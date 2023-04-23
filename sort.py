@@ -3,6 +3,16 @@ import cv2
 import numpy as np
 import configparser
 import pyautogui
+import tkinter as tk
+from tkinter import simpledialog
+from tkinter import messagebox
+import sys
+from tkinter import ttk
+from tkinter import filedialog
+
+def ask_yes(text):
+    result = messagebox.askyesno("Confirmation", text)
+    return result
 
 config = configparser.ConfigParser()
 config['Resource Paths'] = {
@@ -60,10 +70,11 @@ if scan_folders == "1":
         os.makedirs("output/visitors")
     # Detect image files
     scan_image_files = [f for f in os.listdir('output') if f.endswith(('.jpg', '.jpeg', '.png', '.bmp', '.gif'))]
-    if scan_image_files:
-        response = input(f"Image files detected in the default folder. Do you want to continue? (y/n): ")
-        if response.lower() == 'y':
-            folder_path = 'output'
+    if not "--subprocess" in sys.argv:
+        if scan_image_files:
+             response = ask_yes("Image files detected in the default folder. Do you want to continue?")
+             if response:
+                 folder_path = 'output'
 
 if not os.path.exists(folder_path):
     os.makedirs(folder_path)
