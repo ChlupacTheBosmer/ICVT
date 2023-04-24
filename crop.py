@@ -351,7 +351,7 @@ def process_OCR_text(detected_text, frame):
         dialog_width = img_frame_width
         dialog_height = dialog.winfo_reqheight()
         dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
-        dialog_pos_y = max((img_frame_pos_y + img_frame_height),(screen_height-dialog_height))
+        dialog_pos_y = max((img_frame_pos_y + img_frame_height),(screen_height - (img_frame_height//2))
         dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
 
 
@@ -1101,8 +1101,11 @@ def crop_engine():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
                 generate_frames(frame, success,os.path.basename(video_filepaths[i]),i)
-    if root.winfo_exists():
-        root.destroy()
+    try:
+        if root.winfo_exists():
+            root.destroy()
+    except:
+        print("window did not exist")
     open_ICCS_window()
 
 def sort_engine():
