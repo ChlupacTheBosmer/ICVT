@@ -300,6 +300,7 @@ def get_text_from_video(video_filepath, start_or_end):
 def submit_time(input_field):
     global dialog
     global sec_OCR
+    global root
     text = input_field.get()
     if not text.isdigit() or len(text) != 2 or int(text) > 59:
         # execute code here for when text is not in "SS" format
@@ -309,8 +310,10 @@ def submit_time(input_field):
     else:
         print("Error: OCR detected text does not follow the expected format. Resolved manually.")
     sec_OCR = text
-    root.withdraw()
+    root.destroy()
     dialog.destroy()
+    open_ICCS_window()
+    root.withdraw()
 
 def process_OCR_text(detected_text, frame):
     global cap
@@ -346,9 +349,9 @@ def process_OCR_text(detected_text, frame):
         dialog.wm_attributes("-topmost", 1)
         dialog.title("Time Input")
         dialog_width = img_frame_width
-        dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
-        dialog_pos_y = img_frame_pos_y + img_frame_height
         dialog_height = dialog.winfo_reqheight()
+        dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
+        dialog_pos_y = max((img_frame_pos_y + img_frame_height),(screen_height-dialog_height))
         dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
 
 
@@ -1101,6 +1104,7 @@ def crop_engine():
     if root.winfo_exists():
         root.destroy()
     open_ICCS_window()
+
 def sort_engine():
     # Ask user if they want to run sorting script
     run_sorting = ask_yes_no("Do you want to run the sorting script on the generated images?")
