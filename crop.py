@@ -295,9 +295,23 @@ def get_text_from_video(video_filepath, start_or_end):
         cv2.imwrite(OCR_file_path, thresh)
     else:
         OCR_text = "none"
-    frame = frame[0:(height-400), 0:(width-400)]
     cap.release()
     return OCR_text, frame
+def submit_time(input_field):
+    global dialog
+    global sec_OCR
+    text = input_field.get()
+    if not text.isdigit() or len(text) != 2 or int(text) > 59:
+        # execute code here for when text is not in "SS" format
+        print(
+            "Error: OCR detected text does not follow the expected format. Manual input is not in the correct format. The value will be set to an arbitrary 00.")
+        text = '00'
+    else:
+        print("Error: OCR detected text does not follow the expected format. Resolved manually.")
+    sec_OCR = text
+    root.destroy()
+    #dialog.destroy()
+
 def process_OCR_text(detected_text, frame):
     global cap
     global sec_OCR
@@ -313,32 +327,26 @@ def process_OCR_text(detected_text, frame):
         return_time = detected_text[-2:]
     else:
         print(' '.join(["Flow:", "Text detection failed -", detected_text]))
-        #frame = cv2.resize(frame, (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) // 2), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) // 2)))
+        global root
+        global dialog
+        global sec_OCR
+
+        # Create window with video frame
         cv2.namedWindow('Frame')
-        root = tk.Tk()
-        root.wm_attributes("-topmost", 1)
-        screen_width = root.winfo_screenwidth()
-        root.destroy()
-        window_pos_x = int(((screen_width//2) - (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))) // 4))
         cv2.imshow('Frame', frame)
-        cv2.moveWindow('Frame', window_pos_x, 0)
-        # Prompt the user to input text using a dialog box
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
         img_frame_pos_x, img_frame_pos_y, img_frame_width, img_frame_height = cv2.getWindowImageRect('Frame')
-        # img_frame_pos_x = cv2.getWindowProperty('Frame', cv2.WND_PROP_X)
-        # img_frame_pos_y = cv2.getWindowProperty('Frame', cv2.WND_PROP_Y)
-        # img_frame_width = cv2.getWindowProperty('Frame', cv2.WND_PROP_WIDTH)
-        # img_frame_height = cv2.getWindowProperty('Frame', cv2.WND_PROP_HEIGHT)
+        cv2.moveWindow("Frame", int((screen_width // 2) - (img_frame_width // 2)), 0)
+        img_frame_pos_x, img_frame_pos_y, img_frame_width, img_frame_height = cv2.getWindowImageRect('Frame')
 
-        # Set the size and position of the root window
-
-        root = tk.Tk()
-        root.withdraw()
 
         # Create the dialog window
         dialog = tk.Toplevel(root)
+        dialog.wm_attributes("-topmost", 1)
         dialog.title("Time Input")
         dialog_width = img_frame_width
-        dialog_pos_x = img_frame_pos_x
+        dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
         dialog_pos_y = img_frame_pos_y + img_frame_height
         dialog_height = dialog.winfo_reqheight()
         dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
@@ -346,7 +354,7 @@ def process_OCR_text(detected_text, frame):
 
         # Add label
         text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
-        text_field.insert(tk.END, "The OCR detection apparently failed. Please enter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
+        text_field.insert(tk.END, "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
         text_field.configure(state="disabled", highlightthickness=1, highlightbackground="white",
                              background="white", relief="flat")
         text_field.tag_configure("center", justify="center")
@@ -359,35 +367,19 @@ def process_OCR_text(detected_text, frame):
         j = 0
         input_field = tk.Entry(dialog, font=("Arial", 10), width=4)
         input_field.pack(pady=2)
-        input_field.bind("<Return>", lambda j=j: submit_time(input_field, root))
+        input_field.bind("<Return>", lambda j=j: submit_time(input_field))
 
         # Add submit button
-        submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10), command=lambda j=j: submit_time(input_field, root))
+        submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10), command=lambda j=j: submit_time(input_field))
         submit_button.pack(pady=2)
 
         # Focus on the input field
+        dialog.lift()
         input_field.focus_set()
-
-        root.update()
-        window_height = root.winfo_reqheight()
-        root.geometry(f"{dialog_width}x{window_height}+{dialog_pos_x}+{dialog_pos_y}")
-        # Run the main loop
-        root.mainloop()
+        dialog.mainloop()
         return_time = sec_OCR
         cv2.destroyAllWindows()
     return return_time
-def submit_time(input_field, root):
-    text = input_field.get()
-    if not text.isdigit() or len(text) != 2 or int(text) > 59:
-        # execute code here for when text is not in "SS" format
-        print("Error: OCR detected text does not follow the expected format. Manual input is not in the correct format. The value will be set to an arbitrary 00.")
-        text = '00'
-    else:
-        print("Error: OCR detected text does not follow the expected format. Resolved manually.")
-    root.destroy()
-    cv2.destroyAllWindows()
-    global sec_OCR
-    sec_OCR = text
 # define function to get start and end times for each video file
 def get_video_start_end_times(video_filepath):
     video_filename = os.path.basename(video_filepath)
@@ -765,6 +757,7 @@ def open_ICCS_window():
     global tree_allow
     global scaned_folders
     global video_folder_path
+    global root
     root = tk.Tk()
     ICCS_window = root
     root.wm_attributes("-topmost", 1)
@@ -1049,11 +1042,13 @@ def crop_engine():
     global frame_number_start
     global visit_duration
     global crop_mode
+    global root
     result = ask_yes_no("Do you want to start the cropping process?")
     if result:
         valid_annotations_array = []
         valid_annotation_data_entry = []
         print(video_filepaths)
+        root.withdraw()
         if not crop_mode == 3:
             if crop_mode == 1:
                 video_data = get_video_data(video_filepaths)
@@ -1103,6 +1098,9 @@ def crop_engine():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
                 generate_frames(frame, success,os.path.basename(video_filepaths[i]),i)
+    if root.winfo_exists():
+        root.destroy()
+    open_ICCS_window()
 def sort_engine():
     # Ask user if they want to run sorting script
     run_sorting = ask_yes_no("Do you want to run the sorting script on the generated images?")
