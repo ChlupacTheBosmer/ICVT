@@ -309,8 +309,8 @@ def submit_time(input_field):
     else:
         print("Error: OCR detected text does not follow the expected format. Resolved manually.")
     sec_OCR = text
-    root.destroy()
-    #dialog.destroy()
+    root.withdraw()
+    dialog.destroy()
 
 def process_OCR_text(detected_text, frame):
     global cap
