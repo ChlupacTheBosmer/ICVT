@@ -171,7 +171,7 @@ def scan_default_folders():
                         print(f'Selected file: {annotation_file_path}')
                     else:
                         print('Invalid selection')
-                return video_folder_path, annotation_file_path
+    return video_folder_path, annotation_file_path
 def reload_points_of_interest():
     global points_of_interest_entry
     points_of_interest_entry = []
