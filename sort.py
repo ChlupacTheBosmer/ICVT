@@ -98,14 +98,14 @@ arrow_color_l = (0, 0, 255)
 arrow_color_r = (0, 255, 0)
 
 # Specify the desired width of the window
-image_height = 640
-image_width = 640
 window_width = window_width+(arrow_width*2)+text_size_l[0]+text_size_r[0]
 # Loop through each image file and show it to the user
 for image_file in image_files:
     # Load the image
     image_path = os.path.join(folder_path, image_file)
     image = cv2.imread(image_path)
+    image_height, image_width = image.shape
+
 
     # Create a black canvas to hold the image and arrows
     canvas = np.zeros((image_height, window_width, 3), dtype=np.uint8)
