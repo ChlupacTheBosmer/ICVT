@@ -337,15 +337,19 @@ def process_OCR_text(detected_text, frame):
         # Create window with video frame
         cv2.namedWindow('Frame')
         cv2.imshow('Frame', frame)
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
+
+        # Create the dialog window
+        dialog = tk.Toplevel(root)
+        try:
+            screen_width = dialog.winfo_screenwidth()
+            screen_height = dialog.winfo_screenheight()
+        except:
+            screen_width = 1920
+            screen_height = 1080
         img_frame_pos_x, img_frame_pos_y, img_frame_width, img_frame_height = cv2.getWindowImageRect('Frame')
         cv2.moveWindow("Frame", int((screen_width // 2) - (img_frame_width // 2)), 0)
         img_frame_pos_x, img_frame_pos_y, img_frame_width, img_frame_height = cv2.getWindowImageRect('Frame')
 
-
-        # Create the dialog window
-        dialog = tk.Toplevel(root)
         dialog.wm_attributes("-topmost", 1)
         dialog.title("Time Input")
         dialog_width = img_frame_width
