@@ -22,7 +22,8 @@ import numpy as np
 import openpyxl
 import math
 
-#Define all required functions
+
+# Define all required functions
 def config_read():
     global ocr_tesseract_path
     global video_folder_path
@@ -77,14 +78,15 @@ def config_read():
 
     # Get values from the config file
     try:
-        ocr_tesseract_path = config['Resource Paths'].get('OCR_tesseract_path', 'C:/Program Files/Tesseract-OCR/tesseract.exe').strip()
+        ocr_tesseract_path = config['Resource Paths'].get('OCR_tesseract_path',
+                                                          'C:/Program Files/Tesseract-OCR/tesseract.exe').strip()
         video_folder_path = config['Resource Paths'].get('video_folder_path', '').strip()
         annotation_file_path = config['Resource Paths'].get('annotation_file_path', '').strip()
         output_folder = config['Resource Paths'].get('output_folder', 'output').strip()
         scan_folders = config['Workflow settings'].get('Scan_default_folders', '0').strip()
     except ValueError:
         print('Error: Invalid folder/file path found in settings_crop.ini')
-    #Get crop values from config
+    # Get crop values from config
     try:
         crop_mode = int(config['Crop settings'].get('crop_mode', '1').strip())
         frame_skip = int(config['Crop settings'].get('crop_interval_frames', '30').strip())
@@ -96,74 +98,82 @@ def config_read():
         prefix = config['Crop settings'].get('filename_prefix', '').strip()
     except ValueError:
         print('Error: Invalid crop settings specified in settings_crop.ini')
+
+
 def ask_yes_no(text):
     result = messagebox.askyesno("Confirmation", text)
     return result
+
+
 def select_file(selected_file_index, index, root):
     selected_file_index.set(index + 1)
     root.destroy()
+
+
 def scan_default_folders():
+
     # scan default folders
     file_type = ["excel (watchers)", "excel (manual)"]
-    video_folder_path = ""
-    annotation_file_path = ""
+    video_folder_path: str = ""
+    annotation_file_path: str = ""
+
+    # Check if scan folder feature is on
     if scan_folders == "1":
+
+        # Create directories if they do not exist
         if not os.path.exists("videos/"):
             os.makedirs("videos/")
         if not os.path.exists("excel/"):
             os.makedirs("excel/")
+
         # Detect video files
         scan_video_files = [f for f in os.listdir('videos') if f.endswith('.mp4')]
         if scan_video_files:
             response = ask_yes_no(f"Video files detected in the default folder. Do you want to continue?")
-            # response = input(f"Video files detected in the default folder. Do you want to continue? (y/n): ")
-            # if response.lower() == 'y':
             if response:
                 video_folder_path = 'videos'
+
+        # Check if the current default crop mode requires an annotation file
         if crop_mode == 1 or crop_mode == 2:
+
             # Detect Excel files
             scan_excel_files = [f for f in os.listdir('excel') if f.endswith('.xlsx') or f.endswith('.xls')]
             if scan_excel_files:
                 response = ask_yes_no(f"Excel files detected in the default folder. Do you want to continue?")
-                # response = input(f"Excel files detected in the default folder. Do you want to continue? (y/n): ")
-                # if response.lower() == 'y':
                 if response:
 
-                    # create the tkinter window
-                    root = tk.Tk()
-                    root.title("Select file")
-                    root.wm_attributes("-topmost", 1)
-                    label_frame = tk.Frame(root)
+                    # Create the window for selecting the Excel file
+                    excel_files_win = tk.Tk()
+                    excel_files_win.title("Select file")
+                    excel_files_win.wm_attributes("-topmost", 1)
+
+                    # Create window contents
+                    label_frame = tk.Frame(excel_files_win)
                     label_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20)
-                    prompt_label = tk.Label(root,
+                    prompt_label = tk.Label(excel_files_win,
                                             text=f"Please select the {file_type[(crop_mode - 1)]} file you\nwant to use as the source of visit times.")
                     prompt_label.pack()
-                    label = tk.Label(root, text="Excel files in the folder:")
+                    label = tk.Label(excel_files_win, text="Excel files in the folder:")
                     label.pack()
-                    outer_frame = tk.Frame(root)
+                    outer_frame = tk.Frame(excel_files_win)
                     outer_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20, pady=20)
                     for i, f in enumerate(scan_excel_files):
                         button = tk.Button(outer_frame, text=f"{i + 1}. {f}", width=30,
-                                           command=lambda i=i: select_file(selected_file_index, i, root))
+                                           command=lambda i=i: select_file(selected_file_index, i, excel_files_win))
                         button.pack(pady=0)
                     selected_file_index = tk.IntVar()
 
-                    # set the window position to the center of the screen
-                    root.update()
-                    screen_width = root.winfo_screenwidth()
-                    screen_height = root.winfo_screenheight()
-                    window_width = root.winfo_reqwidth()
-                    window_height = root.winfo_reqheight()
+                    # Set the window position to the center of the screen
+                    excel_files_win.update()
+                    screen_width = excel_files_win.winfo_screenwidth()
+                    screen_height = excel_files_win.winfo_screenheight()
+                    window_width = excel_files_win.winfo_reqwidth()
+                    window_height = excel_files_win.winfo_reqheight()
                     x_pos = int((screen_width - window_width) / 2)
                     y_pos = int((screen_height - window_height) / 2)
-                    root.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
-                    root.mainloop()
+                    excel_files_win.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
+                    excel_files_win.mainloop()
                     selection = selected_file_index.get()
-
-                    # print('Excel files in the folder:')
-                    # for i, f in enumerate(scan_excel_files):
-                    # print(f'{i + 1}. {f}')
-                    # selection = int(input(f'Enter the number of the {file_type[(crop_mode-1)]} file you want to use: '))
 
                     # Assign the path of the selected file to a variable
                     if selection > 0 and selection <= len(scan_excel_files):
@@ -172,18 +182,27 @@ def scan_default_folders():
                     else:
                         print('Invalid selection')
     return video_folder_path, annotation_file_path
+
+
 def reload_points_of_interest():
     global points_of_interest_entry
     points_of_interest_entry = []
     for e in range(len(video_filepaths)):
         points_of_interest_entry.append([])
+
+
 def get_excel_path(check):
     global annotation_file_path
-    #Set path to Excel file manually
+    # Set path to Excel file manually
     file_type = ["excel (watchers)", "excel (manual)"]
     if crop_mode == 1 or crop_mode == 2:
         if not os.path.isfile(annotation_file_path) or check == 0:
-            annotation_file_path = filedialog.askopenfilename(title=f"Select the path to the {file_type[(crop_mode-1)]} file", multiple=False, initialdir=os.path.dirname(os.path.abspath(__file__)), filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
+            annotation_file_path = filedialog.askopenfilename(
+                title=f"Select the path to the {file_type[(crop_mode - 1)]} file", multiple=False,
+                initialdir=os.path.dirname(os.path.abspath(__file__)),
+                filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
+
+
 def get_video_folder(check):
     global video_folder_path
     global points_of_interest_entry
@@ -194,15 +213,18 @@ def get_video_folder(check):
     # set path to folder containing mp4 files
     original_video_folder_path = video_folder_path
     if not os.path.isdir(video_folder_path) or check == 0:
-        video_folder_path = filedialog.askdirectory(title="Select the video folder", initialdir=os.path.dirname(os.path.abspath(__file__)))
+        video_folder_path = filedialog.askdirectory(title="Select the video folder",
+                                                    initialdir=os.path.dirname(os.path.abspath(__file__)))
         if video_folder_path == "" and not original_video_folder_path == "":
             video_folder_path = original_video_folder_path
         if (check == 0 and not video_folder_path == original_video_folder_path) or check == 1:
             scan_video_files = [f for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
             parent = os.path.dirname(video_folder_path)
-            scaned_folders = [f for f in os.listdir(video_folder_path) if os.path.isdir(os.path.join(video_folder_path, f))]
+            scaned_folders = [f for f in os.listdir(video_folder_path) if
+                              os.path.isdir(os.path.join(video_folder_path, f))]
             if not scan_video_files and scaned_folders:
-                scan_child_video_files = [f for f in os.listdir(os.path.join(video_folder_path, scaned_folders[0])) if f.endswith('.mp4')]
+                scan_child_video_files = [f for f in os.listdir(os.path.join(video_folder_path, scaned_folders[0])) if
+                                          f.endswith('.mp4')]
                 if scan_child_video_files:
                     video_folder_path = os.path.join(video_folder_path, scaned_folders[0])
                     tree_allow = 1
@@ -215,6 +237,8 @@ def get_video_folder(check):
                 load_video_frames()
                 open_ICCS_window()
             print(video_folder_path)
+
+
 def switch_folder(which):
     global scaned_folders
     global video_folder_path
@@ -222,28 +246,32 @@ def switch_folder(which):
     loaded = 0
     index = scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path)))
     if index > 0 and which == "left":
-        video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index-1])
+        video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index - 1])
         load_videos()
         reload_points_of_interest()
         ICCS_window.destroy()
         load_video_frames()
         open_ICCS_window()
     if (index + 1) < len(scaned_folders) and which == "right":
-        video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index+1])
+        video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index + 1])
         load_videos()
         reload_points_of_interest()
         ICCS_window.destroy()
         load_video_frames()
         open_ICCS_window()
+
+
 def load_videos():
     global video_filepaths
-    #Load videos
+    # Load videos
     video_filepaths = []
     video_filepaths = [os.path.join(video_folder_path, f) for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
-    #for filename in os.listdir(video_folder_path):
-        #file_path = os.path.join(video_folder_path, filename)
-        #if os.path.isfile(file_path):
-            #video_filepaths.append(file_path)
+    # for filename in os.listdir(video_folder_path):
+    # file_path = os.path.join(video_folder_path, filename)
+    # if os.path.isfile(file_path):
+    # video_filepaths.append(file_path)
+
+
 def get_text_from_video(video_filepath, start_or_end):
     global x_coordinate
     global y_coordinate
@@ -297,6 +325,8 @@ def get_text_from_video(video_filepath, start_or_end):
         OCR_text = "none"
     cap.release()
     return OCR_text, frame
+
+
 def submit_time(input_field):
     global dialog
     global sec_OCR
@@ -314,6 +344,7 @@ def submit_time(input_field):
     dialog.destroy()
     open_ICCS_window()
     root.withdraw()
+
 
 def process_OCR_text(detected_text, frame):
     global cap
@@ -355,13 +386,13 @@ def process_OCR_text(detected_text, frame):
         dialog_width = img_frame_width
         dialog_height = dialog.winfo_reqheight()
         dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
-        dialog_pos_y = min((img_frame_pos_y + img_frame_height),(screen_height - (img_frame_height//2)))
+        dialog_pos_y = min((img_frame_pos_y + img_frame_height), (screen_height - (img_frame_height // 2)))
         dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
-
 
         # Add label
         text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
-        text_field.insert(tk.END, "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
+        text_field.insert(tk.END,
+                          "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
         text_field.configure(state="disabled", highlightthickness=1, highlightbackground="white",
                              background="white", relief="flat")
         text_field.tag_configure("center", justify="center")
@@ -377,7 +408,8 @@ def process_OCR_text(detected_text, frame):
         input_field.bind("<Return>", lambda j=j: submit_time(input_field))
 
         # Add submit button
-        submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10), command=lambda j=j: submit_time(input_field))
+        submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10),
+                                  command=lambda j=j: submit_time(input_field))
         submit_button.pack(pady=2)
 
         # Focus on the input field
@@ -387,19 +419,23 @@ def process_OCR_text(detected_text, frame):
         return_time = sec_OCR
         cv2.destroyAllWindows()
     return return_time
+
+
 # define function to get start and end times for each video file
 def get_video_start_end_times(video_filepath):
     video_filename = os.path.basename(video_filepath)
-    print(' '.join(["Flow:", "Processing video file -" , video_filepath]))
+    print(' '.join(["Flow:", "Processing video file -", video_filepath]))
     # get start time
     parts = video_filename[:-4].split("_")
     if len(parts) == 6:
         start_time_minutes = "_".join([parts[3], parts[4], parts[5]])
-        print(' '.join(["Flow: Video name format with prefixes detected. Extracted the time values -", start_time_minutes]))
+        print(' '.join(
+            ["Flow: Video name format with prefixes detected. Extracted the time values -", start_time_minutes]))
     else:
-        print("Error: Some video file names have an unsupported format. Expected format is CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
+        print(
+            "Error: Some video file names have an unsupported format. Expected format is CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
         start_time_minutes = video_filename[:-4]
-    #start_time_minutes = video_filename[:-4]
+    # start_time_minutes = video_filename[:-4]
     text, frame = get_text_from_video(video_filepath, "start")
     start_time_seconds = process_OCR_text(text, frame)
     start_time_str = '_'.join([start_time_minutes, start_time_seconds])
@@ -411,6 +447,8 @@ def get_video_start_end_times(video_filepath):
     end_time_str = pd.to_datetime('_'.join([start_time_minutes, end_time_seconds]), format='%Y%m%d_%H_%M_%S')
     end_time = end_time_str + pd.Timedelta(minutes=15)
     return start_time, end_time
+
+
 def evaluate_string_formula(cell):
     if isinstance(cell, (int, float)):
         # If the cell contains a number, return the value as is
@@ -426,11 +464,15 @@ def evaluate_string_formula(cell):
     else:
         # If the cell contains text, return the text as is
         return cell
+
+
 def load_excel_table(file_path):
     # Define the columns to extract
     cols = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21]
     # Read the Excel file, skipping the first two rows
-    df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None, converters={0: evaluate_string_formula, 1: evaluate_string_formula, 2: evaluate_string_formula, 3: evaluate_string_formula, 4: evaluate_string_formula, 18: evaluate_string_formula})
+    df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
+                       converters={0: evaluate_string_formula, 1: evaluate_string_formula, 2: evaluate_string_formula,
+                                   3: evaluate_string_formula, 4: evaluate_string_formula, 18: evaluate_string_formula})
     print(df)
     filtered_df = df[df.iloc[:, 6] == 1]
     # Convert the month abbreviations in column 2 to month numbers
@@ -443,7 +485,7 @@ def load_excel_table(file_path):
         j = i + 1
         filtered_df.iloc[:, j] = filtered_df.iloc[:, j].astype(int).apply(lambda x: f'{x:02}')
     filtered_df.loc[:, 11] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
-                                                           axis=1)
+                                                            axis=1)
     filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
     print(filtered_df)
     filtered_data = filtered_df.iloc[:, [7, 11]].values.tolist()
@@ -454,13 +496,17 @@ def load_excel_table(file_path):
         os.makedirs("resources/exc/")
     filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
     return annotation_data_array
+
+
 def load_csv(file_path):
     # Define the columns to extract
     cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     # Read the Excel file, skipping the first two rows - follow the custom format
     filtered_df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
-                       converters={0: evaluate_string_formula, 1: evaluate_string_formula, 2: evaluate_string_formula,
-                                   3: evaluate_string_formula, 4: evaluate_string_formula, 6: evaluate_string_formula})
+                                converters={0: evaluate_string_formula, 1: evaluate_string_formula,
+                                            2: evaluate_string_formula,
+                                            3: evaluate_string_formula, 4: evaluate_string_formula,
+                                            6: evaluate_string_formula})
     print(filtered_df)
     # Convert the month abbreviations in column 2(1) to month numbers
     months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
@@ -475,7 +521,7 @@ def load_csv(file_path):
                                                             axis=1)
     filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
     print(filtered_df)
-    #convert to list
+    # convert to list
     filtered_data = filtered_df.iloc[:, [6, 10]].values.tolist()
 
     annotation_data_array = filtered_data
@@ -484,6 +530,8 @@ def load_csv(file_path):
         os.makedirs("resources/exc/")
     filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
     return annotation_data_array
+
+
 def capture_crop(frame, point):
     global cap
     global fps
@@ -506,6 +554,8 @@ def capture_crop(frame, point):
     if crop_img.shape[2] == 3:
         crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
     return crop_img, x1, y1, x2, y2
+
+
 def generate_frames(frame, success, tag, index):
     global points_of_interest_entry
     global cap
@@ -524,9 +574,13 @@ def generate_frames(frame, success, tag, index):
                 if cropped_frames == 1:
                     crop_img, x1, y1, x2, y2 = capture_crop(frame, point)
                     # save file
-                    cv2.imwrite(f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{x1},{y1}_{x2},{y2}.jpg", crop_img)
+                    cv2.imwrite(
+                        f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{x1},{y1}_{x2},{y2}.jpg",
+                        crop_img)
             if whole_frame == 1:
-                cv2.imwrite(f"./{output_folder}/whole frames/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg", frame)
+                cv2.imwrite(
+                    f"./{output_folder}/whole frames/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg",
+                    frame)
             crop_counter += 1
 
         if randomize == 1:
@@ -545,6 +599,8 @@ def generate_frames(frame, success, tag, index):
             cap.release()
             cv2.destroyAllWindows()
             break
+
+
 def get_video_data(video_filepaths):
     # loop through time annotations and open corresponding video file
     # extract video data beforehand to save processing time
@@ -556,11 +612,13 @@ def get_video_data(video_filepaths):
             video_data_entry = [video_filepaths[i], video_start_time, video_end_time]
             video_data.append(video_data_entry)
     return video_data
+
+
 # Define the mouse callback function to record the point of interest
 def update_entries(index, original_points):
     global points_of_interest_entry
     global modified_frames
-    for each in range(index+1, len(points_of_interest_entry)):
+    for each in range(index + 1, len(points_of_interest_entry)):
         if len(points_of_interest_entry[each]) == 0:
             points_of_interest_entry[each] = points_of_interest_entry[index].copy()
         else:
@@ -571,9 +629,12 @@ def update_entries(index, original_points):
     first = 1
     for each in range(index, len(video_filepaths)):
         first = first - 1
-        if first >= 0 and (index == 0 or not points_of_interest_entry[max(index - 1, 0)] == points_of_interest_entry[index]):
+        if first >= 0 and (
+                index == 0 or not points_of_interest_entry[max(index - 1, 0)] == points_of_interest_entry[index]):
             modified_frames.append(each)
         update_button_image(frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
+
+
 def get_mouse_position(event, x, y, flags, mode, i, j):
     global points_of_interest_entry
     global modified_frames
@@ -599,19 +660,21 @@ def get_mouse_position(event, x, y, flags, mode, i, j):
             cv2.destroyAllWindows()
         else:
             if not mode == 0:
-                points_of_interest_entry[index].append((x,y))
+                points_of_interest_entry[index].append((x, y))
                 # index = j+((i)*6)
                 # for each in range(index,len(points_of_interest)-1):
             else:
                 points_of_interest_entry.append((x, y))
             print(points_of_interest_entry)
             cv2.destroyAllWindows()
-def update_button_image(frame,i,j, first):
+
+
+def update_button_image(frame, i, j, first):
     global points_of_interest_entry
     global modified_frames
     global button_images
     global buttons
-    index = j+((i)*6)
+    index = j + ((i) * 6)
     frame = frame.copy()
     height, width, channels = frame.shape
     for point in points_of_interest_entry[index]:
@@ -623,11 +686,14 @@ def update_button_image(frame,i,j, first):
         cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
         cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
         cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-    if (first >= 0 or index in modified_frames) and ((index == 0 and not len(points_of_interest_entry[0]) == 0) or not points_of_interest_entry[max(index - 1, 0)] == points_of_interest_entry[index]):
+    if (first >= 0 or index in modified_frames) and (
+            (index == 0 and not len(points_of_interest_entry[0]) == 0) or not points_of_interest_entry[
+                                                                                  max(index - 1, 0)] ==
+                                                                              points_of_interest_entry[index]):
         # Define the ROI
         frame = cv2.resize(frame, (276, 156), interpolation=cv2.INTER_AREA)
         height, width, channels = frame.shape
-        x, y, w, h = 0, 0, height//5, height//5
+        x, y, w, h = 0, 0, height // 5, height // 5
         roi = frame[y:y + h, x:x + w]
 
         # Load the overlay image
@@ -653,17 +719,19 @@ def update_button_image(frame,i,j, first):
     img = ImageTk.PhotoImage(pil_img)
     button_images[index] = img
     buttons[i][j].configure(image=button_images[index])
+
+
 def on_button_click(i, j, button_images):
     global points_of_interest_entry
-    index = j+((i)*6)
+    index = j + ((i) * 6)
     mode = 1
     frame_tmp = frames[index].copy()
     # Ask the user if they want to select additional points of interest
     while True:
         original_points = points_of_interest_entry[index].copy()
         frame = frame_tmp.copy()
-        #add_point = ask_yes_no()
-        #if add_point:
+        # add_point = ask_yes_no()
+        # if add_point:
         # Draw a rectangle around the already selected points of interest
         height, width, channels = frame.shape
         for point in points_of_interest_entry[index]:
@@ -685,32 +753,39 @@ def on_button_click(i, j, button_images):
         cv2.moveWindow("Frame", int((screen_width // 2) - (window_width // 2)), 0)
 
         # Prompt the user to click on the next point of interest
-        cv2.setMouseCallback("Frame", lambda event, x, y, flags, mode: get_mouse_position(event, x, y, flags, mode, i, j), mode)
+        cv2.setMouseCallback("Frame",
+                             lambda event, x, y, flags, mode: get_mouse_position(event, x, y, flags, mode, i, j), mode)
         key = cv2.waitKey(0)
         if key == 27 or key == 13:  # Check if the Esc key was pressed
             cv2.destroyAllWindows()
             break
-        #update_button_image(frame_tmp.copy(), i, j, 1)
+        # update_button_image(frame_tmp.copy(), i, j, 1)
         update_entries(index, original_points)
         # else:
         #     update_entries(index,original_points)
         #     break
+
+
 def load_video_frames():
     # Loop through each file in folder
     global frames
     global points_of_interest_entry
     frames = []
     for filename in os.listdir(video_folder_path):
-        if filename.endswith(".mp4"): # Modify file extension as needed
+        if filename.endswith(".mp4"):  # Modify file extension as needed
             # Use OpenCV or other library to extract first frame of video
             # and add it to the frames list
             cap = cv2.VideoCapture(os.path.join(video_folder_path, filename))
             cap.set(cv2.CAP_PROP_POS_FRAMES, 25)
             ret, frame = cap.read()
             frames.append(frame)
+
+
 def update_crop_mode(var):
     global crop_mode
     crop_mode = var
+
+
 def save_progress():
     global auto_processing
     global points_of_interest_entry
@@ -721,7 +796,9 @@ def save_progress():
         filepath = os.path.join(video_folder_path, 'crop_information.pkl')
         with open(filepath, 'wb') as f:
             # Use the pickle module to write the data to the file
-            pickle.dump([auto_processing.get(),points_of_interest_entry,video_filepaths], f)
+            pickle.dump([auto_processing.get(), points_of_interest_entry, video_filepaths], f)
+
+
 def load_progress():
     global auto_processing
     global points_of_interest_entry
@@ -758,6 +835,8 @@ def load_progress():
         else:
             messagebox.showinfo("No save detected",
                                 "There are no save files in the current directory.")
+
+
 def open_ICCS_window():
     # Create tkinter window
     global ICCS_window
@@ -768,7 +847,7 @@ def open_ICCS_window():
     root = tk.Tk()
     ICCS_window = root
     root.wm_attributes("-topmost", 1)
-    j=0
+    j = 0
     root.title("Insect Communities Crop Suite")
     # Create frame for the rest
     outer_frame = tk.Frame(root)
@@ -785,7 +864,8 @@ def open_ICCS_window():
         btn_state = "normal"
     else:
         btn_state = "disabled"
-    left_button = tk.Button(toolbar, image=left_arrow, compound=tk.LEFT, text="Previous folder", padx=10, pady=5, height=48, width=200, state=btn_state, command=lambda j=j: switch_folder("left"))
+    left_button = tk.Button(toolbar, image=left_arrow, compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
+                            height=48, width=200, state=btn_state, command=lambda j=j: switch_folder("left"))
     left_button.pack(side=tk.LEFT)
 
     menu_icon = Image.open("resources/img/mn.png")
@@ -793,10 +873,11 @@ def open_ICCS_window():
     pil_img.save("resources/img/mn.png")
     menu_icon = ImageTk.PhotoImage(file="resources/img/mn.png")
 
-    menu_button = tk.Button(toolbar, image=menu_icon, compound=tk.LEFT, text="Menu", padx=10, pady=5, height=48, command=lambda j=j: open_menu())
+    menu_button = tk.Button(toolbar, image=menu_icon, compound=tk.LEFT, text="Menu", padx=10, pady=5, height=48,
+                            command=lambda j=j: open_menu())
     menu_button.pack(side=tk.LEFT)
 
-    #frame for radio
+    # frame for radio
     radio_frame = tk.Frame(toolbar)
     radio_frame.pack(side=tk.LEFT)
 
@@ -819,9 +900,12 @@ def open_ICCS_window():
     three_icon = ImageTk.PhotoImage(file="resources/img/3.png")
 
     # create the radio buttons and group them together
-    rb1 = tk.Radiobutton(radio_frame, text="", image=one_icon, variable=selected_option, value=1, indicatoron=False, height=56, width=116, font=("Arial", 17), command=lambda j_=j: update_crop_mode(1))
-    rb2 = tk.Radiobutton(radio_frame, text="", image=two_icon, variable=selected_option, value=2, indicatoron=False, height=56, width=116, font=("Arial", 17), command=lambda j=j: update_crop_mode(2))
-    rb3 = tk.Radiobutton(radio_frame, text="", image=three_icon, variable=selected_option, value=3, indicatoron=False, height=56, width=116, font=("Arial", 17), command=lambda j=j: update_crop_mode(3))
+    rb1 = tk.Radiobutton(radio_frame, text="", image=one_icon, variable=selected_option, value=1, indicatoron=False,
+                         height=56, width=116, font=("Arial", 17), command=lambda j_=j: update_crop_mode(1))
+    rb2 = tk.Radiobutton(radio_frame, text="", image=two_icon, variable=selected_option, value=2, indicatoron=False,
+                         height=56, width=116, font=("Arial", 17), command=lambda j=j: update_crop_mode(2))
+    rb3 = tk.Radiobutton(radio_frame, text="", image=three_icon, variable=selected_option, value=3, indicatoron=False,
+                         height=56, width=116, font=("Arial", 17), command=lambda j=j: update_crop_mode(3))
 
     # arrange the radio buttons in a horizontal layout using the grid geometry manager
     rb1.grid(row=0, column=0)
@@ -832,31 +916,35 @@ def open_ICCS_window():
     pil_img = right_arrow.resize((50, 50))
     pil_img.save("resources/img/ra.png")
     right_arrow = ImageTk.PhotoImage(file="resources/img/ra.png")
-    if tree_allow == 1 and not (scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path)))+1) == len(scaned_folders):
+    if tree_allow == 1 and not (scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path))) + 1) == len(
+            scaned_folders):
         btn_state1 = "normal"
     else:
         btn_state1 = "disabled"
     print(tree_allow)
     print(btn_state1)
-    right_button = tk.Button(toolbar, image=right_arrow, compound=tk.RIGHT, text="Next folder", padx=10, pady=5, height=48, width=200, state=btn_state1, command=lambda j=j: switch_folder("right"))
+    right_button = tk.Button(toolbar, image=right_arrow, compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
+                             height=48, width=200, state=btn_state1, command=lambda j=j: switch_folder("right"))
     right_button.pack(side=tk.RIGHT)
 
     on_image = tk.PhotoImage(width=116, height=57)
     off_image = tk.PhotoImage(width=116, height=57)
-    on_image.put(("green",), to=(0, 0, 56,56))
+    on_image.put(("green",), to=(0, 0, 56, 56))
     off_image.put(("red",), to=(57, 0, 115, 56))
     global auto_processing
     auto_processing = tk.IntVar(value=0)
     auto_processing.set(0)
-    cb1 = tk.Checkbutton(toolbar, image=off_image, selectimage=on_image, indicatoron=False, onvalue=1, offvalue=0, variable=auto_processing)
-    cb1.pack(side=tk.LEFT, padx=(0,0), pady=0)
+    cb1 = tk.Checkbutton(toolbar, image=off_image, selectimage=on_image, indicatoron=False, onvalue=1, offvalue=0,
+                         variable=auto_processing)
+    cb1.pack(side=tk.LEFT, padx=(0, 0), pady=0)
 
     gears_icon = Image.open("resources/img/au.png")
     pil_img = gears_icon.resize((50, 50))
     pil_img.save("resources/img/au.png")
     gears_icon = ImageTk.PhotoImage(file="resources/img/au.png")
 
-    auto_button = tk.Button(toolbar, image=gears_icon, compound=tk.LEFT, text="\t\tAutomatic evaluation\t\t", padx=10, pady=5, height=48, command=lambda j=j : auto_processing.set(1 - auto_processing.get()))
+    auto_button = tk.Button(toolbar, image=gears_icon, compound=tk.LEFT, text="\t\tAutomatic evaluation\t\t", padx=10,
+                            pady=5, height=48, command=lambda j=j: auto_processing.set(1 - auto_processing.get()))
     auto_button.pack(side=tk.LEFT)
 
     fl_icon = Image.open("resources/img/fl.png")
@@ -864,7 +952,8 @@ def open_ICCS_window():
     pil_img.save("resources/img/fl.png")
     fl_icon = ImageTk.PhotoImage(file="resources/img/fl.png")
 
-    fl_button = tk.Button(toolbar, image=fl_icon, compound=tk.LEFT, text="Select video folder", padx=10, pady=5, height=48, command=lambda j=j: get_video_folder(0))
+    fl_button = tk.Button(toolbar, image=fl_icon, compound=tk.LEFT, text="Select video folder", padx=10, pady=5,
+                          height=48, command=lambda j=j: get_video_folder(0))
     fl_button.pack(side=tk.LEFT)
 
     et_icon = Image.open("resources/img/et.png")
@@ -872,7 +961,8 @@ def open_ICCS_window():
     pil_img.save("resources/img/et.png")
     et_icon = ImageTk.PhotoImage(file="resources/img/et.png")
 
-    et_button = tk.Button(toolbar, image=et_icon, compound=tk.LEFT, text="Select Excel table", padx=10, pady=5, height=48, command=lambda j=j: get_excel_path(0))
+    et_button = tk.Button(toolbar, image=et_icon, compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
+                          height=48, command=lambda j=j: get_excel_path(0))
     et_button.pack(side=tk.LEFT)
 
     ocr_icon = Image.open("resources/img/ocr.png")
@@ -895,7 +985,7 @@ def open_ICCS_window():
     canvas.configure(yscrollcommand=scrollbar.set)
     canvas.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-    #Create target frame for the rest
+    # Create target frame for the rest
     target_frame = tk.Frame(root)
     target_frame.pack(side=tk.TOP)
 
@@ -909,11 +999,13 @@ def open_ICCS_window():
     label_frame.pack(side=tk.LEFT)
     for i in range(rows):
         hour_1st = ((i) * 6)
-        if (((i) * 6)+6) + 1 <= len(video_filepaths):
-            hour_2nd = max(((i)*6)+6,len(video_filepaths)-1)
+        if (((i) * 6) + 6) + 1 <= len(video_filepaths):
+            hour_2nd = max(((i) * 6) + 6, len(video_filepaths) - 1)
         else:
-            hour_2nd = (len(video_filepaths) % 6)-1
-        text_label = tk.Label(label_frame, text=f"{os.path.basename(video_filepaths[hour_1st])[-9:-7]}-{os.path.basename(video_filepaths[hour_2nd])[-9:-7]}", font=("Arial", 15), background=root.cget('bg'))
+            hour_2nd = (len(video_filepaths) % 6) - 1
+        text_label = tk.Label(label_frame,
+                              text=f"{os.path.basename(video_filepaths[hour_1st])[-9:-7]}-{os.path.basename(video_filepaths[hour_2nd])[-9:-7]}",
+                              font=("Arial", 15), background=root.cget('bg'))
         text_label.pack(side=tk.TOP, padx=30, pady=67)
     for i in range(rows):
         # Loop through first 24 frames and create buttons with images
@@ -923,7 +1015,7 @@ def open_ICCS_window():
         for j in range(6):
             if (j + ((i) * 6)) < len(video_filepaths):
                 # Convert frame to PIL image
-                pil_img = cv2.cvtColor(frames[j+((i)*6)], cv2.COLOR_BGR2RGB)
+                pil_img = cv2.cvtColor(frames[j + ((i) * 6)], cv2.COLOR_BGR2RGB)
                 pil_img = Image.fromarray(pil_img, mode='RGB')
                 # Resize image to fit button
                 pil_img = pil_img.resize((276, 156))
@@ -931,7 +1023,8 @@ def open_ICCS_window():
                 tk_img = ImageTk.PhotoImage(pil_img)
                 button_images.append(tk_img)
                 # Create button with image and add to button frame
-                button = tk.Button(button_frame, image=button_images[j+((i)*6)], command=lambda i=i, j=j: on_button_click(i, j, button_images))
+                button = tk.Button(button_frame, image=button_images[j + ((i) * 6)],
+                                   command=lambda i=i, j=j: on_button_click(i, j, button_images))
                 button.grid(row=i, column=j, sticky="w")
                 row.append(button)
             else:
@@ -943,11 +1036,13 @@ def open_ICCS_window():
                 row.append(dummy_frame)
         buttons.append(row)
 
-    fl_button = tk.Button(root, image=fl_icon, compound=tk.LEFT, text="", padx=10, pady=5, height=58, command=lambda j=j: os.startfile(video_folder_path))
+    fl_button = tk.Button(root, image=fl_icon, compound=tk.LEFT, text="", padx=10, pady=5, height=58,
+                          command=lambda j=j: os.startfile(video_folder_path))
     fl_button.pack(side=tk.LEFT)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, annotation_file_path)
-    et_button = tk.Button(root, image=et_icon, compound=tk.LEFT, text="", padx=10, pady=5, height=58, command=lambda j=j: os.startfile(file_path))
+    et_button = tk.Button(root, image=et_icon, compound=tk.LEFT, text="", padx=10, pady=5, height=58,
+                          command=lambda j=j: os.startfile(file_path))
     et_button.pack(side=tk.RIGHT)
 
     bottom_toolbar = tk.Frame(root, pady=5)
@@ -958,14 +1053,16 @@ def open_ICCS_window():
     pil_img.save("resources/img/sv_1.png")
     save_icon = ImageTk.PhotoImage(file="resources/img/sv_1.png")
     # create a Button widget with the save icon as its image
-    save_button = tk.Button(bottom_toolbar, text="Save", image=save_icon, compound=tk.LEFT, padx=10, pady=5, width=300, height=48, command=lambda j=j: save_progress())
+    save_button = tk.Button(bottom_toolbar, text="Save", image=save_icon, compound=tk.LEFT, padx=10, pady=5, width=300,
+                            height=48, command=lambda j=j: save_progress())
 
     crop_icon = Image.open("resources/img/cr.png")
     pil_img = crop_icon.resize((50, 50))
     pil_img.save("resources/img/cr_1.png")
     crop_icon = ImageTk.PhotoImage(file="resources/img/cr_1.png")
     # create a Button widget with the save icon as its image
-    crop_button = tk.Button(bottom_toolbar, text="Crop", image=crop_icon, compound=tk.LEFT, padx=10, pady=5, width=300, height=48, command=lambda j=j: crop_engine())
+    crop_button = tk.Button(bottom_toolbar, text="Crop", image=crop_icon, compound=tk.LEFT, padx=10, pady=5, width=300,
+                            height=48, command=lambda j=j: crop_engine())
 
     sort_icon = Image.open("resources/img/so.png")
     pil_img = sort_icon.resize((50, 50))
@@ -1006,7 +1103,7 @@ def open_ICCS_window():
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
 
-    #update
+    # update
     global loaded
     if loaded == 1:
         for each in range(len(video_filepaths)):
@@ -1016,9 +1113,11 @@ def open_ICCS_window():
         auto_processing.set(auto)
 
     # Set the window size to fit the entire screen
-    root.geometry(f"{screen_width-20}x{screen_height}+0+0")
+    root.geometry(f"{screen_width - 20}x{screen_height}+0+0")
     root.state('zoomed')
     root.mainloop()
+
+
 def initialise():
     global loaded
     global tree_allow
@@ -1034,13 +1133,15 @@ def initialise():
     get_video_folder(1)
     get_excel_path(1)
     load_videos()
-    #Check output folder
+    # Check output folder
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     if not os.path.exists(f"./{output_folder}/whole frames/"):
         os.makedirs(f"./{output_folder}/whole frames/")
     reload_points_of_interest()
     load_video_frames()
+
+
 def crop_engine():
     global points_of_interest_entry
     global video_filepaths
@@ -1068,7 +1169,9 @@ def crop_engine():
                     for filepath in video_filepaths_temp:
                         filename = os.path.basename(filepath)  # get just the filename from the full path
                         if annotation_data_array[index][1][:-9] in filename:
-                            if datetime.timedelta() <= datetime.datetime.strptime(annotation_data_array[index][1][-8:-3], '%H_%M') - datetime.datetime.strptime(filename[-9:-4], '%H_%M') <= datetime.timedelta(minutes=15):
+                            if datetime.timedelta() <= datetime.datetime.strptime(
+                                    annotation_data_array[index][1][-8:-3], '%H_%M') - datetime.datetime.strptime(
+                                    filename[-9:-4], '%H_%M') <= datetime.timedelta(minutes=15):
                                 video_filepaths.append(filepath)
                 video_data = get_video_data(video_filepaths)
             print(annotation_data_array)
@@ -1091,20 +1194,22 @@ def crop_engine():
                 cap = cv2.VideoCapture(valid_annotations_array[index][2])
                 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 fps = cap.get(cv2.CAP_PROP_FPS)
-                visit_duration = (min(((annotation_offset*fps)+(int(valid_annotations_array[index][0])*fps)), total_frames)-(annotation_offset*fps)) // fps
+                visit_duration = (min(((annotation_offset * fps) + (int(valid_annotations_array[index][0]) * fps)),
+                                      total_frames) - (annotation_offset * fps)) // fps
                 frame_number_start = int(annotation_offset * fps)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
-                generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]), video_filepaths.index(valid_annotations_array[index][2]))
+                generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
+                                video_filepaths.index(valid_annotations_array[index][2]))
         else:
             for i, filepath in enumerate(video_filepaths):
                 cap = cv2.VideoCapture(video_filepaths[i])
                 fps = cap.get(cv2.CAP_PROP_FPS)
-                visit_duration = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))//fps
+                visit_duration = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) // fps
                 frame_number_start = 2
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
-                generate_frames(frame, success,os.path.basename(video_filepaths[i]),i)
+                generate_frames(frame, success, os.path.basename(video_filepaths[i]), i)
     try:
         if root.winfo_exists():
             root.destroy()
@@ -1112,16 +1217,19 @@ def crop_engine():
         print("window did not exist")
     open_ICCS_window()
 
+
 def sort_engine():
     # Ask user if they want to run sorting script
     run_sorting = ask_yes_no("Do you want to run the sorting script on the generated images?")
     if run_sorting:
         sort_script_path = "sort.py"
         if os.path.exists(sort_script_path):
-            #subprocess.run(['python', f'{sort_script_path}'])
+            # subprocess.run(['python', f'{sort_script_path}'])
             subprocess.call([sys.executable, f'{sort_script_path}', "--subprocess"])
         else:
             print("Error: sorting script not found.")
+
+
 def open_menu():
     global output_folder
     global scan_folders
@@ -1139,7 +1247,9 @@ def open_menu():
     window.title("Menu")
     window.wm_attributes("-topmost", 1)
     # Create the labels and input fields
-    label_text=["Output folder path:", "Scan default folders:", "Filename prefix:", "Default crop mode:", "Frames to skip:", "Randomize interval:", "Export whole frames:", "Export cropped frames:", "Crop size:", "Offset size:"]
+    label_text = ["Output folder path:", "Scan default folders:", "Filename prefix:", "Default crop mode:",
+                  "Frames to skip:", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
+                  "Crop size:", "Offset size:"]
     labels = []
     fields = []
     outer_frame = tk.Frame(window, pady=10)
@@ -1186,7 +1296,8 @@ def open_menu():
     save_button.grid(row=12, column=0, columnspan=2)
 
     # Set initial values for the input fields
-    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, randomize, whole_frame, cropped_frames, crop_size, offset_range]
+    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, randomize, whole_frame,
+                      cropped_frames, crop_size, offset_range]
     for i in range(10):
         fields[i].insert(0, str(initial_values[i]))
 
@@ -1200,6 +1311,8 @@ def open_menu():
     y_pos = int((screen_height - window_height) / 2)
     window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
     window.mainloop()
+
+
 def config_write():
     global ocr_tesseract_path
     global video_folder_path
@@ -1237,6 +1350,6 @@ def config_write():
     with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
         config.write(configfile)
 
+
 initialise()
 open_ICCS_window()
-
