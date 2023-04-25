@@ -433,7 +433,8 @@ def get_video_start_end_times(video_filepath):
             ["Flow: Video name format with prefixes detected. Extracted the time values -", start_time_minutes]))
     else:
         print(
-            "Error: Some video file names have an unsupported format. Expected format is CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
+            "Error: Some video file names have an unsupported format. Expected format is "
+            "CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
         start_time_minutes = video_filename[:-4]
     # start_time_minutes = video_filename[:-4]
     text, frame = get_text_from_video(video_filepath, "start")
@@ -541,8 +542,8 @@ def capture_crop(frame, point):
     # Add a random offset to the coordinates, but ensure they remain within the image bounds
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    x_offset = random.randint(-(offset_range), offset_range)
-    y_offset = random.randint(-(offset_range), offset_range)
+    x_offset = random.randint(-offset_range, offset_range)
+    y_offset = random.randint(-offset_range, offset_range)
     x1 = max(0, min(((x - crop_size // 2) + x_offset), frame_width - crop_size))
     y1 = max(0, min(((y - crop_size // 2) + y_offset), frame_height - crop_size))
     x2 = max(crop_size, min(((x + crop_size // 2) + x_offset), frame_width))
@@ -569,7 +570,7 @@ def generate_frames(frame, success, tag, index):
     frame_count = 0
     while success:
         # Crop images every 30th frame
-        if (frame_count % frame_skip == 0):
+        if frame_count % frame_skip == 0:
             for i, point in enumerate(points_of_interest_entry[index]):
                 if cropped_frames == 1:
                     crop_img, x1, y1, x2, y2 = capture_crop(frame, point)
@@ -661,8 +662,6 @@ def get_mouse_position(event, x, y, flags, mode, i, j):
         else:
             if not mode == 0:
                 points_of_interest_entry[index].append((x, y))
-                # index = j+((i)*6)
-                # for each in range(index,len(points_of_interest)-1):
             else:
                 points_of_interest_entry.append((x, y))
             print(points_of_interest_entry)
@@ -730,8 +729,7 @@ def on_button_click(i, j, button_images):
     while True:
         original_points = points_of_interest_entry[index].copy()
         frame = frame_tmp.copy()
-        # add_point = ask_yes_no()
-        # if add_point:
+
         # Draw a rectangle around the already selected points of interest
         height, width, channels = frame.shape
         for point in points_of_interest_entry[index]:
@@ -759,11 +757,8 @@ def on_button_click(i, j, button_images):
         if key == 27 or key == 13:  # Check if the Esc key was pressed
             cv2.destroyAllWindows()
             break
-        # update_button_image(frame_tmp.copy(), i, j, 1)
         update_entries(index, original_points)
-        # else:
-        #     update_entries(index,original_points)
-        #     break
+
 
 
 def load_video_frames():
@@ -1331,6 +1326,7 @@ def config_write():
     global end_values
     config = configparser.ConfigParser()
     config.read('settings_crop.ini')
+
     # Update values in the config file
     config.set('Resource Paths', 'OCR_tesseract_path', ocr_tesseract_path)
     config.set('Resource Paths', 'video_folder_path', video_folder_path)
@@ -1350,6 +1346,6 @@ def config_write():
     with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
         config.write(configfile)
 
-
+# Main body of the script
 initialise()
 open_ICCS_window()
