@@ -7,14 +7,12 @@ import pytesseract
 import configparser
 import tkinter as tk
 from tkinter import messagebox
-from tkinter import ttk
 from tkinter import filedialog
 from PIL import Image, ImageTk
 import pickle
 import datetime
 import sys
 import random
-import numpy as np
 import openpyxl
 import math
 import time
@@ -22,7 +20,6 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 
 
-# Define all required functions
 def config_read():
     global ocr_tesseract_path
     global video_folder_path
@@ -100,7 +97,7 @@ def config_read():
 
 
 def ask_yes_no(text):
-    result = messagebox.askyesno("Confirmation", text)
+    result: bool = messagebox.askyesno("Confirmation", text)
     return result
 
 
@@ -202,7 +199,7 @@ def get_excel_path(check):
     if crop_mode == 1 or crop_mode == 2:
         if not os.path.isfile(annotation_file_path) or check == 0:
             annotation_file_path = filedialog.askopenfilename(
-                title=f"Select the path to the {file_type[(crop_mode - 1)]} file", multiple=False,
+                title=f"Select the path to the {file_type[(crop_mode - 1)]} file",
                 initialdir=os.path.dirname(os.path.abspath(__file__)),
                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
 
@@ -277,8 +274,9 @@ def load_videos():
     video_filepaths = [os.path.join(video_folder_path, f) for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
 
 
-def set_OCR_ROI(video_filepath):
-    # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the top left and bottom right coordinates will be saved in the settings_crop.ini file
+def set_ocr_roi(video_filepath):
+    # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the
+    # top left and bottom right coordinates will be saved in the settings_crop.ini file
     global x_coordinate
     global y_coordinate
     global width
@@ -297,7 +295,6 @@ def set_OCR_ROI(video_filepath):
         # Handle cases where conversion to integer fails
         print('Error: Invalid integer value found in settings_crop.ini')
     cap = cv2.VideoCapture(video_filepath)
-    text_roi = (x_coordinate, y_coordinate, width, height)
     # Create a window and pass it to the mouse callback function
     cv2.namedWindow('image')
     # Make the window topmost
@@ -442,6 +439,7 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
     global width
     global height
     failed = False
+    return_time = "00"
     if "\n" in detected_text:
         detected_text = detected_text.replace("\n", "")
     if not len(detected_text) <= 23:
@@ -619,7 +617,7 @@ def evaluate_string_formula(cell):
 
 def load_excel_table(file_path):
     # Define the columns to extract
-    cols = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21]
+    cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21]
     # Read the Excel file, skipping the first two rows
     df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
                        converters={0: evaluate_string_formula, 1: evaluate_string_formula, 2: evaluate_string_formula,
@@ -651,7 +649,7 @@ def load_excel_table(file_path):
 
 def load_csv(file_path):
     # Define the columns to extract
-    cols = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    cols: list[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     # Read the Excel file, skipping the first two rows - follow the custom format
     filtered_df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
                                 converters={0: evaluate_string_formula, 1: evaluate_string_formula,
@@ -1119,7 +1117,7 @@ def open_ICCS_window():
     pil_img.save("resources/img/ocr.png")
     ocr_icon = ImageTk.PhotoImage(file="resources/img/ocr.png")
 
-    ocr_button = tk.Button(toolbar, image=ocr_icon, compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48, width=100, command=lambda j=j: set_OCR_ROI(video_filepaths[0]))
+    ocr_button = tk.Button(toolbar, image=ocr_icon, compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48, width=100, command=lambda j=j: set_ocr_roi(video_filepaths[0]))
     ocr_button.grid(row=0, column=7, padx=0, pady=5, sticky="ew")
 
     right_arrow = Image.open("resources/img/ra.png")
