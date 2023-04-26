@@ -104,7 +104,7 @@ for image_file in image_files:
     # Load the image
     image_path = os.path.join(folder_path, image_file)
     image = cv2.imread(image_path)
-    image_height, image_width = image.shape
+    image_height, image_width, channels = image.shape
 
 
     # Create a black canvas to hold the image and arrows
