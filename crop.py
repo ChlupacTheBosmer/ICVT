@@ -6,17 +6,13 @@ import cv2
 import pytesseract
 import configparser
 import tkinter as tk
-from tkinter import simpledialog
 from tkinter import messagebox
 from tkinter import ttk
 from tkinter import filedialog
-import time
 from PIL import Image, ImageTk
 import pickle
-import shutil
 import datetime
 import sys
-import openpyxl
 import random
 import numpy as np
 import openpyxl
@@ -104,6 +100,9 @@ def ask_yes_no(text):
     result = messagebox.askyesno("Confirmation", text)
     return result
 
+def create_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 def select_file(selected_file_index, index, root):
     selected_file_index.set(index + 1)
@@ -209,6 +208,7 @@ def get_video_folder(check):
     global scaned_folders
     global tree_allow
     global loaded
+    global root
     loaded = 0
     # set path to folder containing mp4 files
     original_video_folder_path = video_folder_path
@@ -233,7 +233,11 @@ def get_video_folder(check):
             if not check == 1:
                 load_videos()
                 reload_points_of_interest()
-                ICCS_window.destroy()
+                try:
+                    if root.winfo_exists():
+                        root.destroy()
+                except:
+                    print("window did not exist")
                 load_video_frames()
                 open_ICCS_window()
             print(video_folder_path)
@@ -266,10 +270,77 @@ def load_videos():
     # Load videos
     video_filepaths = []
     video_filepaths = [os.path.join(video_folder_path, f) for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
-    # for filename in os.listdir(video_folder_path):
-    # file_path = os.path.join(video_folder_path, filename)
-    # if os.path.isfile(file_path):
-    # video_filepaths.append(file_path)
+
+
+def set_OCR_ROI(video_filepath):
+    # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the top left and bottom right coordinates will be saved in the settings_crop.ini file
+    global x_coordinate
+    global y_coordinate
+    global width
+    global height
+    global config
+    global cap
+
+    # Read settings from settings_crop.ini
+    config.read('settings_crop.ini', encoding='utf-8')
+    try:
+        x_coordinate = int(config['OCR settings'].get('x_coordinate', '0').strip())
+        y_coordinate = int(config['OCR settings'].get('y_coordinate', '0').strip())
+        width = int(config['OCR settings'].get('width', '500').strip())
+        height = int(config['OCR settings'].get('height', '40').strip())
+    except ValueError:
+        # Handle cases where conversion to integer fails
+        print('Error: Invalid integer value found in settings_crop.ini')
+    cap = cv2.VideoCapture(video_filepath)
+    text_roi = (x_coordinate, y_coordinate, width, height)
+    # Create a window and pass it to the mouse callback function
+    cv2.namedWindow('image')
+    # Make the window topmost
+    cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
+    # display rectangle on image from the text_roi coordinates
+    cv2.setMouseCallback('image', draw_rectangle)
+    while (cap.isOpened()):
+        ret, frame = cap.read()
+        if ret:
+            cv2.rectangle(frame, (x_coordinate, y_coordinate), (x_coordinate + width, y_coordinate + height),
+                          (0, 255, 0),
+                          2)
+            cv2.imshow('image', frame)
+            k = cv2.waitKey(1) & 0xFF
+            if k == 27:
+                cv2.destroyAllWindows()
+                break
+        else:
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+    # Save settings to settings_crop.ini
+    config['OCR settings']['x_coordinate'] = str(x_coordinate)
+    config['OCR settings']['y_coordinate'] = str(y_coordinate)
+    config['OCR settings']['width'] = str(width)
+    config['OCR settings']['height'] = str(height)
+    with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
+        config.write(configfile)
+
+
+def draw_rectangle(event, x, y, flags, param):
+    global x_coordinate
+    global y_coordinate
+    global width
+    global height
+    global cap
+    global text_roi
+    frame = cap.read()[1]
+    if event == cv2.EVENT_LBUTTONDOWN:
+        x_coordinate = x
+        y_coordinate = y
+    elif event == cv2.EVENT_LBUTTONUP:
+        width = x - x_coordinate
+        height = y - y_coordinate
+        text_roi = (x_coordinate, y_coordinate, width, height)
+        cv2.rectangle(frame, (x_coordinate, y_coordinate), (x, y), (0, 255, 0), 2)
+        cv2.imshow('image', frame)
+        #cv2.waitKey(0)
 
 
 def get_text_from_video(video_filepath, start_or_end):
@@ -280,6 +351,7 @@ def get_text_from_video(video_filepath, start_or_end):
     global config
     global cap
     print(video_filepath)
+
     # Read settings from settings_crop.ini
     config.read('settings_crop.ini', encoding='utf-8')
     try:
@@ -316,8 +388,7 @@ def get_text_from_video(video_filepath, start_or_end):
         # debug OCR file creation
         script_dir = os.path.dirname(os.path.abspath(__file__))
         output_dir = os.path.join(script_dir, "OCR images")
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        create_dir(output_dir)
         OCR_file_name = ''.join([os.path.basename(video_filepath)[:-4], "_", start_or_end, ".png"])
         OCR_file_path = os.path.join(output_dir, OCR_file_name)
         cv2.imwrite(OCR_file_path, thresh)
@@ -349,6 +420,8 @@ def submit_time(input_field):
 def process_OCR_text(detected_text, frame):
     global cap
     global sec_OCR
+    global root
+    global dialog
     if "\n" in detected_text:
         detected_text = detected_text.replace("\n", "")
     if not len(detected_text) <= 23:
@@ -361,9 +434,6 @@ def process_OCR_text(detected_text, frame):
         return_time = detected_text[-2:]
     else:
         print(' '.join(["Flow:", "Text detection failed -", detected_text]))
-        global root
-        global dialog
-        global sec_OCR
 
         # Create window with video frame
         cv2.namedWindow('Frame')
@@ -425,6 +495,7 @@ def process_OCR_text(detected_text, frame):
 def get_video_start_end_times(video_filepath):
     video_filename = os.path.basename(video_filepath)
     print(' '.join(["Flow:", "Processing video file -", video_filepath]))
+
     # get start time
     parts = video_filename[:-4].split("_")
     if len(parts) == 6:
@@ -436,7 +507,6 @@ def get_video_start_end_times(video_filepath):
             "Error: Some video file names have an unsupported format. Expected format is "
             "CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
         start_time_minutes = video_filename[:-4]
-    # start_time_minutes = video_filename[:-4]
     text, frame = get_text_from_video(video_filepath, "start")
     start_time_seconds = process_OCR_text(text, frame)
     start_time_str = '_'.join([start_time_minutes, start_time_seconds])
@@ -764,7 +834,6 @@ def on_button_click(i, j, button_images):
 def load_video_frames():
     # Loop through each file in folder
     global frames
-    global points_of_interest_entry
     frames = []
     for filename in os.listdir(video_folder_path):
         if filename.endswith(".mp4"):  # Modify file extension as needed
@@ -801,6 +870,7 @@ def load_progress():
     global frames
     global loaded
     global auto
+    global ICCS_window
     result = ask_yes_no("Do you want to load settings? This will overwrite any unsaved progress.")
     if result:
         # Create an in-memory file object
@@ -965,7 +1035,7 @@ def open_ICCS_window():
     pil_img.save("resources/img/ocr.png")
     ocr_icon = ImageTk.PhotoImage(file="resources/img/ocr.png")
 
-    ocr_button = tk.Button(toolbar, image=ocr_icon, compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48, width=100)
+    ocr_button = tk.Button(toolbar, image=ocr_icon, compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48, width=100, command=lambda j=j: set_OCR_ROI(video_filepaths[0]))
     ocr_button.pack(side=tk.LEFT)
 
     # Create a canvas to hold the buttons
@@ -1128,11 +1198,8 @@ def initialise():
     get_video_folder(1)
     get_excel_path(1)
     load_videos()
-    # Check output folder
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    if not os.path.exists(f"./{output_folder}/whole frames/"):
-        os.makedirs(f"./{output_folder}/whole frames/")
+    create_dir(output_folder)
+    create_dir(f"./{output_folder}/whole frames/")
     reload_points_of_interest()
     load_video_frames()
 
@@ -1349,3 +1416,4 @@ def config_write():
 # Main body of the script
 initialise()
 open_ICCS_window()
+
