@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import configparser
 import pyautogui
+from PIL import Image
 import tkinter as tk
 from tkinter import simpledialog
 from tkinter import messagebox
@@ -23,8 +24,7 @@ config['Resource Paths'] = {
 config['GUI settings'] = {
     'left_label': 'empty',
     'right_label': 'visitor',
-    'window_width': '800',
-    'window_height': '800'
+    'window_size': '960'
 }
 config['Workflow settings'] = {
     'Scan_default_folders': '1',
@@ -52,8 +52,7 @@ except ValueError:
 try:
     text_left = config['GUI settings'].get('left_label', 'empty').strip().upper()
     text_right = config['GUI settings'].get('right_label', 'visitor').strip().upper()
-    window_width = int(config['GUI settings'].get('window_width', '600').strip())
-    window_height = int(config['GUI settings'].get('window_height', '600').strip())
+    window_width = int(config['GUI settings'].get('window_size', '640').strip())
     left_key = config['Workflow settings'].get('send_left_key', 'a').strip()
     right_key = config['Workflow settings'].get('send_right_key', 'd').strip()
     quit_key = config['Workflow settings'].get('quit_key', 'q').strip()
@@ -97,8 +96,6 @@ arrow_height = 60
 arrow_color_l = (0, 0, 255)
 arrow_color_r = (0, 255, 0)
 
-# Specify the desired width of the window
-window_width = window_width+(arrow_width*2)+text_size_l[0]+text_size_r[0]
 # Loop through each image file and show it to the user
 for image_file in image_files:
     # Load the image
@@ -106,7 +103,30 @@ for image_file in image_files:
     image = cv2.imread(image_path)
     image_height, image_width, channels = image.shape
 
+    # Calculate the aspect ratio of the image
+    aspect_ratio = image_width / image_height
 
+    # Set the desired height and width
+    new_height = window_width
+    new_width = int(new_height * aspect_ratio)
+
+    # Resize the image
+    resized_image = cv2.resize(image,(new_width, new_height), Image.LANCZOS)
+
+    # If the new width is less than 960, resize again to get the correct width
+    if new_width < new_height:
+        resized_image = cv2.resize(resized_image, (new_height, new_height), Image.LANCZOS)
+
+    # If the new width is greater than 960, crop the image to get the correct width
+    if new_width > new_height:
+        crop_start = int((new_width - new_height) / 2)
+        crop_end = crop_start + new_height
+        resized_image = resized_image[:, crop_start:crop_end]
+    image = resized_image
+    image_height, image_width, channels = image.shape
+
+    # Specify the desired width of the window
+    window_width = window_width + (arrow_width * 2) + text_size_l[0] + text_size_r[0]
     # Create a black canvas to hold the image and arrows
     canvas = np.zeros((image_height, window_width, 3), dtype=np.uint8)
 
@@ -145,7 +165,7 @@ for image_file in image_files:
     # Calculate window position
     screen_width, screen_height = pyautogui.size()
     x = (screen_width - window_width) // 2
-    y = (screen_height - window_height) // 2
+    y = 0
     cv2.moveWindow(window_name, x, y)
 
     cv2.imshow(window_name, canvas)
