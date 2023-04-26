@@ -17,6 +17,7 @@ import random
 import numpy as np
 import openpyxl
 import math
+import time
 
 
 # Define all required functions
@@ -373,7 +374,7 @@ def get_text_from_video(video_filepath, start_or_end):
     ret, frame = cap.read()
     if ret:
         # Crop the image and pre-process it
-        height, width, channels = frame.shape
+        #height, width, channels = frame.shape
         x, y, w, h = text_roi
         text_frame = frame[y:y + h, x:x + w]
         HSV_img = cv2.cvtColor(text_frame, cv2.COLOR_BGR2HSV)
@@ -411,10 +412,16 @@ def submit_time(input_field):
     else:
         print("Error: OCR detected text does not follow the expected format. Resolved manually.")
     sec_OCR = text
-    root.destroy()
-    dialog.destroy()
-    open_ICCS_window()
-    root.withdraw()
+    while True:
+        try:
+            if dialog.winfo_exists():
+                dialog.quit()
+                dialog.destroy()
+                print("destroying dialog")
+                break
+        except:
+            time.sleep(0.1)
+            break
 
 
 def process_OCR_text(detected_text, frame):
@@ -422,6 +429,10 @@ def process_OCR_text(detected_text, frame):
     global sec_OCR
     global root
     global dialog
+    global x_coordinate
+    global y_coordinate
+    global width
+    global height
     if "\n" in detected_text:
         detected_text = detected_text.replace("\n", "")
     if not len(detected_text) <= 23:
@@ -435,9 +446,14 @@ def process_OCR_text(detected_text, frame):
     else:
         print(' '.join(["Flow:", "Text detection failed -", detected_text]))
 
-        # Create window with video frame
-        cv2.namedWindow('Frame')
-        cv2.imshow('Frame', frame)
+        # loop until the tkinter root window is created
+        while True:
+            try:
+                if root.winfo_exists():
+                    break
+            except:
+                print("waiting for window to be created")
+                time.sleep(0.1)
 
         # Create the dialog window
         dialog = tk.Toplevel(root)
@@ -447,28 +463,41 @@ def process_OCR_text(detected_text, frame):
         except:
             screen_width = 1920
             screen_height = 1080
-        img_frame_pos_x, img_frame_pos_y, img_frame_width, img_frame_height = cv2.getWindowImageRect('Frame')
-        cv2.moveWindow("Frame", int((screen_width // 2) - (img_frame_width // 2)), 0)
-        img_frame_pos_x, img_frame_pos_y, img_frame_width, img_frame_height = cv2.getWindowImageRect('Frame')
 
         dialog.wm_attributes("-topmost", 1)
         dialog.title("Time Input")
-        dialog_width = img_frame_width
-        dialog_height = dialog.winfo_reqheight()
-        dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
-        dialog_pos_y = min((img_frame_pos_y + img_frame_height), (screen_height - (img_frame_height // 2)))
-        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
+
+        # convert frame to tkinter image
+        text_roi = (x_coordinate, y_coordinate, width, height)
+        x, y, w, h = text_roi
+        img_frame_width = min(screen_width//2,w*2)
+        img_frame_height = min(screen_height//2,h*2)
+        frame = frame[y:y + h, x:x + w]
+        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (img_frame_width, img_frame_height), Image.LANCZOS)
+        img = Image.fromarray(img)
+        img = ImageTk.PhotoImage(img)
+        img_width = img.width()
+        img_height = img.height()
+
+        # Add image frame containing the video frame
+        img_frame = tk.Frame(dialog, width=img_width, height=img_height)
+        img_frame.pack(side=tk.TOP, pady=(0, 0))
+        img_frame.pack_propagate(0)
+
+        #Add image to image frame
+        img_label = tk.Label(img_frame, image=img)
+        img_label.pack(side=tk.TOP, pady=(0, 0))
 
         # Add label
         text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
         text_field.insert(tk.END,
                           "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
-        text_field.configure(state="disabled", highlightthickness=1, highlightbackground="white",
-                             background="white", relief="flat")
+        text_field.configure(state="disabled", highlightthickness=1, relief="flat", background=dialog.cget('bg'))
         text_field.tag_configure("center", justify="center")
         text_field.tag_add("center", "1.0", "end")
         text_field.pack(side=tk.TOP, padx=(0, 0))
-        label = tk.Label(dialog, text="Enter text", font=("Arial", 10))
+        label = tk.Label(dialog, text="Enter text", font=("Arial", 10), background=dialog.cget('bg'))
         label.pack(pady=2)
 
         # Add input field
@@ -476,18 +505,25 @@ def process_OCR_text(detected_text, frame):
         input_field = tk.Entry(dialog, font=("Arial", 10), width=4)
         input_field.pack(pady=2)
         input_field.bind("<Return>", lambda j=j: submit_time(input_field))
+        input_field.focus()
 
         # Add submit button
         submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10),
                                   command=lambda j=j: submit_time(input_field))
         submit_button.pack(pady=2)
 
-        # Focus on the input field
-        dialog.lift()
-        input_field.focus_set()
+        # Position the window
+        dialog_width = dialog.winfo_reqwidth()+img_frame_width
+        dialog_height = dialog.winfo_reqheight()+img_frame_height
+        dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
+        dialog_pos_y = 0
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
+
+        # Start the dialog
         dialog.mainloop()
+
+        # When dialog is closed
         return_time = sec_OCR
-        cv2.destroyAllWindows()
     return return_time
 
 
@@ -1179,7 +1215,7 @@ def open_ICCS_window():
 
     # Set the window size to fit the entire screen
     root.geometry(f"{screen_width - 20}x{screen_height}+0+0")
-    root.state('zoomed')
+    #root.state('zoomed')
     root.mainloop()
 
 
@@ -1237,10 +1273,12 @@ def crop_engine():
                                 video_filepaths.append(filepath)
                 video_data = get_video_data(video_filepaths)
             print(annotation_data_array)
+            print(video_data)
             for index, list in enumerate(annotation_data_array):
                 print(' '.join(["Flow: Annotation number:", str(index + 1)]))
                 annotation_time = pd.to_datetime(annotation_data_array[index][1], format='%Y%m%d_%H_%M_%S')
                 for i, list in enumerate(video_data):
+                    print(f"{video_data[i][1]} <= {annotation_time} <= {video_data[i][2]}")
                     if video_data[i][1] <= annotation_time <= video_data[i][2]:
                         for each in range(len(annotation_data_array[index])):
                             valid_annotation_data_entry.append(annotation_data_array[index][each])
