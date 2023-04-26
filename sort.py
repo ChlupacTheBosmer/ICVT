@@ -126,12 +126,12 @@ for image_file in image_files:
     image_height, image_width, channels = image.shape
 
     # Specify the desired width of the window
-    window_width = window_width + (arrow_width * 2) + text_size_l[0] + text_size_r[0]
+    adj_window_width = window_width + (arrow_width * 2) + text_size_l[0] + text_size_r[0]
     # Create a black canvas to hold the image and arrows
-    canvas = np.zeros((image_height, window_width, 3), dtype=np.uint8)
+    canvas = np.zeros((image_height, adj_window_width, 3), dtype=np.uint8)
 
     # Put the image on the canvas, centered horizontally
-    image_x = (window_width - image_width) // 2
+    image_x = (adj_window_width - image_width) // 2
     canvas[:, image_x:image_x + image_width, :] = image
 
     # Add triangle to the left side of the canvas
@@ -145,26 +145,26 @@ for image_file in image_files:
     cv2.putText(canvas, text_left, text_position, font, 1, text_color, 2)
 
     # Add triangle to the right side of the canvas
-    triangle_points = [(window_width - arrow_width, image_height // 2 - arrow_height),
-                       (window_width, image_height // 2),
-                       (window_width - arrow_width, image_height // 2 + arrow_height)]
+    triangle_points = [(adj_window_width - arrow_width, image_height // 2 - arrow_height),
+                       (adj_window_width, image_height // 2),
+                       (adj_window_width - arrow_width, image_height // 2 + arrow_height)]
     cv2.drawContours(canvas, [np.array(triangle_points)], 0, arrow_color_r, -1)
 
     # Add text label to the right side of the canvas
     text_color = (0, 255, 0)
-    text_position = (window_width - arrow_width - text_size_r[0], image_height // 2 + text_size_r[1] // 2)
+    text_position = (adj_window_width - arrow_width - text_size_r[0], image_height // 2 + text_size_r[1] // 2)
     cv2.putText(canvas, text_right, text_position, font, 1, text_color, 2)
 
     # Show the image and wait for user input
     window_name = f"{os.path.basename(image_path)} - Image"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.setWindowTitle(window_name, os.path.basename(image_path))
-    cv2.resizeWindow(window_name, window_width, image_height)
+    cv2.resizeWindow(window_name, adj_window_width, image_height)
 
 
     # Calculate window position
     screen_width, screen_height = pyautogui.size()
-    x = (screen_width - window_width) // 2
+    x = (screen_width - adj_window_width) // 2
     y = 0
     cv2.moveWindow(window_name, x, y)
 
