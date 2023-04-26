@@ -171,15 +171,16 @@ for image_file in image_files:
     cv2.imshow(window_name, canvas)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_TOPMOST, 1)
 
-    key = cv2.waitKey(0)
+    key = cv2.waitKeyEx(0)
     cv2.destroyAllWindows()
 
     # Move the image file to the appropriate folder based on user input
-    if key == ord(quit_key):
+    if key == ord(quit_key) or key == 27:
         break
-    elif key == ord(left_key):
+    elif key == ord(left_key) or key == 81 or key == 2424832:
+
         os.rename(image_path, os.path.join(left_folder_path, image_file))
-    elif key == ord(right_key):
+    elif key == ord(right_key) or key == 83 or key == 2555904:
         os.rename(image_path, os.path.join(right_folder_path, image_file))
 
 # Clean up
