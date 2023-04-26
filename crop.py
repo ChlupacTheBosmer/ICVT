@@ -18,6 +18,8 @@ import numpy as np
 import openpyxl
 import math
 import time
+from hachoir.metadata import extractMetadata
+from hachoir.parser import createParser
 
 
 # Define all required functions
@@ -101,9 +103,11 @@ def ask_yes_no(text):
     result = messagebox.askyesno("Confirmation", text)
     return result
 
+
 def create_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
+
 
 def select_file(selected_file_index, index, root):
     selected_file_index.set(index + 1)
@@ -380,9 +384,11 @@ def get_text_from_video(video_filepath, start_or_end):
         HSV_img = cv2.cvtColor(text_frame, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(HSV_img)
         v = cv2.GaussianBlur(v, (1, 1), 0)
-        thresh = cv2.threshold(v, 220, 255, cv2.THRESH_BINARY_INV)[1]
+        thresh = cv2.threshold(v, 220, 255, cv2.THRESH_BINARY_INV)[1] #change the second number to change the treshold - anything over that value will be turned into white
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=(1, 1))
         thresh = cv2.dilate(thresh, kernel)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=(1, 1))
+        thresh = cv2.erode(thresh, kernel)
         # text recognition
         OCR_text = pytesseract.image_to_string(thresh)
 
@@ -392,7 +398,9 @@ def get_text_from_video(video_filepath, start_or_end):
         create_dir(output_dir)
         OCR_file_name = ''.join([os.path.basename(video_filepath)[:-4], "_", start_or_end, ".png"])
         OCR_file_path = os.path.join(output_dir, OCR_file_name)
-        cv2.imwrite(OCR_file_path, thresh)
+        #cv2.imwrite(OCR_file_path, thresh)
+        with open(OCR_file_path, 'wb') as f:
+            f.write(cv2.imencode('.png', thresh)[1].tobytes())
     else:
         OCR_text = "none"
     cap.release()
@@ -424,7 +432,7 @@ def submit_time(input_field):
             break
 
 
-def process_OCR_text(detected_text, frame):
+def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
     global cap
     global sec_OCR
     global root
@@ -433,6 +441,7 @@ def process_OCR_text(detected_text, frame):
     global y_coordinate
     global width
     global height
+    failed = False
     if "\n" in detected_text:
         detected_text = detected_text.replace("\n", "")
     if not len(detected_text) <= 23:
@@ -445,85 +454,109 @@ def process_OCR_text(detected_text, frame):
         return_time = detected_text[-2:]
     else:
         print(' '.join(["Flow:", "Text detection failed -", detected_text]))
-
-        # loop until the tkinter root window is created
-        while True:
+        if start_or_end == "start":
             try:
-                if root.winfo_exists():
-                    break
+                parser = createParser(video_filepath)
+                metadata = extractMetadata(parser)
+                print(metadata)
+                modify_date = str(metadata.get("creation_date"))
+                return_time = modify_date[-2:]
+                print("Error: OCR detected text does not follow the expected format. Obtained value from metadata.")
             except:
-                print("waiting for window to be created")
-                time.sleep(0.1)
+                failed = True
+        elif start_or_end == "end":
+            try:
+                parser = createParser(video_filepath)
+                metadata = extractMetadata(parser)
+                print(metadata)
+                modify_date = str(metadata.get("creation_date"))
+                start_seconds = int(modify_date[-2:])
+                duration = str(metadata.get("duration"))
+                time_parts = duration.split(":")
+                seconds = int(time_parts[2].split(".")[0])
+                return_time = str(seconds+start_seconds)
+                print("Error: OCR detected text does not follow the expected format. Obtained value from metadata.")
+            except:
+                failed = True
+        if failed:
+            # loop until the tkinter root window is created
+            while True:
+                try:
+                    if root.winfo_exists():
+                        break
+                except:
+                    print("waiting for window to be created")
+                    time.sleep(0.1)
 
-        # Create the dialog window
-        dialog = tk.Toplevel(root)
-        try:
-            screen_width = dialog.winfo_screenwidth()
-            screen_height = dialog.winfo_screenheight()
-        except:
-            screen_width = 1920
-            screen_height = 1080
+            # Create the dialog window
+            dialog = tk.Toplevel(root)
+            try:
+                screen_width = dialog.winfo_screenwidth()
+                screen_height = dialog.winfo_screenheight()
+            except:
+                screen_width = 1920
+                screen_height = 1080
 
-        dialog.wm_attributes("-topmost", 1)
-        dialog.title("Time Input")
+            dialog.wm_attributes("-topmost", 1)
+            dialog.title("Time Input")
 
-        # convert frame to tkinter image
-        text_roi = (x_coordinate, y_coordinate, width, height)
-        x, y, w, h = text_roi
-        img_frame_width = min(screen_width//2,w*2)
-        img_frame_height = min(screen_height//2,h*2)
-        frame = frame[y:y + h, x:x + w]
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (img_frame_width, img_frame_height), Image.LANCZOS)
-        img = Image.fromarray(img)
-        img = ImageTk.PhotoImage(img)
-        img_width = img.width()
-        img_height = img.height()
+            # convert frame to tkinter image
+            text_roi = (x_coordinate, y_coordinate, width, height)
+            x, y, w, h = text_roi
+            img_frame_width = min(screen_width//2,w*2)
+            img_frame_height = min(screen_height//2,h*2)
+            frame = frame[y:y + h, x:x + w]
+            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = cv2.resize(img, (img_frame_width, img_frame_height), Image.LANCZOS)
+            img = Image.fromarray(img)
+            img = ImageTk.PhotoImage(img)
+            img_width = img.width()
+            img_height = img.height()
 
-        # Add image frame containing the video frame
-        img_frame = tk.Frame(dialog, width=img_width, height=img_height)
-        img_frame.pack(side=tk.TOP, pady=(0, 0))
-        img_frame.pack_propagate(0)
+            # Add image frame containing the video frame
+            img_frame = tk.Frame(dialog, width=img_width, height=img_height)
+            img_frame.pack(side=tk.TOP, pady=(0, 0))
+            img_frame.pack_propagate(0)
 
-        #Add image to image frame
-        img_label = tk.Label(img_frame, image=img)
-        img_label.pack(side=tk.TOP, pady=(0, 0))
+            #Add image to image frame
+            img_label = tk.Label(img_frame, image=img)
+            img_label.pack(side=tk.TOP, pady=(0, 0))
 
-        # Add label
-        text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
-        text_field.insert(tk.END,
-                          "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
-        text_field.configure(state="disabled", highlightthickness=1, relief="flat", background=dialog.cget('bg'))
-        text_field.tag_configure("center", justify="center")
-        text_field.tag_add("center", "1.0", "end")
-        text_field.pack(side=tk.TOP, padx=(0, 0))
-        label = tk.Label(dialog, text="Enter text", font=("Arial", 10), background=dialog.cget('bg'))
-        label.pack(pady=2)
+            # Add label
+            text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
+            text_field.insert(tk.END,
+                              "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
+            text_field.configure(state="disabled", highlightthickness=1, relief="flat", background=dialog.cget('bg'))
+            text_field.tag_configure("center", justify="center")
+            text_field.tag_add("center", "1.0", "end")
+            text_field.pack(side=tk.TOP, padx=(0, 0))
+            label = tk.Label(dialog, text="Enter text", font=("Arial", 10), background=dialog.cget('bg'))
+            label.pack(pady=2)
 
-        # Add input field
-        j = 0
-        input_field = tk.Entry(dialog, font=("Arial", 10), width=4)
-        input_field.pack(pady=2)
-        input_field.bind("<Return>", lambda j=j: submit_time(input_field))
-        input_field.focus()
+            # Add input field
+            j = 0
+            input_field = tk.Entry(dialog, font=("Arial", 10), width=4)
+            input_field.pack(pady=2)
+            input_field.bind("<Return>", lambda j=j: submit_time(input_field))
+            input_field.focus()
 
-        # Add submit button
-        submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10),
-                                  command=lambda j=j: submit_time(input_field))
-        submit_button.pack(pady=2)
+            # Add submit button
+            submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10),
+                                      command=lambda j=j: submit_time(input_field))
+            submit_button.pack(pady=2)
 
-        # Position the window
-        dialog_width = dialog.winfo_reqwidth()+img_frame_width
-        dialog_height = dialog.winfo_reqheight()+img_frame_height
-        dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
-        dialog_pos_y = 0
-        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
+            # Position the window
+            dialog_width = dialog.winfo_reqwidth()+img_frame_width
+            dialog_height = dialog.winfo_reqheight()+img_frame_height
+            dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
+            dialog_pos_y = 0
+            dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
 
-        # Start the dialog
-        dialog.mainloop()
+            # Start the dialog
+            dialog.mainloop()
 
-        # When dialog is closed
-        return_time = sec_OCR
+            # When dialog is closed
+            return_time = sec_OCR
     return return_time
 
 
@@ -544,15 +577,26 @@ def get_video_start_end_times(video_filepath):
             "CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
         start_time_minutes = video_filename[:-4]
     text, frame = get_text_from_video(video_filepath, "start")
-    start_time_seconds = process_OCR_text(text, frame)
+    start_time_seconds = process_OCR_text(text, frame, video_filepath, "start")
     start_time_str = '_'.join([start_time_minutes, start_time_seconds])
     start_time = pd.to_datetime(start_time_str, format='%Y%m%d_%H_%M_%S')
 
     # get end time
     text, frame = get_text_from_video(video_filepath, "end")
-    end_time_seconds = process_OCR_text(text, frame)
+    end_time_seconds = process_OCR_text(text, frame, video_filepath, "end")
+    try:
+        parser = createParser(video_filepath)
+        metadata = extractMetadata(parser)
+        duration = str(metadata.get("duration"))
+        time_parts = duration.split(":")
+        delta = int(time_parts[1])
+    except:
+        delta = 15 + (int(end_time_seconds) // 60)
+    #print(start_time_minutes)
+    #print(end_time_seconds)
+    end_time_seconds = str(int(end_time_seconds) % 60)
     end_time_str = pd.to_datetime('_'.join([start_time_minutes, end_time_seconds]), format='%Y%m%d_%H_%M_%S')
-    end_time = end_time_str + pd.Timedelta(minutes=15)
+    end_time = end_time_str + pd.Timedelta(minutes=int(delta))
     return start_time, end_time
 
 
@@ -644,10 +688,25 @@ def capture_crop(frame, point):
     global fps
     global frame_number_start
     global visit_duration
+    global crop_size
     x, y = point
     # Add a random offset to the coordinates, but ensure they remain within the image bounds
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # Check if any of the dimensions is smaller than Crop_size (640)
+    if frame_height < crop_size or frame_width < crop_size:
+        # Calculate the scaling factor to upscale the image
+        scaling_factor = crop_size / min(frame_height, frame_width)
+
+        # Calculate the new dimensions for the upscaled frame
+        new_width = int(round(frame_width * scaling_factor))
+        new_height = int(round(frame_height * scaling_factor))
+
+        # Upscale the frame using cv2.resize with Lanczos upscaling algorithm
+        frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+    frame_height, frame_width = frame.shape[:2]
+
     x_offset = random.randint(-offset_range, offset_range)
     y_offset = random.randint(-offset_range, offset_range)
     x1 = max(0, min(((x - crop_size // 2) + x_offset), frame_width - crop_size))
@@ -669,7 +728,7 @@ def generate_frames(frame, success, tag, index):
     global fps
     global frame_number_start
     global visit_duration
-    species = tag[-27:-19]
+    species = tag[-27:-19].replace("_", "")
     timestamp = tag[-18:-4]
     crop_counter = 1
     # Loop through the video and crop yimages every 30th frame
@@ -866,7 +925,6 @@ def on_button_click(i, j, button_images):
         update_entries(index, original_points)
 
 
-
 def load_video_frames():
     # Loop through each file in folder
     global frames
@@ -945,9 +1003,11 @@ def open_ICCS_window():
     global scaned_folders
     global video_folder_path
     global root
+    global annotation_file_path
+    global auto
     root = tk.Tk()
     ICCS_window = root
-    root.wm_attributes("-topmost", 1)
+    root.focus()
     j = 0
     root.title("Insect Communities Crop Suite")
     # Create frame for the rest
@@ -967,7 +1027,7 @@ def open_ICCS_window():
         btn_state = "disabled"
     left_button = tk.Button(toolbar, image=left_arrow, compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
                             height=48, width=200, state=btn_state, command=lambda j=j: switch_folder("left"))
-    left_button.pack(side=tk.LEFT)
+    left_button.grid(row=0, column=0, padx=0, pady=5, sticky="ew")
 
     menu_icon = Image.open("resources/img/mn.png")
     pil_img = menu_icon.resize((50, 50))
@@ -976,11 +1036,11 @@ def open_ICCS_window():
 
     menu_button = tk.Button(toolbar, image=menu_icon, compound=tk.LEFT, text="Menu", padx=10, pady=5, height=48,
                             command=lambda j=j: open_menu())
-    menu_button.pack(side=tk.LEFT)
+    menu_button.grid(row=0, column=1, padx=0, pady=5, sticky="ew")
 
     # frame for radio
     radio_frame = tk.Frame(toolbar)
-    radio_frame.pack(side=tk.LEFT)
+    radio_frame.grid(row=0, column=2, padx=0, pady=5, sticky="ew")
 
     # create a tkinter variable to hold the selected value
     selected_option = tk.StringVar(value=crop_mode)
@@ -1009,24 +1069,12 @@ def open_ICCS_window():
                          height=56, width=116, font=("Arial", 17), command=lambda j=j: update_crop_mode(3))
 
     # arrange the radio buttons in a horizontal layout using the grid geometry manager
-    rb1.grid(row=0, column=0)
-    rb2.grid(row=0, column=1)
-    rb3.grid(row=0, column=2)
-
-    right_arrow = Image.open("resources/img/ra.png")
-    pil_img = right_arrow.resize((50, 50))
-    pil_img.save("resources/img/ra.png")
-    right_arrow = ImageTk.PhotoImage(file="resources/img/ra.png")
-    if tree_allow == 1 and not (scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path))) + 1) == len(
-            scaned_folders):
-        btn_state1 = "normal"
-    else:
-        btn_state1 = "disabled"
-    print(tree_allow)
-    print(btn_state1)
-    right_button = tk.Button(toolbar, image=right_arrow, compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
-                             height=48, width=200, state=btn_state1, command=lambda j=j: switch_folder("right"))
-    right_button.pack(side=tk.RIGHT)
+    rb1.grid(row=0, column=0, sticky="ew")
+    rb2.grid(row=0, column=1, sticky="ew")
+    rb3.grid(row=0, column=2, sticky="ew")
+    radio_frame.grid_columnconfigure(0, weight=1, minsize=50)
+    radio_frame.grid_columnconfigure(1, weight=1, minsize=50)
+    radio_frame.grid_columnconfigure(2, weight=1, minsize=50)
 
     on_image = tk.PhotoImage(width=116, height=57)
     off_image = tk.PhotoImage(width=116, height=57)
@@ -1037,16 +1085,16 @@ def open_ICCS_window():
     auto_processing.set(0)
     cb1 = tk.Checkbutton(toolbar, image=off_image, selectimage=on_image, indicatoron=False, onvalue=1, offvalue=0,
                          variable=auto_processing)
-    cb1.pack(side=tk.LEFT, padx=(0, 0), pady=0)
+    cb1.grid(row=0, column=3, padx=0, pady=5, sticky="ew")
 
     gears_icon = Image.open("resources/img/au.png")
     pil_img = gears_icon.resize((50, 50))
     pil_img.save("resources/img/au.png")
     gears_icon = ImageTk.PhotoImage(file="resources/img/au.png")
 
-    auto_button = tk.Button(toolbar, image=gears_icon, compound=tk.LEFT, text="\t\tAutomatic evaluation\t\t", padx=10,
+    auto_button = tk.Button(toolbar, image=gears_icon, compound=tk.LEFT, text="Automatic evaluation", padx=10,
                             pady=5, height=48, command=lambda j=j: auto_processing.set(1 - auto_processing.get()))
-    auto_button.pack(side=tk.LEFT)
+    auto_button.grid(row=0, column=4, padx=0, pady=5, sticky="ew")
 
     fl_icon = Image.open("resources/img/fl.png")
     pil_img = fl_icon.resize((50, 50))
@@ -1055,7 +1103,7 @@ def open_ICCS_window():
 
     fl_button = tk.Button(toolbar, image=fl_icon, compound=tk.LEFT, text="Select video folder", padx=10, pady=5,
                           height=48, command=lambda j=j: get_video_folder(0))
-    fl_button.pack(side=tk.LEFT)
+    fl_button.grid(row=0, column=5, padx=0, pady=5, sticky="ew")
 
     et_icon = Image.open("resources/img/et.png")
     pil_img = et_icon.resize((50, 50))
@@ -1064,7 +1112,7 @@ def open_ICCS_window():
 
     et_button = tk.Button(toolbar, image=et_icon, compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
                           height=48, command=lambda j=j: get_excel_path(0))
-    et_button.pack(side=tk.LEFT)
+    et_button.grid(row=0, column=6, padx=0, pady=5, sticky="ew")
 
     ocr_icon = Image.open("resources/img/ocr.png")
     pil_img = ocr_icon.resize((50, 50))
@@ -1072,7 +1120,30 @@ def open_ICCS_window():
     ocr_icon = ImageTk.PhotoImage(file="resources/img/ocr.png")
 
     ocr_button = tk.Button(toolbar, image=ocr_icon, compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48, width=100, command=lambda j=j: set_OCR_ROI(video_filepaths[0]))
-    ocr_button.pack(side=tk.LEFT)
+    ocr_button.grid(row=0, column=7, padx=0, pady=5, sticky="ew")
+
+    right_arrow = Image.open("resources/img/ra.png")
+    pil_img = right_arrow.resize((50, 50))
+    pil_img.save("resources/img/ra.png")
+    right_arrow = ImageTk.PhotoImage(file="resources/img/ra.png")
+    if tree_allow == 1 and not (scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path))) + 1) == len(
+            scaned_folders):
+        btn_state1 = "normal"
+    else:
+        btn_state1 = "disabled"
+    right_button = tk.Button(toolbar, image=right_arrow, compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
+                             height=48, width=200, state=btn_state1, command=lambda j=j: switch_folder("right"))
+    right_button.grid(row=0, column=8, padx=0, pady=5, sticky="ew")
+
+    toolbar.grid_columnconfigure(0, weight=2, minsize=50)
+    toolbar.grid_columnconfigure(1, weight=3, minsize=50)
+    toolbar.grid_columnconfigure(2, weight=4, minsize=150)
+    toolbar.grid_columnconfigure(3, weight=4, minsize=50)
+    toolbar.grid_columnconfigure(4, weight=1, minsize=50)
+    toolbar.grid_columnconfigure(5, weight=4, minsize=50)
+    toolbar.grid_columnconfigure(6, weight=4, minsize=50)
+    toolbar.grid_columnconfigure(7, weight=4, minsize=50)
+    toolbar.grid_columnconfigure(8, weight=2, minsize=50)
 
     # Create a canvas to hold the buttons
     canvas = tk.Canvas(outer_frame)
@@ -1143,8 +1214,17 @@ def open_ICCS_window():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, annotation_file_path)
     et_button = tk.Button(root, image=et_icon, compound=tk.LEFT, text="", padx=10, pady=5, height=58,
-                          command=lambda j=j: os.startfile(file_path))
+                          command=lambda j=j: os.startfile(annotation_file_path))
     et_button.pack(side=tk.RIGHT)
+
+    sheet_dir = os.path.dirname(annotation_file_path)
+    ef_icon = Image.open("resources/img/ef.png")
+    pil_img = ef_icon.resize((50, 50))
+    pil_img.save("resources/img/ef.png")
+    ef_icon = ImageTk.PhotoImage(file="resources/img/ef.png")
+    ef_button = tk.Button(root, image=ef_icon, compound=tk.LEFT, text="", padx=0, pady=5, height=58,
+                          command=lambda j=j: os.startfile(os.path.dirname(annotation_file_path)))
+    ef_button.pack(side=tk.RIGHT)
 
     bottom_toolbar = tk.Frame(root, pady=5)
     bottom_toolbar.pack(side=tk.TOP, fill=tk.BOTH)
@@ -1181,13 +1261,17 @@ def open_ICCS_window():
     load_button = tk.Button(bottom_toolbar, text="Load", image=load_icon, compound=tk.LEFT, padx=10, pady=5, width=300,
                             height=48, command=lambda j=j: load_progress())
     # Specify the column for each button
-    save_button.grid(row=0, column=1)
-    crop_button.grid(row=0, column=2)
-    sort_button.grid(row=0, column=3)
-    load_button.grid(row=0, column=4)
+    save_button.grid(row=0, column=1, sticky="ew")
+    crop_button.grid(row=0, column=2, sticky="ew")
+    sort_button.grid(row=0, column=3, sticky="ew")
+    load_button.grid(row=0, column=4, sticky="ew")
 
     # Add padding between the buttons
     bottom_toolbar.grid_columnconfigure(0, weight=1)
+    bottom_toolbar.grid_columnconfigure(1, weight=2)
+    bottom_toolbar.grid_columnconfigure(2, weight=2)
+    bottom_toolbar.grid_columnconfigure(3, weight=2)
+    bottom_toolbar.grid_columnconfigure(4, weight=2)
     bottom_toolbar.grid_columnconfigure(5, weight=1)
 
     # Update the canvas to show the buttons
@@ -1204,17 +1288,22 @@ def open_ICCS_window():
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
 
+    root_width = root.winfo_width()
+
     # update
     global loaded
     if loaded == 1:
         for each in range(len(video_filepaths)):
             first = -1
-            print(first)
             update_button_image(frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
-        auto_processing.set(auto)
+        # if auto is defined, set the auto processing to that value otherwise set it to 0
+        if auto is None:
+            auto_processing.set(0)
+        else:
+            auto_processing.set(auto)
 
     # Set the window size to fit the entire screen
-    root.geometry(f"{screen_width - 20}x{screen_height}+0+0")
+    root.geometry(f"{screen_width}x{screen_height-70}+-10+0")
     #root.state('zoomed')
     root.mainloop()
 
@@ -1225,8 +1314,10 @@ def initialise():
     global modified_frames
     global video_folder_path
     global annotation_file_path
+    global auto
     config_read()
     pytesseract.pytesseract.tesseract_cmd = ocr_tesseract_path
+    auto = 0
     loaded = 0
     tree_allow = 0
     modified_frames = []
@@ -1249,6 +1340,7 @@ def crop_engine():
     global visit_duration
     global crop_mode
     global root
+    global loaded
     result = ask_yes_no("Do you want to start the cropping process?")
     if result:
         valid_annotations_array = []
@@ -1315,6 +1407,7 @@ def crop_engine():
             root.destroy()
     except:
         print("window did not exist")
+    loaded = 1
     open_ICCS_window()
 
 
@@ -1352,15 +1445,15 @@ def open_menu():
                   "Crop size:", "Offset size:"]
     labels = []
     fields = []
-    outer_frame = tk.Frame(window, pady=10)
+    outer_frame = tk.Frame(window, pady=20)
     outer_frame.pack(side=tk.TOP, fill=tk.BOTH)
     for i in range(10):
         label = tk.Label(outer_frame, text=f"{label_text[i]}")
-        label.grid(row=i, column=0)
+        label.grid(row=i, column=0, padx=10)
         labels.append(label)
 
         field = tk.Entry(outer_frame, width=120)
-        field.grid(row=i, column=1)
+        field.grid(row=i, column=1, padx=10)
         fields.append(field)
 
     # Create the save button
@@ -1390,6 +1483,8 @@ def open_menu():
         crop_size = int(end_values[8])
         offset_range = int(end_values[9])
         config_write()
+        create_dir(output_folder)
+        create_dir(f"./{output_folder}/whole frames/")
         window.destroy()
 
     save_button = tk.Button(outer_frame, text="Save", command=save_fields)

@@ -10,6 +10,7 @@ ffmpeg==1.4
 ffmpeg-python==0.2.0
 fonttools==4.39.3
 future==0.18.3
+hachoir==3.2.0
 httplib2==0.22.0
 idna==2.10
 imageio==2.27.0
