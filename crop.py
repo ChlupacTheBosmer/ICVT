@@ -217,6 +217,9 @@ def get_excel_path(check, ini_dir):
                 title=f"Select the path to the {file_type[(crop_mode - 1)]} file",
                 initialdir=ini_dir,
                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
+    else:
+        #display message box that the crop mode does not require an annotation file
+        messagebox.showinfo("Info", "The current crop mode does not require an annotation file. Switch crop mode to 1 (watchers) or 2 (manual) to use an annotation file.")
 
 
 def get_video_folder(check):
