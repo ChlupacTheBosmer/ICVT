@@ -1482,17 +1482,17 @@ def crop_engine():
     logger.debug("Running function crop_engine()")
     result = ask_yes_no("Do you want to start the cropping process?")
     if result:
-        video_ok, excel_ok = check_paths(True, True)
-        if not video_ok or not excel_ok:
-            messagebox.showinfo("Warning",
-                                f"Unspecified path to a video folder or a valid Excel file.")
-            reload(1, False)
-            return
         valid_annotations_array = []
         valid_annotation_data_entry = []
         print(f"Flow: Start cropping on the following videos: {video_filepaths}")
         root.withdraw()
         if not crop_mode == 3:
+            video_ok, excel_ok = check_paths(True, True)
+            if not video_ok or not excel_ok:
+                messagebox.showinfo("Warning",
+                                    f"Unspecified path to a video folder or a valid Excel file.")
+                reload(1, False)
+                return
             if crop_mode == 1:
                 video_data = get_video_data(video_filepaths)
                 annotation_data_array = load_excel_table(annotation_file_path)
@@ -1544,6 +1544,12 @@ def crop_engine():
                 generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
                                 video_filepaths.index(valid_annotations_array[index][2]))
         else:
+            video_ok= check_paths(True, False)
+            if not video_ok:
+                messagebox.showinfo("Warning",
+                                    f"Unspecified path to a video folder.")
+                reload(1, False)
+                return
             orig_wf = whole_frame
             whole_frame = 1
             for i, filepath in enumerate(video_filepaths):
