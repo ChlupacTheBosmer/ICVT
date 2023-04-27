@@ -413,7 +413,7 @@ def get_text_from_video(video_filepath, start_or_end):
         HSV_img = cv2.cvtColor(text_frame, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(HSV_img)
         v = cv2.GaussianBlur(v, (1, 1), 0)
-        thresh = cv2.threshold(v, 220, 255, cv2.THRESH_BINARY_INV)[1] #change the second number to change the treshold - anything over that value will be turned into white
+        thresh = cv2.threshold(v, 220, 255, cv2.THRESH_BINARY_INV)[1] #change the second number to change the threshold - anything over that value will be turned into white
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=(1, 1))
         thresh = cv2.dilate(thresh, kernel)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=(1, 1))
@@ -1577,7 +1577,7 @@ def crop_engine():
 def sort_engine():
     global logger
     logger.debug("Running function sort_engine()")
-    # Ask user if they want to Running function sorting script
+    # Ask user if they want to run sorting script
     run_sorting = ask_yes_no("Do you want to Running function the sorting script on the generated images?")
     if run_sorting:
         sort_script_path = "sort.py"
@@ -1764,7 +1764,7 @@ def check_paths(video_folder, annotation_file):
     global video_folder_path
 
     if annotation_file:
-        # Check if the annotation file path is valid path to a n excel file
+        # Check if the annotation file path is valid path to an Excel file
         if not os.path.isfile(annotation_file_path) or not annotation_file_path.endswith(".xlsx"):
             logger.error(f"Annotation file path is not valid: {annotation_file_path}")
             excel_ok = False
@@ -1788,6 +1788,3 @@ def check_paths(video_folder, annotation_file):
 # Main body of the script
 initialise()
 open_ICCS_window()
-
-
-
