@@ -18,6 +18,8 @@ import math
 import time
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
+import logging
+import xlwings as xw
 
 
 def config_read():
@@ -35,6 +37,8 @@ def config_read():
     global offset_range
     global config
     global prefix
+    global logger
+    logger.debug('Running function config_read()')
     # load config or create the file
     # Set default values
     config = configparser.ConfigParser()
@@ -97,22 +101,29 @@ def config_read():
 
 
 def ask_yes_no(text):
+    global logger
+    logger.debug(f'Running function ask_yes_no({text})')
     result: bool = messagebox.askyesno("Confirmation", text)
     return result
 
 
 def create_dir(path):
+    global logger
+    logger.debug(f'Running function create_dir({path})')
     if not os.path.exists(path):
         os.makedirs(path)
 
 
 def select_file(selected_file_index, index, root):
+    global logger
+    logger.debug(f'Running function select_file({selected_file_index}, {index}, {root})')
     selected_file_index.set(index + 1)
     root.destroy()
 
 
 def scan_default_folders():
-
+    global logger
+    logger.debug('Running function scan_default_folders()')
     # scan default folders
     file_type = ["excel (watchers)", "excel (manual)"]
     video_folder_path: str = ""
@@ -186,6 +197,8 @@ def scan_default_folders():
 
 
 def reload_points_of_interest():
+    global logger
+    logger.debug('Running function reload_points_of_interest()')
     global points_of_interest_entry
     points_of_interest_entry = []
     for e in range(len(video_filepaths)):
@@ -193,11 +206,13 @@ def reload_points_of_interest():
 
 
 def get_excel_path(check, ini_dir):
+    global logger
     global annotation_file_path
+    logger.debug(f'Running function get_excel_path({check}, {ini_dir})')
     # Set path to Excel file manually
     file_type = ["excel (watchers)", "excel (manual)"]
     if crop_mode == 1 or crop_mode == 2:
-        if not os.path.isfile(annotation_file_path) or check == 0:
+        if not check_paths(False, True) or check == 0:
             annotation_file_path = filedialog.askopenfilename(
                 title=f"Select the path to the {file_type[(crop_mode - 1)]} file",
                 initialdir=ini_dir,
@@ -211,15 +226,17 @@ def get_video_folder(check):
     global tree_allow
     global loaded
     global root
+    global logger
+    logger.debug(f'Running function get_video_folder({check})')
     loaded = 0
     # set path to folder containing mp4 files
     original_video_folder_path = video_folder_path
-    if not os.path.isdir(video_folder_path) or check == 0:
+    if not check_paths(True, False) or check == 0:
         video_folder_path = filedialog.askdirectory(title="Select the video folder",
                                                     initialdir=os.path.dirname(os.path.abspath(__file__)))
         if video_folder_path == "" and not original_video_folder_path == "":
             video_folder_path = original_video_folder_path
-        if (check == 0 and not video_folder_path == original_video_folder_path) or check == 1:
+        if ((check == 0 and not video_folder_path == original_video_folder_path) or check == 1) and check_paths(True, False):
             scan_video_files = [f for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
             parent = os.path.dirname(video_folder_path)
             scaned_folders = [f for f in os.listdir(video_folder_path) if
@@ -233,48 +250,53 @@ def get_video_folder(check):
             else:
                 tree_allow = 0
             if not check == 1:
-                load_videos()
-                reload_points_of_interest()
-                try:
-                    if root.winfo_exists():
-                        root.destroy()
-                except:
-                    print("window did not exist")
-                load_video_frames()
-                open_ICCS_window()
-            print(video_folder_path)
+                reload(0, True)
+    else:
+        print(f"Flow: obtained video folder path: {video_folder_path}")
 
 
 def switch_folder(which):
     global scaned_folders
     global video_folder_path
     global loaded
+    global logger
+    logger.debug(f'Running function switch_folder({which})')
     loaded = 0
     index = scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path)))
     if index > 0 and which == "left":
         video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index - 1])
-        load_videos()
-        reload_points_of_interest()
-        ICCS_window.destroy()
-        load_video_frames()
-        open_ICCS_window()
+        reload(0, True)
+        # load_videos()
+        # reload_points_of_interest()
+        # ICCS_window.destroy()
+        # load_video_frames()
+        # open_ICCS_window()
     if (index + 1) < len(scaned_folders) and which == "right":
         video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index + 1])
-        load_videos()
-        reload_points_of_interest()
-        ICCS_window.destroy()
-        load_video_frames()
-        open_ICCS_window()
+        reload(0, True)
+        # load_videos()
+        # reload_points_of_interest()
+        # ICCS_window.destroy()
+        # load_video_frames()
+        # open_ICCS_window()
 
 
 def load_videos():
     global video_filepaths
-    # Load videos
-    video_filepaths = []
-    video_filepaths = [os.path.join(video_folder_path, f) for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
+    global logger
+    logger.debug('Running function load_videos()')
+    # Check if the video folder path is valid
+    if check_paths(True, False):
+        # Load videos
+        video_filepaths = []
+        video_filepaths = [os.path.join(video_folder_path, f) for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
+    else:
+        messagebox.showerror("Error", "Invalid video folder path")
+        video_filepaths = []
 
 
 def set_ocr_roi(video_filepath):
+
     # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the
     # top left and bottom right coordinates will be saved in the settings_crop.ini file
     global x_coordinate
@@ -283,6 +305,8 @@ def set_ocr_roi(video_filepath):
     global height
     global config
     global cap
+    global logger
+    logger.debug(f'Running function set_ocr_roi({video_filepath})')
 
     # Read settings from settings_crop.ini
     config.read('settings_crop.ini', encoding='utf-8')
@@ -294,6 +318,10 @@ def set_ocr_roi(video_filepath):
     except ValueError:
         # Handle cases where conversion to integer fails
         print('Error: Invalid integer value found in settings_crop.ini')
+    # check if video_filepath is valid path to a video file
+    if not os.path.isfile(video_filepath) or not video_filepath.endswith(".mp4"):
+        print('Error: Invalid video file path')
+        return
     cap = cv2.VideoCapture(video_filepath)
     # Create a window and pass it to the mouse callback function
     cv2.namedWindow('image')
@@ -352,7 +380,8 @@ def get_text_from_video(video_filepath, start_or_end):
     global height
     global config
     global cap
-    print(video_filepath)
+    global logger
+    logger.debug(f'Running function get_text_from_video({video_filepath}, {start_or_end})')
 
     # Read settings from settings_crop.ini
     config.read('settings_crop.ini', encoding='utf-8')
@@ -408,6 +437,8 @@ def submit_time(input_field):
     global dialog
     global sec_OCR
     global root
+    global logger
+    logger.debug(f'Running function submit_time({input_field})')
     text = input_field.get()
     if not text.isdigit() or len(text) != 2 or int(text) > 59:
         # execute code here for when text is not in "SS" format
@@ -422,7 +453,6 @@ def submit_time(input_field):
             if dialog.winfo_exists():
                 dialog.quit()
                 dialog.destroy()
-                print("destroying dialog")
                 break
         except:
             time.sleep(0.1)
@@ -438,6 +468,8 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
     global y_coordinate
     global width
     global height
+    global logger
+    logger.debug(f'Running function process_OCR_text({detected_text}, {video_filepath}, {start_or_end})')
     failed = False
     return_time = "00"
     if "\n" in detected_text:
@@ -456,7 +488,6 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
             try:
                 parser = createParser(video_filepath)
                 metadata = extractMetadata(parser)
-                print(metadata)
                 modify_date = str(metadata.get("creation_date"))
                 return_time = modify_date[-2:]
                 print("Error: OCR detected text does not follow the expected format. Obtained value from metadata.")
@@ -466,7 +497,6 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
             try:
                 parser = createParser(video_filepath)
                 metadata = extractMetadata(parser)
-                print(metadata)
                 modify_date = str(metadata.get("creation_date"))
                 start_seconds = int(modify_date[-2:])
                 duration = str(metadata.get("duration"))
@@ -483,7 +513,6 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
                     if root.winfo_exists():
                         break
                 except:
-                    print("waiting for window to be created")
                     time.sleep(0.1)
 
             # Create the dialog window
@@ -560,6 +589,8 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
 
 # define function to get start and end times for each video file
 def get_video_start_end_times(video_filepath):
+    global logger
+    logger.debug(f"Running function get_video_start_end_times({video_filepath})")
     video_filename = os.path.basename(video_filepath)
     print(' '.join(["Flow:", "Processing video file -", video_filepath]))
 
@@ -616,14 +647,48 @@ def evaluate_string_formula(cell):
 
 
 def load_excel_table(file_path):
+    global logger
+    logger.debug(f"Running function load_excel_table({file_path})")
     # Define the columns to extract
     cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21]
+
     # Read the Excel file, skipping the first two rows
-    df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
-                       converters={0: evaluate_string_formula, 1: evaluate_string_formula, 2: evaluate_string_formula,
-                                   3: evaluate_string_formula, 4: evaluate_string_formula, 18: evaluate_string_formula})
-    print(df)
+    try:
+        df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
+                           converters={0: evaluate_string_formula, 1: evaluate_string_formula, 2: evaluate_string_formula,
+                                       3: evaluate_string_formula, 4: evaluate_string_formula, 18: evaluate_string_formula})
+    except ValueError as e:
+        logger.error(f"Error reading Excel file {file_path}. Error message: {e}")
+        # Open the Excel workbook using xlwings
+        wb = xw.Book(file_path)
+
+        sheet = wb.sheets[0]
+
+        # Remove any filters
+        if sheet.api.AutoFilterMode:
+            sheet.api.AutoFilterMode = False
+
+        #Save to temporary file
+        create_dir("resources/exc")
+        temp_file_path = os.path.join("resources/exc", "temp.xlsx")
+        wb.save(temp_file_path)
+        wb.close()
+
+        #Read with pandas
+        try:
+            df = pd.read_excel(temp_file_path, usecols=cols, skiprows=2, header=None,
+                           converters={0: evaluate_string_formula, 1: evaluate_string_formula,
+                                       2: evaluate_string_formula,
+                                       3: evaluate_string_formula, 4: evaluate_string_formula,
+                                       18: evaluate_string_formula})
+        except ValueError as e:
+            logger.error(f"Attempted to fix errors in Excel file {file_path}. Attempt failed. Error message: {e}. Please fix the errors manually and try again.")
+            return None
+        logger.info(f"Attempted to remove filters from Excel file {file_path}. Saved a copy of the file to {temp_file_path}")
+
+    print(f"Flow: Retrieved dataframe from Excel:\n{df}")
     filtered_df = df[df.iloc[:, 6] == 1]
+
     # Convert the month abbreviations in column 2 to month numbers
     months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
               'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
@@ -636,27 +701,57 @@ def load_excel_table(file_path):
     filtered_df.loc[:, 11] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
                                                             axis=1)
     filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
-    print(filtered_df)
+    print(f"Flow: Filtered dataframe:\n {filtered_df}")
     filtered_data = filtered_df.iloc[:, [7, 11]].values.tolist()
 
     annotation_data_array = filtered_data
-    if not os.path.exists("resources/exc/"):
-        # create directory
-        os.makedirs("resources/exc/")
+    create_dir("resources/exc/")
     filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
     return annotation_data_array
 
-
 def load_csv(file_path):
+    global logger
+    logger.debug(f"Running function load_csv({file_path})")
     # Define the columns to extract
     cols: list[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
     # Read the Excel file, skipping the first two rows - follow the custom format
-    filtered_df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
-                                converters={0: evaluate_string_formula, 1: evaluate_string_formula,
-                                            2: evaluate_string_formula,
-                                            3: evaluate_string_formula, 4: evaluate_string_formula,
-                                            6: evaluate_string_formula})
-    print(filtered_df)
+    try:
+        filtered_df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
+                                    converters={0: evaluate_string_formula, 1: evaluate_string_formula,
+                                                2: evaluate_string_formula,
+                                                3: evaluate_string_formula, 4: evaluate_string_formula,
+                                                6: evaluate_string_formula})
+    except ValueError as e:
+        logger.error(f"Error reading Excel file {file_path}. Error message: {e}")
+        # Open the Excel workbook using xlwings
+        wb = xw.Book(file_path)
+
+        sheet = wb.sheets[0]
+
+        # Remove any filters
+        if sheet.api.AutoFilterMode:
+            sheet.api.AutoFilterMode = False
+
+        #Save to temporary file
+        create_dir("resources/exc")
+        temp_file_path = os.path.join("resources/exc", "temp.xlsx")
+        wb.save(temp_file_path)
+        wb.close()
+
+        #Read with pandas
+        try:
+            filtered_df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
+                                        converters={0: evaluate_string_formula, 1: evaluate_string_formula,
+                                                    2: evaluate_string_formula,
+                                                    3: evaluate_string_formula, 4: evaluate_string_formula,
+                                                    6: evaluate_string_formula})
+        except ValueError as e:
+            logger.error(f"Attempted to fix errors in Excel file {file_path}. Attempt failed. Error message: {e}. Please fix the errors manually and try again.")
+            return None
+        logger.info(f"Attempted to remove filters from Excel file {file_path}. Saved a copy of the file to {temp_file_path}")
+    print(f"Flow: Retrieved dataframe from Excel:\n{filtered_df}")
+
     # Convert the month abbreviations in column 2(1) to month numbers
     months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
               'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
@@ -669,14 +764,13 @@ def load_csv(file_path):
     filtered_df.loc[:, 10] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
                                                             axis=1)
     filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
-    print(filtered_df)
+    print(f"Flow: Filtered dataframe:\n {filtered_df}")
+
     # convert to list
     filtered_data = filtered_df.iloc[:, [6, 10]].values.tolist()
 
     annotation_data_array = filtered_data
-    if not os.path.exists("resources/exc/"):
-        # create directory
-        os.makedirs("resources/exc/")
+    create_dir("resources/exc/")
     filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
     return annotation_data_array
 
@@ -687,6 +781,8 @@ def capture_crop(frame, point):
     global frame_number_start
     global visit_duration
     global crop_size
+    global logger
+    logger.debug(f"Running function capture_crop({point})")
     x, y = point
     # Add a random offset to the coordinates, but ensure they remain within the image bounds
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -726,6 +822,8 @@ def generate_frames(frame, success, tag, index):
     global fps
     global frame_number_start
     global visit_duration
+    global logger
+    logger.debug(f"Running function generate_frames({index})")
     species = tag[-27:-19].replace("_", "")
     timestamp = tag[-18:-4]
     crop_counter = 1
@@ -766,6 +864,8 @@ def generate_frames(frame, success, tag, index):
 
 
 def get_video_data(video_filepaths):
+    global logger
+    logger.debug(f"Running function get_video_data({video_filepaths})")
     # loop through time annotations and open corresponding video file
     # extract video data beforehand to save processing time
     video_data = []
@@ -782,6 +882,8 @@ def get_video_data(video_filepaths):
 def update_entries(index, original_points):
     global points_of_interest_entry
     global modified_frames
+    global logger
+    logger.debug(f"Running function update_entries({index}, {original_points})")
     for each in range(index + 1, len(points_of_interest_entry)):
         if len(points_of_interest_entry[each]) == 0:
             points_of_interest_entry[each] = points_of_interest_entry[index].copy()
@@ -805,7 +907,6 @@ def get_mouse_position(event, x, y, flags, mode, i, j):
     if event == cv2.EVENT_LBUTTONUP:
         index = j + ((i) * 6)
         if flags & cv2.EVENT_FLAG_SHIFTKEY:
-            print("shift")
             closest_point = None
             closest_distance = float('inf')
             for point in points_of_interest_entry[index]:
@@ -815,7 +916,7 @@ def get_mouse_position(event, x, y, flags, mode, i, j):
                     closest_distance = distance
             if closest_distance < 30:
                 points_of_interest_entry[index].remove(closest_point)
-            print(points_of_interest_entry)
+            print(f"Flow: retrieved POIs: {points_of_interest_entry}")
             cv2.destroyAllWindows()
         elif flags & cv2.EVENT_FLAG_CTRLKEY and flags & cv2.EVENT_FLAG_ALTKEY:
             points_of_interest_entry[index] = []
@@ -827,7 +928,7 @@ def get_mouse_position(event, x, y, flags, mode, i, j):
                 points_of_interest_entry[index].append((x, y))
             else:
                 points_of_interest_entry.append((x, y))
-            print(points_of_interest_entry)
+            print(f"Flow: retrieved POIs: {points_of_interest_entry}")
             cv2.destroyAllWindows()
 
 
@@ -836,6 +937,8 @@ def update_button_image(frame, i, j, first):
     global modified_frames
     global button_images
     global buttons
+    global logger
+    logger.debug(f"Running function update_button_image({i}, {j}, {first})")
     index = j + ((i) * 6)
     frame = frame.copy()
     height, width, channels = frame.shape
@@ -885,6 +988,8 @@ def update_button_image(frame, i, j, first):
 
 def on_button_click(i, j, button_images):
     global points_of_interest_entry
+    global logger
+    logger.debug(f"Running function on_button_click({i}, {j})")
     index = j + ((i) * 6)
     mode = 1
     frame_tmp = frames[index].copy()
@@ -926,19 +1031,28 @@ def on_button_click(i, j, button_images):
 def load_video_frames():
     # Loop through each file in folder
     global frames
+    global logger
+    logger.debug(f"Running function load_video_frames()")
     frames = []
-    for filename in os.listdir(video_folder_path):
-        if filename.endswith(".mp4"):  # Modify file extension as needed
-            # Use OpenCV or other library to extract first frame of video
-            # and add it to the frames list
-            cap = cv2.VideoCapture(os.path.join(video_folder_path, filename))
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 25)
-            ret, frame = cap.read()
-            frames.append(frame)
+    if check_paths(True, False):
+        for filename in os.listdir(video_folder_path):
+            if filename.endswith(".mp4"):  # Modify file extension as needed
+                # Use OpenCV or other library to extract first frame of video
+                # and add it to the frames list
+                cap = cv2.VideoCapture(os.path.join(video_folder_path, filename))
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 25)
+                ret, frame = cap.read()
+                frames.append(frame)
+    else:
+        # display message box with error message
+        messagebox.showerror("Error", "Invalid video folder path")
+
 
 
 def update_crop_mode(var):
     global crop_mode
+    global logger
+    logger.debug(f"Running function update_crop_mode({var})")
     crop_mode = var
 
 
@@ -946,13 +1060,19 @@ def save_progress():
     global auto_processing
     global points_of_interest_entry
     global video_filepaths
+    global logger
+    logger.debug(f"Running function save_progress()")
     result = ask_yes_no("Do you want to save the settings? This will overwrite any previous saves.")
     if result:
-        # Create an in-memory file object
-        filepath = os.path.join(video_folder_path, 'crop_information.pkl')
-        with open(filepath, 'wb') as f:
-            # Use the pickle module to write the data to the file
-            pickle.dump([auto_processing.get(), points_of_interest_entry, video_filepaths], f)
+        if check_paths(True, False):
+            # Create an in-memory file object
+            filepath = os.path.join(video_folder_path, 'crop_information.pkl')
+            with open(filepath, 'wb') as f:
+                # Use the pickle module to write the data to the file
+                pickle.dump([auto_processing.get(), points_of_interest_entry, video_filepaths], f)
+        else:
+            # display message box with error message
+            messagebox.showerror("Error", "Invalid video folder path")
 
 
 def load_progress():
@@ -962,36 +1082,47 @@ def load_progress():
     global frames
     global loaded
     global auto
-    global ICCS_window
+    global root
+    global logger
+    logger.debug(f"Running function load_progress()")
     result = ask_yes_no("Do you want to load settings? This will overwrite any unsaved progress.")
     if result:
-        # Create an in-memory file object
-        filepath = os.path.join(video_folder_path, 'crop_information.pkl')
-        if os.path.isfile(filepath):
-            ICCS_window.destroy()
-            points_of_interest_entry = []
-            with open(filepath, 'rb') as f:
-                data = pickle.load(f)
-            print(data)
-            auto = data[0]
-            points_of_interest_entry = data[1].copy()
-            video_filepaths_new = data[2].copy()
-            set1 = set(video_filepaths_new)
-            set2 = set(video_filepaths)
-            if not set1 == set2:
-                messagebox.showinfo("Discrepancy detected",
-                                    "The contents of the video folder have changed since the save has been made. Cannot load the progress. Please start over.")
-                reload_points_of_interest()
+        if check_paths(True, False):
+            # Create an in-memory file object
+            filepath = os.path.join(video_folder_path, 'crop_information.pkl')
+            if os.path.isfile(filepath):
+                try:
+                    if root.winfo_exists():
+                        root.destroy()
+                except:
+                    print("Error: Unexpected, window destroyed before reference. Odpruženo.")
+                points_of_interest_entry = []
+                with open(filepath, 'rb') as f:
+                    data = pickle.load(f)
+                #print(data)
+                auto = data[0]
+                points_of_interest_entry = data[1].copy()
+                video_filepaths_new = data[2].copy()
+                set1 = set(video_filepaths_new)
+                set2 = set(video_filepaths)
+                if not set1 == set2:
+                    messagebox.showinfo("Discrepancy detected",
+                                        "The contents of the video folder have changed since the save has been made. Cannot load the progress. Please start over.")
+                    reload_points_of_interest()
+                else:
+                    video_filepaths = []
+                    video_filepaths = video_filepaths_new.copy()
+                reload(1, False)
+                # load_videos()
+                # load_video_frames()
+                # loaded = 1
+                # open_ICCS_window()
             else:
-                video_filepaths = []
-                video_filepaths = video_filepaths_new.copy()
-            load_videos()
-            load_video_frames()
-            loaded = 1
-            open_ICCS_window()
+                messagebox.showinfo("No save detected",
+                                    "There are no save files in the current directory.")
         else:
-            messagebox.showinfo("No save detected",
-                                "There are no save files in the current directory.")
+            # display message box with error message
+            messagebox.showerror("Error", "Invalid video folder path")
 
 
 def open_ICCS_window():
@@ -1003,6 +1134,8 @@ def open_ICCS_window():
     global root
     global annotation_file_path
     global auto
+    global logger
+    logger.debug(f"Running function open_ICCS_window()")
     root = tk.Tk()
     ICCS_window = root
     root.focus()
@@ -1314,6 +1447,9 @@ def initialise():
     global video_folder_path
     global annotation_file_path
     global auto
+    global logger
+    log_write()
+    logger.debug("Running function initialise()")
     config_read()
     pytesseract.pytesseract.tesseract_cmd = ocr_tesseract_path
     auto = 0
@@ -1321,7 +1457,8 @@ def initialise():
     tree_allow = 0
     modified_frames = []
     video_folder_path, annotation_file_path = scan_default_folders()
-    get_video_folder(1)
+    while not check_paths(True, False):
+        get_video_folder(1)
     get_excel_path(1, video_folder_path)
     load_videos()
     create_dir(output_folder)
@@ -1340,11 +1477,19 @@ def crop_engine():
     global crop_mode
     global root
     global loaded
+    global logger
+    logger.debug("Running function crop_engine()")
     result = ask_yes_no("Do you want to start the cropping process?")
     if result:
+        video_ok, excel_ok = check_paths(True, True)
+        if not video_ok or not excel_ok:
+            messagebox.showinfo("Warning",
+                                f"Unspecified path to a video folder or a valid Excel file.")
+            reload(1, False)
+            return
         valid_annotations_array = []
         valid_annotation_data_entry = []
-        print(video_filepaths)
+        print(f"Flow: Start cropping on the following videos: {video_filepaths}")
         root.withdraw()
         if not crop_mode == 3:
             if crop_mode == 1:
@@ -1352,6 +1497,11 @@ def crop_engine():
                 annotation_data_array = load_excel_table(annotation_file_path)
             if crop_mode == 2:
                 annotation_data_array = load_csv(annotation_file_path)
+            if annotation_data_array is None:
+                messagebox.showinfo("Warning", f"Attempted to fix errors in the selected Excel file. Attempt failed. Please fix the errors manually and try again.")
+                reload(1, False)
+                return
+            if crop_mode == 2:
                 video_filepaths_temp = video_filepaths
                 video_filepaths = []
                 for index, list in enumerate(annotation_data_array):
@@ -1363,8 +1513,8 @@ def crop_engine():
                                     filename[-9:-4], '%H_%M') <= datetime.timedelta(minutes=15):
                                 video_filepaths.append(filepath)
                 video_data = get_video_data(video_filepaths)
-            print(annotation_data_array)
-            print(video_data)
+            print(f"Flow: Start cropping according to the following annotations: {annotation_data_array}")
+            print(f"Flow: Start cropping with the following video data: {video_data}")
             for index, list in enumerate(annotation_data_array):
                 print(' '.join(["Flow: Annotation number:", str(index + 1)]))
                 annotation_time = pd.to_datetime(annotation_data_array[index][1], format='%Y%m%d_%H_%M_%S')
@@ -1375,7 +1525,7 @@ def crop_engine():
                             valid_annotation_data_entry.append(annotation_data_array[index][each])
                         for each in range(3):
                             valid_annotation_data_entry.append(video_data[i][each])
-                        print(valid_annotation_data_entry)
+                        print(f"Flow: Relevant annotations: {valid_annotation_data_entry}")
                         valid_annotations_array.append(valid_annotation_data_entry)
                         valid_annotation_data_entry = []
             for index in range(len(valid_annotations_array)):
@@ -1401,18 +1551,21 @@ def crop_engine():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
                 generate_frames(frame, success, os.path.basename(video_filepaths[i]), i)
-    try:
-        if root.winfo_exists():
-            root.destroy()
-    except:
-        print("window did not exist")
-    loaded = 1
-    open_ICCS_window()
+    reload(1, False)
+    # try:
+    #     if root.winfo_exists():
+    #         root.destroy()
+    # except:
+    #     print("Error: Unexpected, window destroyed before reference. Odpruženo.")
+    # loaded = 1
+    # open_ICCS_window()
 
 
 def sort_engine():
-    # Ask user if they want to run sorting script
-    run_sorting = ask_yes_no("Do you want to run the sorting script on the generated images?")
+    global logger
+    logger.debug("Running function sort_engine()")
+    # Ask user if they want to Running function sorting script
+    run_sorting = ask_yes_no("Do you want to Running function the sorting script on the generated images?")
     if run_sorting:
         sort_script_path = "sort.py"
         if os.path.exists(sort_script_path):
@@ -1434,6 +1587,8 @@ def open_menu():
     global offset_range
     global prefix
     global end_values
+    global logger
+    logger.debug("Running function open_menu()")
     # Create the Tkinter window
     window = tk.Tk()
     window.title("Menu")
@@ -1523,6 +1678,8 @@ def config_write():
     global config
     global prefix
     global end_values
+    global logger
+    logger.debug("Running function config_write()")
     config = configparser.ConfigParser()
     config.read('settings_crop.ini')
 
@@ -1545,7 +1702,79 @@ def config_write():
     with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
         config.write(configfile)
 
+def log_write():
+    global logger
+    # Create a logger instance
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    # Create a file handler that logs all messages, and set its formatter
+    file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Create a console handler that logs only messages with level INFO or higher, and set its formatter
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+
+    # Write log messages
+    # logger.debug('This message will be written to the file only.')
+    # logger.info('This message will be written to both the file and the console.')
+    # logger.warning('This message will be written to both the file and the console.')
+    # logger.error('This message will be written to both the file and the console.')
+    # logger.critical('This message will be written to both the file and the console.')
+
+def reload(is_loaded, reload_POIs):
+    global loaded
+    global root
+    global logger
+    logger.debug(f"Running function reload({is_loaded}, {reload_POIs})")
+    load_videos()
+    if reload_POIs:
+        reload_points_of_interest()
+    load_video_frames()
+    try:
+        if root.winfo_exists():
+            root.destroy()
+    except:
+        print("Error: Unexpected, window destroyed before reference. Odpruženo.")
+    loaded = is_loaded
+    open_ICCS_window()
+
+def check_paths(video_folder, annotation_file):
+    global annotation_file_path
+    global video_folder_path
+
+    if annotation_file:
+        # Check if the annotation file path is valid path to a n excel file
+        if not os.path.isfile(annotation_file_path) or not annotation_file_path.endswith(".xlsx"):
+            logger.error(f"Annotation file path is not valid: {annotation_file_path}")
+            excel_ok = False
+        else:
+            excel_ok = True
+    if video_folder:
+        # Check if the video folder path is valid path to a folder
+        if not os.path.isdir(video_folder_path):
+            logger.error(f"Video folder path is not valid: {video_folder_path}")
+            video_ok = False
+        else:
+            video_ok = True
+    if annotation_file and video_folder:
+        return [video_ok, excel_ok]
+    elif annotation_file:
+        return excel_ok
+    elif video_folder:
+        return video_ok
+
+
 # Main body of the script
 initialise()
 open_ICCS_window()
+
+
 
