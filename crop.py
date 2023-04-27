@@ -192,7 +192,7 @@ def reload_points_of_interest():
         points_of_interest_entry.append([])
 
 
-def get_excel_path(check):
+def get_excel_path(check, ini_dir):
     global annotation_file_path
     # Set path to Excel file manually
     file_type = ["excel (watchers)", "excel (manual)"]
@@ -200,7 +200,7 @@ def get_excel_path(check):
         if not os.path.isfile(annotation_file_path) or check == 0:
             annotation_file_path = filedialog.askopenfilename(
                 title=f"Select the path to the {file_type[(crop_mode - 1)]} file",
-                initialdir=os.path.dirname(os.path.abspath(__file__)),
+                initialdir=ini_dir,
                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
 
 
@@ -1007,7 +1007,8 @@ def open_ICCS_window():
     ICCS_window = root
     root.focus()
     j = 0
-    root.title("Insect Communities Crop Suite")
+    root.title(f"Insect Communities Crop Suite - {os.path.basename(os.path.normpath(video_folder_path))}")
+
     # Create frame for the rest
     outer_frame = tk.Frame(root)
     outer_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH)
@@ -1109,7 +1110,7 @@ def open_ICCS_window():
     et_icon = ImageTk.PhotoImage(file="resources/img/et.png")
 
     et_button = tk.Button(toolbar, image=et_icon, compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
-                          height=48, command=lambda j=j: get_excel_path(0))
+                          height=48, command=lambda j=j: get_excel_path(0, video_folder_path))
     et_button.grid(row=0, column=6, padx=0, pady=5, sticky="ew")
 
     ocr_icon = Image.open("resources/img/ocr.png")
@@ -1321,7 +1322,7 @@ def initialise():
     modified_frames = []
     video_folder_path, annotation_file_path = scan_default_folders()
     get_video_folder(1)
-    get_excel_path(1)
+    get_excel_path(1, video_folder_path)
     load_videos()
     create_dir(output_folder)
     create_dir(f"./{output_folder}/whole frames/")
