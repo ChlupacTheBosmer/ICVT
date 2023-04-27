@@ -1478,6 +1478,7 @@ def crop_engine():
     global root
     global loaded
     global logger
+    global whole_frame
     logger.debug("Running function crop_engine()")
     result = ask_yes_no("Do you want to start the cropping process?")
     if result:
@@ -1543,6 +1544,8 @@ def crop_engine():
                 generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
                                 video_filepaths.index(valid_annotations_array[index][2]))
         else:
+            orig_wf = whole_frame
+            whole_frame = 1
             for i, filepath in enumerate(video_filepaths):
                 cap = cv2.VideoCapture(video_filepaths[i])
                 fps = cap.get(cv2.CAP_PROP_FPS)
@@ -1551,6 +1554,7 @@ def crop_engine():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
                 generate_frames(frame, success, os.path.basename(video_filepaths[i]), i)
+            whole_frame = orig_wf
     reload(1, False)
     # try:
     #     if root.winfo_exists():
