@@ -1007,7 +1007,7 @@ def open_ICCS_window():
     ICCS_window = root
     root.focus()
     j = 0
-    root.title(f"Insect Communities Crop Suite - {os.path.basename(os.path.normpath(video_folder_path))}")
+    root.title(f"Insect Communities Crop Suite - Folder: {os.path.basename(os.path.normpath(video_folder_path))} - Table: {os.path.basename(os.path.normpath(annotation_file_path))}")
 
     # Create frame for the rest
     outer_frame = tk.Frame(root)
