@@ -20,6 +20,7 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 import logging
 import xlwings as xw
+import keyboard
 
 
 def config_read():
@@ -836,7 +837,7 @@ def generate_frames(frame, success, tag, index):
     # Loop through the video and crop yimages every 30th frame
     frame_count = 0
     if frames_per_visit > 0:
-        frame_skip = (visit_duration * fps)/frames_per_visit
+        frame_skip = (visit_duration * fps)//frames_per_visit
     while success:
         # Crop images every 30th frame
         if frame_count % frame_skip == 0:
@@ -939,7 +940,6 @@ def get_mouse_position(event, x, y, flags, mode, i, j):
             print(f"Flow: retrieved POIs: {points_of_interest_entry}")
             cv2.destroyAllWindows()
 
-
 def update_button_image(frame, i, j, first):
     global points_of_interest_entry
     global modified_frames
@@ -993,14 +993,41 @@ def update_button_image(frame, i, j, first):
     button_images[index] = img
     buttons[i][j].configure(image=button_images[index])
 
+def on_key_press(event):
+    global b_l
+    global b_r
+    global u_l
+    global u_r
+    print("execd")
+    if keyboard.is_pressed('left') and keyboard.is_pressed('down'):
+        b_l = b_l * -1
+    elif keyboard.is_pressed('right') and keyboard.is_pressed('down'):
+        b_r = b_r * -1
+    elif keyboard.is_pressed('left') and keyboard.is_pressed('up'):
+        u_l = u_l * -1
+    elif keyboard.is_pressed('right') and keyboard.is_pressed('up'):
+        u_r = u_r * -1
+    elif keyboard.is_pressed('q'):
+        b_l = b_l * -1
+        b_r = b_r * -1
+        u_l = u_l * -1
+        u_r = u_r * -1
 
 def on_button_click(i, j, button_images):
     global points_of_interest_entry
     global logger
+    global b_l
+    global b_r
+    global u_l
+    global u_r
     logger.debug(f"Running function on_button_click({i}, {j})")
     index = j + ((i) * 6)
     mode = 1
     frame_tmp = frames[index].copy()
+    b_l = -1
+    b_r = -1
+    u_l = -1
+    u_r = -1
     # Ask the user if they want to select additional points of interest
     while True:
         original_points = points_of_interest_entry[index].copy()
@@ -1009,14 +1036,159 @@ def on_button_click(i, j, button_images):
         # Draw a rectangle around the already selected points of interest
         height, width, channels = frame.shape
         for point in points_of_interest_entry[index]:
-            x1, y1 = max(0, point[0] - offset_range), max(0, point[1] - offset_range)
-            x2, y2 = min(width, point[0] + offset_range), min(height, point[1] + offset_range)
+            x1, y1 = max(0, point[0] - (crop_size//2)), max(0, point[1] - (crop_size//2))
+            x2, y2 = min(width, point[0] + (crop_size//2)), min(height, point[1] + (crop_size//2))
             cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
             cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
             cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
             cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
             cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            if True:
+                if b_r > 0:
+                    pos_off = 0
+                    o_x1 = max(pos_off,
+                               min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off))
+                    o_y1 = max(pos_off,
+                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))
+                    o_x2 = max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off))
+                    o_y2 = max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off))
+                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                    # Add label text
+                    label_text = 'BR'
+                    label_color = (255, 229, 0)
+                    label_font = cv2.FONT_HERSHEY_SIMPLEX
+                    label_scale = 1
+                    label_thickness = 2
+
+                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
+                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                    #             label_thickness)
+                    # cv2.line(frame, (o_x1, o_y1),
+                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                    #          label_color, label_thickness)
+                if u_l > 0:
+                    pos_off = 0
+                    o_x1 = max(pos_off,
+                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off))
+                    o_y1 = max(pos_off,
+                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))
+                    o_x2 = max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off))
+                    o_y2 = max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off))
+                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                    # Add label text
+                    label_text = 'UL'
+                    label_color = (255, 229, 0)
+                    label_font = cv2.FONT_HERSHEY_SIMPLEX
+                    label_scale = 1
+                    label_thickness = 2
+
+                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
+                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                    #             label_thickness)
+                    # cv2.line(frame, (o_x1, o_y1),
+                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                    #          label_color, label_thickness)
+                if u_r > 0:
+                    pos_off = 0
+                    o_x1 = max(pos_off,
+                               min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off))
+                    o_y1 = max(pos_off,
+                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))
+                    o_x2 = max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off))
+                    o_y2 = max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off))
+                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                    # Add label text
+                    label_text = 'UR'
+                    label_color = (255, 229, 0)
+                    label_font = cv2.FONT_HERSHEY_SIMPLEX
+                    label_scale = 1
+                    label_thickness = 2
+
+                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
+                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                    #             label_thickness)
+                    # cv2.line(frame, (o_x1, o_y1),
+                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                    #          label_color, label_thickness)
+                if b_l > 0:
+                    pos_off = 0
+                    o_x1 = max(pos_off,
+                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off))
+                    o_y1 = max(pos_off,
+                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))
+                    o_x2 = max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off))
+                    o_y2 = max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off))
+                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                    # Add label text
+                    label_text = 'BL'
+                    label_color = (255, 229, 0)
+                    label_font = cv2.FONT_HERSHEY_SIMPLEX
+                    label_scale = 1
+                    label_thickness = 2
+
+                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
+                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                    #             label_thickness)
+                    # cv2.line(frame, (o_x1, o_y1),
+                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                    #          label_color, label_thickness)
+            # Define rectangles by their upper left and bottom right corners
+            pos_off = 0
+            rectangles = [
+                [(max(pos_off, min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
+                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))],  # Rectangle 1: (upper_left, bottom_right)
+                [(max(pos_off,
+                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
+                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],  # Rectangle 2: (upper_left, bottom_right)
+                [(max(pos_off,
+                               min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
+                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],  # Rectangle 3: (upper_left, bottom_right)
+                [(max(pos_off,
+                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
+                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
+                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
+                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))]  # Rectangle 4: (upper_left, bottom_right)
+            ]
+
+            # Find the overlapping area
+            x_min = max(rect[0][0] for rect in rectangles)
+            y_min = max(rect[0][1] for rect in rectangles)
+            x_max = min(rect[1][0] for rect in rectangles)
+            y_max = min(rect[1][1] for rect in rectangles)
+
+            # Calculate the coordinates of the overlapping area
+            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
 
         # Display the image with the rectangles marking the already selected points of interest
         cv2.imshow("Frame", frame)
@@ -1033,6 +1205,14 @@ def on_button_click(i, j, button_images):
         if key == 27 or key == 13:  # Check if the Esc key was pressed
             cv2.destroyAllWindows()
             break
+        elif key == ord("q"):
+            u_l = u_l * -1
+        elif key == ord ("w"):
+            u_r = u_r * -1
+        elif key == ord("e"):
+            b_l = b_l * -1
+        elif key == ord("r"):
+            b_r = b_r * -1
         update_entries(index, original_points)
 
 
@@ -1713,7 +1893,7 @@ def config_write():
     config.set('Workflow settings', 'Scan_default_folders', scan_folders)
     config.set('Crop settings', 'crop_mode', str(crop_mode))
     config.set('Crop settings', 'crop_interval_frames', str(frame_skip))
-    config.set('Crop settings', 'frames_pre_visit', str(frames_per_visit))
+    config.set('Crop settings', 'frames_per_visit', str(frames_per_visit))
     config.set('Crop settings', 'randomize_interval', str(randomize))
     config.set('Crop settings', 'export_whole_frame', str(whole_frame))
     config.set('Crop settings', 'export_crops', str(cropped_frames))
