@@ -30,6 +30,7 @@ def config_read():
     global scan_folders
     global crop_mode
     global frame_skip
+    global frames_per_visit
     global randomize
     global whole_frame
     global cropped_frames
@@ -57,6 +58,7 @@ def config_read():
     config['Crop settings'] = {
         'crop_mode': '1',
         'crop_interval_frames': '30',
+        'frames_per_visit': '0',
         'randomize_interval': '0',
         'export_whole_frame': '0',
         'export_crops': '1',
@@ -90,6 +92,7 @@ def config_read():
     try:
         crop_mode = int(config['Crop settings'].get('crop_mode', '1').strip())
         frame_skip = int(config['Crop settings'].get('crop_interval_frames', '30').strip())
+        frames_per_visit = int(config['Crop settings'].get('frames_per_visit', '0').strip())
         randomize = int(config['Crop settings'].get('randomize_interval', '0').strip())
         whole_frame = int(config['Crop settings'].get('export_whole_frame', '0').strip())
         cropped_frames = int(config['Crop settings'].get('export_crops', '1').strip())
@@ -832,6 +835,8 @@ def generate_frames(frame, success, tag, index):
     crop_counter = 1
     # Loop through the video and crop yimages every 30th frame
     frame_count = 0
+    if frames_per_visit > 0:
+        frame_skip = (visit_duration * fps)/frames_per_visit
     while success:
         # Crop images every 30th frame
         if frame_count % frame_skip == 0:
@@ -859,7 +864,7 @@ def generate_frames(frame, success, tag, index):
         frame_to_read = frame_number_start + frame_count
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_to_read)
         success, frame = cap.read()
-        if not frame_count <= (visit_duration * fps):
+        if not (frames_per_visit == 0 and frame_count <= (visit_duration * fps)) or (frames_per_visit >= 1 and frame_count <= frames_per_visit):
             # Release the video capture object and close all windows
             cap.release()
             cv2.destroyAllWindows()
@@ -1593,6 +1598,7 @@ def open_menu():
     global scan_folders
     global crop_mode
     global frame_skip
+    global frames_per_visit
     global randomize
     global whole_frame
     global cropped_frames
@@ -1608,13 +1614,13 @@ def open_menu():
     window.wm_attributes("-topmost", 1)
     # Create the labels and input fields
     label_text = ["Output folder path:", "Scan default folders:", "Filename prefix:", "Default crop mode:",
-                  "Frames to skip:", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
+                  "Frames to skip:", "Frames per visit:", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
                   "Crop size:", "Offset size:"]
     labels = []
     fields = []
     outer_frame = tk.Frame(window, pady=20)
     outer_frame.pack(side=tk.TOP, fill=tk.BOTH)
-    for i in range(10):
+    for i in range(11):
         label = tk.Label(outer_frame, text=f"{label_text[i]}")
         label.grid(row=i, column=0, padx=10)
         labels.append(label)
@@ -1629,6 +1635,7 @@ def open_menu():
         global scan_folders
         global crop_mode
         global frame_skip
+        global frames_per_visit
         global randomize
         global whole_frame
         global cropped_frames
@@ -1637,18 +1644,19 @@ def open_menu():
         global prefix
         global end_values
         end_values = []
-        for i in range(10):
+        for i in range(11):
             end_values.append(fields[i].get())
         output_folder = str(end_values[0])
         scan_folders = str(end_values[1])
         prefix = str(end_values[2])
         crop_mode = int(end_values[3])
         frame_skip = int(end_values[4])
-        randomize = int(end_values[5])
-        whole_frame = int(end_values[6])
-        cropped_frames = int(end_values[7])
-        crop_size = int(end_values[8])
-        offset_range = int(end_values[9])
+        frames_per_visit = int(end_values[5])
+        randomize = int(end_values[6])
+        whole_frame = int(end_values[7])
+        cropped_frames = int(end_values[8])
+        crop_size = int(end_values[9])
+        offset_range = int(end_values[10])
         config_write()
         create_dir(output_folder)
         create_dir(f"./{output_folder}/whole frames/")
@@ -1658,9 +1666,9 @@ def open_menu():
     save_button.grid(row=12, column=0, columnspan=2)
 
     # Set initial values for the input fields
-    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, randomize, whole_frame,
+    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, frames_per_visit, randomize, whole_frame,
                       cropped_frames, crop_size, offset_range]
-    for i in range(10):
+    for i in range(11):
         fields[i].insert(0, str(initial_values[i]))
 
     # Start the Tkinter event
@@ -1683,6 +1691,7 @@ def config_write():
     global scan_folders
     global crop_mode
     global frame_skip
+    global frames_per_visit
     global randomize
     global whole_frame
     global cropped_frames
@@ -1704,6 +1713,7 @@ def config_write():
     config.set('Workflow settings', 'Scan_default_folders', scan_folders)
     config.set('Crop settings', 'crop_mode', str(crop_mode))
     config.set('Crop settings', 'crop_interval_frames', str(frame_skip))
+    config.set('Crop settings', 'frames_pre_visit', str(frames_per_visit))
     config.set('Crop settings', 'randomize_interval', str(randomize))
     config.set('Crop settings', 'export_whole_frame', str(whole_frame))
     config.set('Crop settings', 'export_crops', str(cropped_frames))
