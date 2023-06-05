@@ -5,7 +5,6 @@ from tkinter import filedialog
 import cv2
 import math
 import os
-import shutil
 
 def yolobbox2bbox(x,y,w,h):
     x1, y1 = (x-(w/2))*640, (y-(h/2))*640
