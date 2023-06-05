@@ -56,7 +56,7 @@ for filename in os.listdir(folder_path):
         img = Image.open(original_path)
 
         # Open the corresponding txt file
-        txt_path = f"{folder_path}/{filename[:-4]}.txt"
+        txt_path = f"{original_path[:-4]}.txt"
         if not os.path.exists(txt_path):
             continue
         with open(txt_path, "r") as f:
@@ -84,8 +84,12 @@ for filename in os.listdir(folder_path):
             cv2.namedWindow('image')
             # Make the window topmost
             cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+            key = cv2.waitKey(0)
+            if key == 27 or key == 13:  # Check if the Esc key was pressed
+                cv2.destroyAllWindows()
+                break
+            else:
+                cv2.destroyAllWindows()
 
         # Move the image and txt file to the original folder
         #shutil.move(destination_path, os.path.join(folder_path, filename))
