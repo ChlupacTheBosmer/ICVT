@@ -830,6 +830,7 @@ def generate_frames(frame, success, tag, index):
     global frame_number_start
     global visit_duration
     global logger
+    global frame_skip
     logger.debug(f"Running function generate_frames({index})")
     species = tag[-27:-19].replace("_", "")
     timestamp = tag[-18:-4]
@@ -840,6 +841,7 @@ def generate_frames(frame, success, tag, index):
         frame_skip = (visit_duration * fps)//frames_per_visit
         if frame_skip < 1:
             frame_skip = 1
+    print(frame_skip)
     while success:
         # Crop images every 30th frame
         if frame_count % int(frame_skip) == 0:
