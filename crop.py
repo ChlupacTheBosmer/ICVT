@@ -873,7 +873,7 @@ def generate_frames(frame, success, tag, index):
         frame_to_read = frame_number_start + frame_count
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_to_read)
         success, frame = cap.read()
-        if not (frames_per_visit == 0 and frame_count <= (visit_duration * fps)) or (frames_per_visit >= 1 and frame_count <= frames_per_visit):
+        if not (frame_count <= (visit_duration * fps)):
             # Release the video capture object and close all windows
             cap.release()
             cv2.destroyAllWindows()
