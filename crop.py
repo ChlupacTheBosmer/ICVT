@@ -838,6 +838,8 @@ def generate_frames(frame, success, tag, index):
     frame_count = 0
     if frames_per_visit > 0:
         frame_skip = (visit_duration * fps)//frames_per_visit
+        if frame_skip < 1:
+            frame_skip = 1
     while success:
         # Crop images every 30th frame
         if frame_count % int(frame_skip) == 0:
