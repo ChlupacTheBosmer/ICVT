@@ -50,10 +50,10 @@ for filename in os.listdir(folder_path):
         destination_path = os.path.join(tmp_folder, filename)
 
         # Move the file to the destination folder
-        shutil.move(original_path, destination_path)
+        #shutil.move(original_path, destination_path)
 
         # Open the image
-        img = Image.open(destination_path)
+        img = Image.open(original_path)
 
         # Open the corresponding txt file
         txt_path = f"{folder_path}/{filename[:-4]}.txt"
@@ -73,7 +73,7 @@ for filename in os.listdir(folder_path):
         y = box_bottom - box_height/2
 
         # Open the cropped image
-        img1 = cv2.imread(f"{tmp_folder}/{filename[:-4]}.jpg")
+        img1 = cv2.imread(original_path)
 
         # Draw a rectangle on the image using the bounding box coordinates
         cv2.rectangle(img1, (box_left, box_top), (box_right, box_bottom), (0, 255, 0), 2)
@@ -88,5 +88,5 @@ for filename in os.listdir(folder_path):
             cv2.destroyAllWindows()
 
         # Move the image and txt file to the original folder
-        shutil.move(destination_path, os.path.join(folder_path, filename))
+        #shutil.move(destination_path, os.path.join(folder_path, filename))
         print(f"File {filename} processed successfully")
