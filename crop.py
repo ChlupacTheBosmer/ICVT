@@ -834,7 +834,7 @@ def generate_frames(frame, success, tag, index):
     species = tag[-27:-19].replace("_", "")
     timestamp = tag[-18:-4]
     crop_counter = 1
-    # Loop through the video and crop yimages every 30th frame
+    # Loop through the video and crop y images every 30th frame
     frame_count = 0
     if frames_per_visit > 0:
         frame_skip = (visit_duration * fps)//frames_per_visit
