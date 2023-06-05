@@ -836,10 +836,11 @@ def generate_frames(frame, success, tag, index):
     timestamp = tag[-18:-4]
     crop_counter = 1
     frame_skip_loc = frame_skip
+
     # Loop through the video and crop y images every 30th frame
     frame_count = 0
     if frames_per_visit > 0:
-        frame_skip_loc = (visit_duration * fps)//frames_per_visit
+        frame_skip_loc = int((visit_duration * fps)//frames_per_visit)
         if frame_skip_loc < 1:
             frame_skip_loc = 1
     print(frame_skip_loc)
