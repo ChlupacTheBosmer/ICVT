@@ -840,7 +840,7 @@ def generate_frames(frame, success, tag, index):
         frame_skip = (visit_duration * fps)//frames_per_visit
     while success:
         # Crop images every 30th frame
-        if frame_count % frame_skip == 0:
+        if frame_count % int(frame_skip) == 0:
             for i, point in enumerate(points_of_interest_entry[index]):
                 if cropped_frames == 1:
                     crop_img, x1, y1, x2, y2 = capture_crop(frame, point)
@@ -1230,7 +1230,12 @@ def load_video_frames():
                 cap = cv2.VideoCapture(os.path.join(video_folder_path, filename))
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 25)
                 ret, frame = cap.read()
-                frames.append(frame)
+                if ret:
+                    frames.append(frame)
+                else:
+                    # If the read operation fails, add a default image
+                    default_image = cv2.imread('resources/img/nf.png')
+                    frames.append(default_image)
     else:
         # display message box with error message
         messagebox.showerror("Error", "Invalid video folder path")
