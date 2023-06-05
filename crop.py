@@ -657,7 +657,7 @@ def load_excel_table(file_path):
     global logger
     logger.debug(f"Running function load_excel_table({file_path})")
     # Define the columns to extract
-    cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21]
+    cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21, 24]
 
     # Read the Excel file, skipping the first two rows
     try:
@@ -708,8 +708,9 @@ def load_excel_table(file_path):
     filtered_df.loc[:, 11] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
                                                             axis=1)
     filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
+    filtered_df.iloc[:, 12] = filtered_df.iloc[:, 12].astype(str)
     print(f"Flow: Filtered dataframe:\n {filtered_df}")
-    filtered_data = filtered_df.iloc[:, [7, 11]].values.tolist()
+    filtered_data = filtered_df.iloc[:, [7, 11, 12]].values.tolist()
 
     annotation_data_array = filtered_data
     create_dir("resources/exc/")
