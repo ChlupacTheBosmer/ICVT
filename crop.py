@@ -822,7 +822,6 @@ def capture_crop(frame, point):
         crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
     return crop_img, x1, y1, x2, y2
 
-
 def generate_frames(frame, success, tag, index):
     global points_of_interest_entry
     global cap
@@ -878,7 +877,6 @@ def generate_frames(frame, success, tag, index):
             cap.release()
             cv2.destroyAllWindows()
             break
-
 
 def get_video_data(video_filepaths):
     global logger
