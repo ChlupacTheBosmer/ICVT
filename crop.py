@@ -846,7 +846,9 @@ def generate_frames(frame, success, tag, index):
     print(frame_skip_loc)
     while success:
         # Crop images every 30th frame
-        if frame_count % int(frame_skip_loc) == 0:
+        print(int(frame_count % frame_skip_loc))
+        print(frame_count % frame_skip_loc)
+        if int(frame_count % frame_skip_loc) == 0:
             for i, point in enumerate(points_of_interest_entry[index]):
                 if cropped_frames == 1:
                     crop_img, x1, y1, x2, y2 = capture_crop(frame, point)
