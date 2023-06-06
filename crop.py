@@ -21,7 +21,9 @@ from hachoir.parser import createParser
 import logging
 import xlwings as xw
 import keyboard
-
+from ultralytics import YOLO
+import torch
+import shutil
 
 def config_read():
     global ocr_tesseract_path
@@ -869,6 +871,7 @@ def generate_frames(frame, success, tag, index):
         frame_skip_loc = int((visit_duration * fps)//frames_per_visit)
         if frame_skip_loc < 1:
             frame_skip_loc = 1
+    img_paths = []
     while success:
         # Crop images every 30th frame
         if int(frame_count % frame_skip_loc) == 0:
@@ -879,6 +882,7 @@ def generate_frames(frame, success, tag, index):
                     cv2.imwrite(
                         f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{x1},{y1}_{x2},{y2}.jpg",
                         crop_img)
+                    img_paths.append(f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{x1},{y1}_{x2},{y2}.jpg")
             if whole_frame == 1:
                 cv2.imwrite(
                     f"./{output_folder}/whole frames/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg",
@@ -901,6 +905,26 @@ def generate_frames(frame, success, tag, index):
             cap.release()
             cv2.destroyAllWindows()
             break
+    yolo_preprocessing(img_paths)
+
+def yolo_preprocessing(img_paths):
+    model = YOLO('resources/yolo/best.pt')
+    results = model(img_paths, save=False, imgsz=crop_size, conf=0.25, save_txt=False, max_det=1, stream=True)
+    for i, result in enumerate(results):
+        boxes = result.boxes.data
+        original_path = os.path.join(img_paths[i])
+        create_dir("output/empty")
+        create_dir("output/visitor")
+        empty_path = os.path.join("output/empty", os.path.basename(img_paths[i]))
+        visitor_path = os.path.join("output/visitor", os.path.basename(img_paths[i]))
+        if len(result.boxes.data) > 0:
+            shutil.move(original_path, visitor_path)
+            with open(f"{visitor_path[:-4]}.txt", 'w') as file:
+                # Write the box_data to the file
+                txt = str(result.boxes.xywh[0].tolist())
+                file.write(f"0 {txt.replace('[', '').replace(']', '').replace(',', '')}")
+        else:
+            shutil.move(original_path, empty_path)
 
 def get_video_data(video_filepaths):
     global logger
@@ -938,7 +962,6 @@ def update_entries(index, original_points):
                 index == 0 or not points_of_interest_entry[max(index - 1, 0)] == points_of_interest_entry[index]):
             modified_frames.append(each)
         update_button_image(frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
-
 
 def get_mouse_position(event, x, y, flags, mode, i, j):
     global points_of_interest_entry
@@ -981,14 +1004,62 @@ def update_button_image(frame, i, j, first):
     frame = frame.copy()
     height, width, channels = frame.shape
     for point in points_of_interest_entry[index]:
-        x1, y1 = max(0, point[0] - offset_range), max(0, point[1] - offset_range)
-        x2, y2 = min(width, point[0] + offset_range), min(height, point[1] + offset_range)
+        x1, y1 = max(0, point[0] - (crop_size // 2)), max(0, point[1] - (crop_size // 2))
+        x2, y2 = min(width, point[0] + (crop_size // 2)), min(height, point[1] + (crop_size // 2))
         cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
         cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
         cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
         cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
         cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+        pos_off = 0
+        rectangles = [
+            [(max(pos_off, min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
+              max(pos_off,
+                  min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
+             (max(crop_size - pos_off,
+                  min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
+              max(crop_size - pos_off,
+                  min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))],
+            # Rectangle 1: (upper_left, bottom_right)
+            [(max(pos_off,
+                  min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
+              max(pos_off,
+                  min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
+             (max(crop_size - pos_off,
+                  min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
+              max(crop_size - pos_off,
+                  min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
+            # Rectangle 2: (upper_left, bottom_right)
+            [(max(pos_off,
+                  min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
+              max(pos_off,
+                  min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
+             (max(crop_size - pos_off,
+                  min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
+              max(crop_size - pos_off,
+                  min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
+            # Rectangle 3: (upper_left, bottom_right)
+            [(max(pos_off,
+                  min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
+              max(pos_off,
+                  min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
+             (max(crop_size - pos_off,
+                  min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
+              max(crop_size - pos_off,
+                  min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))]
+            # Rectangle 4: (upper_left, bottom_right)
+        ]
+
+        # Find the overlapping area
+        x_min = max(rect[0][0] for rect in rectangles)
+        y_min = max(rect[0][1] for rect in rectangles)
+        x_max = min(rect[1][0] for rect in rectangles)
+        y_max = min(rect[1][1] for rect in rectangles)
+
+        # Calculate the coordinates of the overlapping area
+        cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+
     if (first >= 0 or index in modified_frames) and (
             (index == 0 and not len(points_of_interest_entry[0]) == 0) or not points_of_interest_entry[
                                                                                   max(index - 1, 0)] ==
@@ -1245,7 +1316,6 @@ def on_button_click(i, j, button_images):
             b_r = b_r * -1
         update_entries(index, original_points)
 
-
 def load_video_frames():
     # Loop through each file in folder
     global frames
@@ -1270,14 +1340,11 @@ def load_video_frames():
         # display message box with error message
         messagebox.showerror("Error", "Invalid video folder path")
 
-
-
 def update_crop_mode(var):
     global crop_mode
     global logger
     logger.debug(f"Running function update_crop_mode({var})")
     crop_mode = var
-
 
 def save_progress():
     global auto_processing
@@ -1296,7 +1363,6 @@ def save_progress():
         else:
             # display message box with error message
             messagebox.showerror("Error", "Invalid video folder path")
-
 
 def load_progress():
     global auto_processing
