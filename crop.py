@@ -657,7 +657,7 @@ def load_excel_table(file_path):
     global logger
     logger.debug(f"Running function load_excel_table({file_path})")
     # Define the columns to extract
-    cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21]
+    cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21, 24]
 
     # Read the Excel file, skipping the first two rows
     try:
@@ -708,8 +708,9 @@ def load_excel_table(file_path):
     filtered_df.loc[:, 11] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
                                                             axis=1)
     filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
+    filtered_df.iloc[:, 12] = filtered_df.iloc[:, 12].astype(str)
     print(f"Flow: Filtered dataframe:\n {filtered_df}")
-    filtered_data = filtered_df.iloc[:, [7, 11]].values.tolist()
+    filtered_data = filtered_df.iloc[:, [7, 11, 12]].values.tolist()
 
     annotation_data_array = filtered_data
     create_dir("resources/exc/")
@@ -822,7 +823,6 @@ def capture_crop(frame, point):
         crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
     return crop_img, x1, y1, x2, y2
 
-
 def generate_frames(frame, success, tag, index):
     global points_of_interest_entry
     global cap
@@ -830,17 +830,25 @@ def generate_frames(frame, success, tag, index):
     global frame_number_start
     global visit_duration
     global logger
+    global frame_skip
     logger.debug(f"Running function generate_frames({index})")
     species = tag[-27:-19].replace("_", "")
     timestamp = tag[-18:-4]
     crop_counter = 1
-    # Loop through the video and crop yimages every 30th frame
+    frame_skip_loc = frame_skip
+
+    # Loop through the video and crop y images every 30th frame
     frame_count = 0
     if frames_per_visit > 0:
-        frame_skip = (visit_duration * fps)//frames_per_visit
+        frame_skip_loc = int((visit_duration * fps)//frames_per_visit)
+        if frame_skip_loc < 1:
+            frame_skip_loc = 1
+    print(frame_skip_loc)
     while success:
         # Crop images every 30th frame
-        if frame_count % frame_skip == 0:
+        print(int(frame_count % frame_skip_loc))
+        print(frame_count % frame_skip_loc)
+        if int(frame_count % frame_skip_loc) == 0:
             for i, point in enumerate(points_of_interest_entry[index]):
                 if cropped_frames == 1:
                     crop_img, x1, y1, x2, y2 = capture_crop(frame, point)
@@ -855,22 +863,21 @@ def generate_frames(frame, success, tag, index):
             crop_counter += 1
 
         if randomize == 1:
-            if (frame_skip - frame_count == 1):
+            if (frame_skip_loc - frame_count == 1):
                 frame_count += 1
             else:
-                frame_count += random.randint(1, max((frame_skip - frame_count), 2))
+                frame_count += random.randint(1, max((frame_skip_loc - frame_count), 2))
         else:
-            frame_count += frame_skip
+            frame_count += frame_skip_loc
         # Read the next frame
         frame_to_read = frame_number_start + frame_count
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_to_read)
         success, frame = cap.read()
-        if not (frames_per_visit == 0 and frame_count <= (visit_duration * fps)) or (frames_per_visit >= 1 and frame_count <= frames_per_visit):
+        if not (frame_count <= (visit_duration * fps)):
             # Release the video capture object and close all windows
             cap.release()
             cv2.destroyAllWindows()
             break
-
 
 def get_video_data(video_filepaths):
     global logger
@@ -1230,7 +1237,12 @@ def load_video_frames():
                 cap = cv2.VideoCapture(os.path.join(video_folder_path, filename))
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 25)
                 ret, frame = cap.read()
-                frames.append(frame)
+                if ret:
+                    frames.append(frame)
+                else:
+                    # If the read operation fails, add a default image
+                    default_image = cv2.imread('resources/img/nf.png')
+                    frames.append(default_image)
     else:
         # display message box with error message
         messagebox.showerror("Error", "Invalid video folder path")
