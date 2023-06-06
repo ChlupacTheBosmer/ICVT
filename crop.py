@@ -32,6 +32,7 @@ def config_read():
     global crop_mode
     global frame_skip
     global frames_per_visit
+    global filter_visitors
     global randomize
     global whole_frame
     global cropped_frames
@@ -60,6 +61,7 @@ def config_read():
         'crop_mode': '1',
         'crop_interval_frames': '30',
         'frames_per_visit': '0',
+        'filter_visitors': '0',
         'randomize_interval': '0',
         'export_whole_frame': '0',
         'export_crops': '1',
@@ -94,6 +96,7 @@ def config_read():
         crop_mode = int(config['Crop settings'].get('crop_mode', '1').strip())
         frame_skip = int(config['Crop settings'].get('crop_interval_frames', '30').strip())
         frames_per_visit = int(config['Crop settings'].get('frames_per_visit', '0').strip())
+        filter_visitors = int(config['Crop settings'].get('filter_visitors', '0').strip())
         randomize = int(config['Crop settings'].get('randomize_interval', '0').strip())
         whole_frame = int(config['Crop settings'].get('export_whole_frame', '0').strip())
         cropped_frames = int(config['Crop settings'].get('export_crops', '1').strip())
@@ -657,7 +660,7 @@ def load_excel_table(file_path):
     global logger
     logger.debug(f"Running function load_excel_table({file_path})")
     # Define the columns to extract
-    cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21, 24]
+    cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21, 23, 24]
 
     # Read the Excel file, skipping the first two rows
     try:
@@ -705,17 +708,40 @@ def load_excel_table(file_path):
     for i in range(5):
         j = i + 1
         filtered_df.iloc[:, j] = filtered_df.iloc[:, j].astype(int).apply(lambda x: f'{x:02}')
-    filtered_df.loc[:, 11] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
+    filtered_df.loc[:, 13] = filtered_df.iloc[:, 11]
+    filtered_df.iloc[:, 12] = filtered_df.iloc[:, 12]
+    filtered_df.iloc[:, 11] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
                                                             axis=1)
     filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
-    filtered_df.iloc[:, 12] = filtered_df.iloc[:, 12].astype(str)
     print(f"Flow: Filtered dataframe:\n {filtered_df}")
-    filtered_data = filtered_df.iloc[:, [7, 11, 12]].values.tolist()
+    filtered_data = filtered_df.iloc[:, [7, 11]].values.tolist()
+
+    # Get the column names
+    column_1 = filtered_df.columns[12]
+    column_2 = filtered_df.columns[13]
+
+    # Count the number of NAs in each column
+    na_count_1 = filtered_df[column_1].isna().sum()
+    na_count_2 = filtered_df[column_2].isna().sum()
+
+    # Check which column has fewer NAs
+    if na_count_1 <= na_count_2:
+        chosen_column = column_1
+        other_column = column_2
+    else:
+        chosen_column = column_2
+        other_column = column_1
+
+    # Replace NAs in chosen_column with values from other_column if they are not NAs
+    visitor_id = filtered_df[[chosen_column, other_column]].copy()
+    visitor_id[chosen_column].fillna(visitor_id[other_column], inplace=True)
+    visitor_id = visitor_id[[chosen_column]].values.tolist()
+    print(visitor_id)
 
     annotation_data_array = filtered_data
     create_dir("resources/exc/")
     filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
-    return annotation_data_array
+    return annotation_data_array, visitor_id
 
 def load_csv(file_path):
     global logger
@@ -843,11 +869,8 @@ def generate_frames(frame, success, tag, index):
         frame_skip_loc = int((visit_duration * fps)//frames_per_visit)
         if frame_skip_loc < 1:
             frame_skip_loc = 1
-    print(frame_skip_loc)
     while success:
         # Crop images every 30th frame
-        print(int(frame_count % frame_skip_loc))
-        print(frame_count % frame_skip_loc)
         if int(frame_count % frame_skip_loc) == 0:
             for i, point in enumerate(points_of_interest_entry[index]):
                 if cropped_frames == 1:
@@ -1666,6 +1689,49 @@ def initialise():
     reload_points_of_interest()
     load_video_frames()
 
+def filter_array_by_visitors(valid_annotations_array):
+    global filtered_array
+    # filter window
+    filter_window = tk.Tk()
+    filter_window.title("Filter Visitors")
+    filter_window.wm_attributes("-topmost", 1)
+
+    def apply_filter():
+        global filtered_array
+        selected_values = [value.get() for value in checkbox_vars]
+        filtered_array = [
+            row for row in valid_annotations_array if not row[5] in selected_values
+        ]
+        print(filtered_array)  # Do something with the filtered array
+        filter_window.quit()
+        filter_window.destroy()
+
+
+    # Get unique values from column index 5
+    column_5_values = [row[5] for row in valid_annotations_array]
+    unique_values = set(column_5_values)
+
+    checkbox_vars = []
+    for i, value in enumerate(unique_values):
+        var = tk.StringVar(filter_window, value=value)  # Pass 'filter_window' as the 'master' argument
+        checkbox_vars.append(var)
+
+        checkbox = tk.Checkbutton(filter_window, text=value, variable=var)
+        checkbox.grid(row=i, column=0, sticky='w')
+
+    apply_button = tk.Button(filter_window, text="Apply Filter", command=apply_filter)
+    apply_button.grid(row=len(unique_values), column=0)
+
+    #Set properties and start window
+    filter_window.update()
+    screen_width = filter_window.winfo_screenwidth()
+    screen_height = filter_window.winfo_screenheight()
+    window_width = filter_window.winfo_reqwidth()
+    window_height = filter_window.winfo_reqheight()
+    x_pos = int((screen_width - window_width) / 2)
+    y_pos = int((screen_height - window_height) / 2)
+    filter_window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
+    filter_window.mainloop()
 
 def crop_engine():
     global points_of_interest_entry
@@ -1695,7 +1761,7 @@ def crop_engine():
                 return
             if crop_mode == 1:
                 video_data = get_video_data(video_filepaths)
-                annotation_data_array = load_excel_table(annotation_file_path)
+                annotation_data_array, visitor_id = load_excel_table(annotation_file_path)
             if crop_mode == 2:
                 annotation_data_array = load_csv(annotation_file_path)
             if annotation_data_array is None:
@@ -1726,9 +1792,14 @@ def crop_engine():
                             valid_annotation_data_entry.append(annotation_data_array[index][each])
                         for each in range(3):
                             valid_annotation_data_entry.append(video_data[i][each])
+                        if crop_mode == 1:
+                            valid_annotation_data_entry.append(visitor_id[index][0])
                         print(f"Flow: Relevant annotations: {valid_annotation_data_entry}")
                         valid_annotations_array.append(valid_annotation_data_entry)
                         valid_annotation_data_entry = []
+            if filter_visitors == 1:
+                filter_array_by_visitors(valid_annotations_array)
+                valid_annotations_array = filtered_array
             for index in range(len(valid_annotations_array)):
                 print(f"Processing item {index}")
                 annotation_time = pd.to_datetime(valid_annotations_array[index][1], format='%Y%m%d_%H_%M_%S')
@@ -1791,6 +1862,7 @@ def open_menu():
     global crop_mode
     global frame_skip
     global frames_per_visit
+    global filter_visitors
     global randomize
     global whole_frame
     global cropped_frames
@@ -1806,13 +1878,13 @@ def open_menu():
     window.wm_attributes("-topmost", 1)
     # Create the labels and input fields
     label_text = ["Output folder path:", "Scan default folders:", "Filename prefix:", "Default crop mode:",
-                  "Frames to skip:", "Frames per visit:", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
+                  "Frames to skip:", "Frames per visit:", "Filter visitors:", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
                   "Crop size:", "Offset size:"]
     labels = []
     fields = []
     outer_frame = tk.Frame(window, pady=20)
     outer_frame.pack(side=tk.TOP, fill=tk.BOTH)
-    for i in range(11):
+    for i in range(12):
         label = tk.Label(outer_frame, text=f"{label_text[i]}")
         label.grid(row=i, column=0, padx=10)
         labels.append(label)
@@ -1828,6 +1900,7 @@ def open_menu():
         global crop_mode
         global frame_skip
         global frames_per_visit
+        global filter_visitors
         global randomize
         global whole_frame
         global cropped_frames
@@ -1836,7 +1909,7 @@ def open_menu():
         global prefix
         global end_values
         end_values = []
-        for i in range(11):
+        for i in range(12):
             end_values.append(fields[i].get())
         output_folder = str(end_values[0])
         scan_folders = str(end_values[1])
@@ -1844,23 +1917,24 @@ def open_menu():
         crop_mode = int(end_values[3])
         frame_skip = int(end_values[4])
         frames_per_visit = int(end_values[5])
-        randomize = int(end_values[6])
-        whole_frame = int(end_values[7])
-        cropped_frames = int(end_values[8])
-        crop_size = int(end_values[9])
-        offset_range = int(end_values[10])
+        filter_visitors = int(end_values[6])
+        randomize = int(end_values[7])
+        whole_frame = int(end_values[8])
+        cropped_frames = int(end_values[9])
+        crop_size = int(end_values[10])
+        offset_range = int(end_values[11])
         config_write()
         create_dir(output_folder)
         create_dir(f"./{output_folder}/whole frames/")
         window.destroy()
 
     save_button = tk.Button(outer_frame, text="Save", command=save_fields)
-    save_button.grid(row=12, column=0, columnspan=2)
+    save_button.grid(row=13, column=0, columnspan=2)
 
     # Set initial values for the input fields
-    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, frames_per_visit, randomize, whole_frame,
+    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, frames_per_visit, filter_visitors, randomize, whole_frame,
                       cropped_frames, crop_size, offset_range]
-    for i in range(11):
+    for i in range(12):
         fields[i].insert(0, str(initial_values[i]))
 
     # Start the Tkinter event
@@ -1884,6 +1958,7 @@ def config_write():
     global crop_mode
     global frame_skip
     global frames_per_visit
+    global filter_visitors
     global randomize
     global whole_frame
     global cropped_frames
@@ -1906,6 +1981,7 @@ def config_write():
     config.set('Crop settings', 'crop_mode', str(crop_mode))
     config.set('Crop settings', 'crop_interval_frames', str(frame_skip))
     config.set('Crop settings', 'frames_per_visit', str(frames_per_visit))
+    config.set('Crop settings', 'filter_visitors', str(filter_visitors))
     config.set('Crop settings', 'randomize_interval', str(randomize))
     config.set('Crop settings', 'export_whole_frame', str(whole_frame))
     config.set('Crop settings', 'export_crops', str(cropped_frames))
