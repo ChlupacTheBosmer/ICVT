@@ -125,21 +125,26 @@ for filename in os.listdir(folder_path_img):
         # Crop the image
         img_cropped = img.crop((x1, y1, x2, y2))
 
-        # Open the cropped image
+        # Open the image
         img1 = cv2.imread(f"{tmp_folder}/{filename[:-4]}.jpg")
+        if img1 is not None:
+            # Image loaded successfully
+            # Draw a rectangle on the image using the bounding box coordinates
+            cv2.rectangle(img1, (box_left, box_top), (box_right, box_bottom), (0, 255, 0), 2)
+            cv2.rectangle(img1, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-        # Draw a rectangle on the image using the bounding box coordinates
-        cv2.rectangle(img1, (box_left, box_top), (box_right, box_bottom), (0, 255, 0), 2)
-        cv2.rectangle(img1, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            if frames > 1:
+                # Show the image
+                cv2.imshow('image', img1)
+                cv2.namedWindow('image')
+                # Make the window topmost
+                cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
+                cv2.waitKey(frames)
+                cv2.destroyAllWindows()
+        else:
+            # Failed to load the image
+            print("Failed to load the image.")
 
-        if frames > 1:
-            # Show the image
-            cv2.imshow('image', img1)
-            cv2.namedWindow('image')
-            # Make the window topmost
-            cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
-            cv2.waitKey(frames)
-            cv2.destroyAllWindows()
 
         # Resize the cropped image to 320x320 pixels
         img_resized = img_cropped.resize((320, 320))
@@ -158,7 +163,7 @@ for filename in os.listdir(folder_path_img):
 
         if os.path.exists(txt_path):
             #Convert the coordinates to YOLOv3 format
-            b = (new_box_left, new_box_top, new_box_right, new_box_bottom)
+            b = (max(new_box_left, 1), max(new_box_top, 1), max(new_box_right, 1), max(new_box_bottom, 1))
             print(b, img_resized.size[0], img_resized.size[1])
             bb = pbx.convert_bbox(b, from_type="voc", to_type="yolo", image_size=(img_resized.size[0], img_resized.size[1]))
             #bb = bbox2yolobbox((img_resized.size[0], img_resized.size[1]), b)
@@ -166,21 +171,26 @@ for filename in os.listdir(folder_path_img):
             # Write the new coordinates to a new txt file
             new_txt_path = f"{out_folder_path_lbl}/{filename[:-4]}_320.txt"
             with open(new_txt_path, "w") as f:
-                f.write(f"0 {round(bb[0], 6)} {round(bb[1], 6)} {round(bb[2], 6)} {round(bb[3], 6)}")
+                f.write(f"0 {max(round(bb[0], 6), 1)} {max(round(bb[1], 6), 1)} {max(round(bb[2], 6), 1)} {max(round(bb[3], 6), 1)}")
 
         img2 = cv2.imread(f"{tmp_folder}/{filename[:-4]}_320.jpg")
+        if img2 is not None:
+            # Image loaded successfully
+            # Draw a rectangle on the image using the bounding box coordinates
+            cv2.rectangle(img2, (int(new_box_left), int(new_box_top)), (int(new_box_right), int(new_box_bottom)),
+                          (0, 255, 0), 2)
 
-        # Draw a rectangle on the image using the bounding box coordinates
-        cv2.rectangle(img2, (int(new_box_left), int(new_box_top)), (int(new_box_right), int(new_box_bottom)), (0, 255, 0), 2)
-
-        if frames > 1:
-            # Show the image
-            cv2.imshow('image', img2)
-            cv2.namedWindow('image')
-            # Make the window topmost
-            cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
-            cv2.waitKey(frames)
-            cv2.destroyAllWindows()
+            if frames > 1:
+                # Show the image
+                cv2.imshow('image', img2)
+                cv2.namedWindow('image')
+                # Make the window topmost
+                cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
+                cv2.waitKey(frames)
+                cv2.destroyAllWindows()
+        else:
+            # Failed to load the image
+            print("Failed to load the image.")
 
         # Move the image and txt file to the original folder
         if os.path.exists(txt_path):

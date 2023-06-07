@@ -6,6 +6,7 @@ import cv2
 import math
 import os
 import numpy
+import pybboxes as pbx
 
 def yolobbox2bbox(x,y,w,h):
     x1, y1 = (x-(w/2))*640, (y-(h/2))*640
@@ -60,20 +61,17 @@ for filename in os.listdir(folder_path):
 
         # Convert the coordinates to floats and scale them for a 320x320 image
         coords = [float(coord) for coord in coords]
+        #bb = pbx.convert_bbox(coords, from_type="yolo", to_type="voc", image_size=(img.size[0], img.size[1]))
         box_left, box_top, box_right, box_bottom = yolobbox2bbox(*coords)
+        #box_left, box_top, box_right, box_bottom = bb[0], bb[1], bb[2], bb[3]
         box_width = box_right - box_left
         box_height = box_bottom - box_top
 
-        # Calculate the centre of the bounding box in the original image
-        x = box_right - box_width/2
-        y = box_bottom - box_height/2
-
-        # Open the cropped image
+        # Open the image
         stream = open(original_path, "rb")
         bytes = bytearray(stream.read())
         numpyarray = numpy.asarray(bytes, dtype=numpy.uint8)
         img1 = cv2.imdecode(numpyarray, cv2.IMREAD_UNCHANGED)
-        #img1 = cv2.imread()
 
         # Draw a rectangle on the image using the bounding box coordinates
         cv2.rectangle(img1, (box_left, box_top), (box_right, box_bottom), (0, 255, 0), 2)
