@@ -5,6 +5,7 @@ from tkinter import filedialog
 import cv2
 import math
 import os
+import numpy
 
 def yolobbox2bbox(x,y,w,h):
     x1, y1 = (x-(w/2))*640, (y-(h/2))*640
@@ -46,10 +47,6 @@ for filename in os.listdir(folder_path):
 
         # Construct the full paths to the original and destination files
         original_path = os.path.join(folder_path, filename)
-        destination_path = os.path.join(tmp_folder, filename)
-
-        # Move the file to the destination folder
-        #shutil.move(original_path, destination_path)
 
         # Open the image
         img = Image.open(original_path)
@@ -72,7 +69,11 @@ for filename in os.listdir(folder_path):
         y = box_bottom - box_height/2
 
         # Open the cropped image
-        img1 = cv2.imread(original_path)
+        stream = open(original_path, "rb")
+        bytes = bytearray(stream.read())
+        numpyarray = numpy.asarray(bytes, dtype=numpy.uint8)
+        img1 = cv2.imdecode(numpyarray, cv2.IMREAD_UNCHANGED)
+        #img1 = cv2.imread()
 
         # Draw a rectangle on the image using the bounding box coordinates
         cv2.rectangle(img1, (box_left, box_top), (box_right, box_bottom), (0, 255, 0), 2)
