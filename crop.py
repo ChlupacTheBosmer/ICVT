@@ -976,7 +976,7 @@ async def generate_frames(frame, success, tag, index):
 
 async def yolo_preprocessing(img_paths, valid_annotations_array, index):
     model = YOLO('resources/yolo/best.pt')
-    results = model(img_paths, save=False, imgsz=crop_size, conf=0.25, save_txt=False, max_det=1, stream=True, device=0)
+    results = model(img_paths, save=False, imgsz=crop_size, conf=0.25, save_txt=False, max_det=1, stream=True)
     for i, result in enumerate(results):
         boxes = result.boxes.data
         original_path = os.path.join(img_paths[i])
