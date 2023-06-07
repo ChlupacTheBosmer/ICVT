@@ -445,31 +445,151 @@ def get_text_from_video(video_filepath, start_or_end):
     return OCR_text, frame
 
 
-def submit_time(input_field):
-    global dialog
+def get_text_manually(frame):
     global sec_OCR
     global root
+    global dialog
+    global x_coordinate
+    global y_coordinate
+    global width
+    global height
     global logger
-    logger.debug(f'Running function submit_time({input_field})')
-    text = input_field.get()
-    if not text.isdigit() or len(text) != 2 or int(text) > 59:
-        # execute code here for when text is not in "SS" format
-        print(
-            "Error: OCR detected text does not follow the expected format. Manual input is not in the correct format. The value will be set to an arbitrary 00.")
-        text = '00'
-    else:
-        print("Error: OCR detected text does not follow the expected format. Resolved manually.")
-    sec_OCR = text
+
+    def submit_time(input_field):
+        global dialog
+        global sec_OCR
+        global root
+        global logger
+        logger.debug(f'Running function submit_time({input_field})')
+        text = input_field.get()
+        if not text.isdigit() or len(text) != 2 or int(text) > 59:
+            # execute code here for when text is not in "SS" format
+            print(
+                "Error: OCR detected text does not follow the expected format. Manual input is not in the correct format. The value will be set to an arbitrary 00.")
+            text = '00'
+        else:
+            print("Error: OCR detected text does not follow the expected format. Resolved manually.")
+        sec_OCR = text
+        while True:
+            try:
+                if dialog.winfo_exists():
+                    dialog.quit()
+                    dialog.destroy()
+                    break
+            except:
+                time.sleep(0.1)
+                break
+
+    # loop until the tkinter root window is created
     while True:
         try:
-            if dialog.winfo_exists():
-                dialog.quit()
-                dialog.destroy()
-                break
+            if root.winfo_exists():
+                break41
         except:
             time.sleep(0.1)
-            break
 
+    # Create the dialog window
+    dialog = tk.Toplevel(root)
+    try:
+        screen_width = dialog.winfo_screenwidth()
+        screen_height = dialog.winfo_screenheight()
+    except:
+        screen_width = 1920
+        screen_height = 1080
+
+    dialog.wm_attributes("-topmost", 1)
+    dialog.title("Time Input")
+
+    # convert frame to tkinter image
+    text_roi = (x_coordinate, y_coordinate, width, height)
+    x, y, w, h = text_roi
+    img_frame_width = min(screen_width // 2, w * 2)
+    img_frame_height = min(screen_height // 2, h * 2)
+    frame = frame[y:y + h, x:x + w]
+    img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (img_frame_width, img_frame_height), Image.LANCZOS)
+    img = Image.fromarray(img)
+    img = ImageTk.PhotoImage(img)
+    img_width = img.width()
+    img_height = img.height()
+
+    # Add image frame containing the video frame
+    img_frame = tk.Frame(dialog, width=img_width, height=img_height)
+    img_frame.pack(side=tk.TOP, pady=(0, 0))
+    img_frame.pack_propagate(0)
+
+    # Add image to image frame
+    img_label = tk.Label(img_frame, image=img)
+    img_label.pack(side=tk.TOP, pady=(0, 0))
+
+    # Add label
+    text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
+    text_field.insert(tk.END,
+                      "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
+    text_field.configure(state="disabled", highlightthickness=1, relief="flat", background=dialog.cget('bg'))
+    text_field.tag_configure("center", justify="center")
+    text_field.tag_add("center", "1.0", "end")
+    text_field.pack(side=tk.TOP, padx=(0, 0))
+    label = tk.Label(dialog, text="Enter text", font=("Arial", 10), background=dialog.cget('bg'))
+    label.pack(pady=2)
+
+    # Add input field
+    j = 0
+    input_field = tk.Entry(dialog, font=("Arial", 10), width=4)
+    input_field.pack(pady=2)
+    input_field.bind("<Return>", lambda j=j: submit_time(input_field))
+    input_field.focus()
+
+    # Add submit button
+    submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10),
+                              command=lambda j=j: submit_time(input_field))
+    submit_button.pack(pady=2)
+
+    # Position the window
+    dialog_width = dialog.winfo_reqwidth() + img_frame_width
+    dialog_height = dialog.winfo_reqheight() + img_frame_height
+    dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
+    dialog_pos_y = 0
+    dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
+
+    # Start the dialog
+    dialog.mainloop()
+
+    # When dialog is closed
+    return_time = sec_OCR
+    if len(return_time) > 0:
+        success = True
+    else:
+        success = False
+    return return_time, success
+
+def get_metadata_from_video(video_filepath, start_or_end):
+    if start_or_end == "start":
+        try:
+            parser = createParser(video_filepath)
+            metadata = extractMetadata(parser)
+            modify_date = str(metadata.get("creation_date"))
+            return_time = modify_date[-2:]
+            print("Flow: Obtained video start time from metadata.")
+            success = True
+        except:
+            success = False
+    elif start_or_end == "end":
+        try:
+            parser = createParser(video_filepath)
+            metadata = extractMetadata(parser)
+            modify_date = str(metadata.get("creation_date"))
+            start_seconds = int(modify_date[-2:])
+            duration = str(metadata.get("duration"))
+            time_parts = duration.split(":")
+            seconds = int(time_parts[2].split(".")[0])
+            return_time = str(seconds + start_seconds)
+            print("Flow: Obtained video end time from metadata.")
+            success = True
+        except:
+            success = False
+    success = False
+    return return_time, success
 
 def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
     global cap
@@ -482,7 +602,6 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
     global height
     global logger
     logger.debug(f'Running function process_OCR_text({detected_text}, {video_filepath}, {start_or_end})')
-    failed = False
     return_time = "00"
     if "\n" in detected_text:
         detected_text = detected_text.replace("\n", "")
@@ -494,110 +613,11 @@ def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
     if re.match(correct_format, detected_text[-8:]):
         print(' '.join(["Flow:", "Text detection successful -", detected_text[-8:]]))
         return_time = detected_text[-2:]
+        success = True
     else:
         print(' '.join(["Flow:", "Text detection failed -", detected_text]))
-        if start_or_end == "start":
-            try:
-                parser = createParser(video_filepath)
-                metadata = extractMetadata(parser)
-                modify_date = str(metadata.get("creation_date"))
-                return_time = modify_date[-2:]
-                print("Error: OCR detected text does not follow the expected format. Obtained value from metadata.")
-            except:
-                failed = True
-        elif start_or_end == "end":
-            try:
-                parser = createParser(video_filepath)
-                metadata = extractMetadata(parser)
-                modify_date = str(metadata.get("creation_date"))
-                start_seconds = int(modify_date[-2:])
-                duration = str(metadata.get("duration"))
-                time_parts = duration.split(":")
-                seconds = int(time_parts[2].split(".")[0])
-                return_time = str(seconds+start_seconds)
-                print("Error: OCR detected text does not follow the expected format. Obtained value from metadata.")
-            except:
-                failed = True
-        if failed:
-            # loop until the tkinter root window is created
-            while True:
-                try:
-                    if root.winfo_exists():
-                        break
-                except:
-                    time.sleep(0.1)
-
-            # Create the dialog window
-            dialog = tk.Toplevel(root)
-            try:
-                screen_width = dialog.winfo_screenwidth()
-                screen_height = dialog.winfo_screenheight()
-            except:
-                screen_width = 1920
-                screen_height = 1080
-
-            dialog.wm_attributes("-topmost", 1)
-            dialog.title("Time Input")
-
-            # convert frame to tkinter image
-            text_roi = (x_coordinate, y_coordinate, width, height)
-            x, y, w, h = text_roi
-            img_frame_width = min(screen_width//2,w*2)
-            img_frame_height = min(screen_height//2,h*2)
-            frame = frame[y:y + h, x:x + w]
-            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = cv2.resize(img, (img_frame_width, img_frame_height), Image.LANCZOS)
-            img = Image.fromarray(img)
-            img = ImageTk.PhotoImage(img)
-            img_width = img.width()
-            img_height = img.height()
-
-            # Add image frame containing the video frame
-            img_frame = tk.Frame(dialog, width=img_width, height=img_height)
-            img_frame.pack(side=tk.TOP, pady=(0, 0))
-            img_frame.pack_propagate(0)
-
-            #Add image to image frame
-            img_label = tk.Label(img_frame, image=img)
-            img_label.pack(side=tk.TOP, pady=(0, 0))
-
-            # Add label
-            text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
-            text_field.insert(tk.END,
-                              "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
-            text_field.configure(state="disabled", highlightthickness=1, relief="flat", background=dialog.cget('bg'))
-            text_field.tag_configure("center", justify="center")
-            text_field.tag_add("center", "1.0", "end")
-            text_field.pack(side=tk.TOP, padx=(0, 0))
-            label = tk.Label(dialog, text="Enter text", font=("Arial", 10), background=dialog.cget('bg'))
-            label.pack(pady=2)
-
-            # Add input field
-            j = 0
-            input_field = tk.Entry(dialog, font=("Arial", 10), width=4)
-            input_field.pack(pady=2)
-            input_field.bind("<Return>", lambda j=j: submit_time(input_field))
-            input_field.focus()
-
-            # Add submit button
-            submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10),
-                                      command=lambda j=j: submit_time(input_field))
-            submit_button.pack(pady=2)
-
-            # Position the window
-            dialog_width = dialog.winfo_reqwidth()+img_frame_width
-            dialog_height = dialog.winfo_reqheight()+img_frame_height
-            dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
-            dialog_pos_y = 0
-            dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
-
-            # Start the dialog
-            dialog.mainloop()
-
-            # When dialog is closed
-            return_time = sec_OCR
-    return return_time
-
+        success = False
+    return return_time, success
 
 # define function to get start and end times for each video file
 def get_video_start_end_times(video_filepath):
@@ -607,6 +627,7 @@ def get_video_start_end_times(video_filepath):
     print(' '.join(["Flow:", "Processing video file -", video_filepath]))
 
     # get start time
+    # get the time from filename
     parts = video_filename[:-4].split("_")
     if len(parts) == 6:
         start_time_minutes = "_".join([parts[3], parts[4], parts[5]])
@@ -617,14 +638,22 @@ def get_video_start_end_times(video_filepath):
             "Error: Some video file names have an unsupported format. Expected format is "
             "CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
         start_time_minutes = video_filename[:-4]
-    text, frame = get_text_from_video(video_filepath, "start")
-    start_time_seconds = process_OCR_text(text, frame, video_filepath, "start")
+    start_time_seconds, success = get_metadata_from_video(video_filepath, "start")
+    if not success:
+        text, frame = get_text_from_video(video_filepath, "start")
+        start_time_seconds, success = process_OCR_text(text, frame, video_filepath, "start")
+        if not success:
+            start_time_seconds, success = get_text_manually(frame)
     start_time_str = '_'.join([start_time_minutes, start_time_seconds])
     start_time = pd.to_datetime(start_time_str, format='%Y%m%d_%H_%M_%S')
 
     # get end time
-    text, frame = get_text_from_video(video_filepath, "end")
-    end_time_seconds = process_OCR_text(text, frame, video_filepath, "end")
+    end_time_seconds, success = get_metadata_from_video(video_filepath, "end")
+    if not success:
+        text, frame = get_text_from_video(video_filepath, "end")
+        end_time_seconds, success = process_OCR_text(text, frame, video_filepath, "end")
+        if not success:
+            end_time_seconds, success = get_text_manually(frame)
     try:
         parser = createParser(video_filepath)
         metadata = extractMetadata(parser)
@@ -639,7 +668,6 @@ def get_video_start_end_times(video_filepath):
     end_time_str = pd.to_datetime('_'.join([start_time_minutes, end_time_seconds]), format='%Y%m%d_%H_%M_%S')
     end_time = end_time_str + pd.Timedelta(minutes=int(delta))
     return start_time, end_time
-
 
 def evaluate_string_formula(cell):
     if isinstance(cell, (int, float)):
@@ -880,9 +908,9 @@ def generate_frames(frame, success, tag, index):
                     crop_img, x1, y1, x2, y2 = capture_crop(frame, point)
                     # save file
                     cv2.imwrite(
-                        f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{x1},{y1}_{x2},{y2}.jpg",
+                        f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i+1}_{x1},{y1}_{x2},{y2}.jpg",
                         crop_img)
-                    img_paths.append(f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{x1},{y1}_{x2},{y2}.jpg")
+                    img_paths.append(f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i+1}_{x1},{y1}_{x2},{y2}.jpg")
             if whole_frame == 1:
                 cv2.imwrite(
                     f"./{output_folder}/whole frames/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg",
@@ -915,13 +943,20 @@ def yolo_preprocessing(img_paths):
         original_path = os.path.join(img_paths[i])
         create_dir("output/empty")
         create_dir("output/visitor")
+        create_dir("output/visitor/labels")
         empty_path = os.path.join("output/empty", os.path.basename(img_paths[i]))
         visitor_path = os.path.join("output/visitor", os.path.basename(img_paths[i]))
+        label_path = os.path.join("output/visitor/labels", os.path.basename(img_paths[i])[:-4])
         if len(result.boxes.data) > 0:
             shutil.move(original_path, visitor_path)
-            with open(f"{visitor_path[:-4]}.txt", 'w') as file:
+            with open(f"{label_path}.txt", 'w') as file:
                 # Write the box_data to the file
-                txt = str(result.boxes.xywh[0].tolist())
+                txt= []
+                lst = result.boxes.xywhn[0].tolist()
+                for item in lst:
+                    txt_item = round(item, 6)
+                    txt.append(txt_item)
+                txt = str(txt)
                 file.write(f"0 {txt.replace('[', '').replace(']', '').replace(',', '')}")
         else:
             shutil.move(original_path, empty_path)
@@ -1772,32 +1807,33 @@ def filter_array_by_visitors(valid_annotations_array):
         filter_window.quit()
         filter_window.destroy()
 
-
     # Get unique values from column index 5
     column_5_values = [row[5] for row in valid_annotations_array]
     unique_values = set(column_5_values)
+    if len(unique_values) > 0:
+        checkbox_vars = []
+        for i, value in enumerate(unique_values):
+            var = tk.StringVar(filter_window, value=value)  # Pass 'filter_window' as the 'master' argument
+            checkbox_vars.append(var)
 
-    checkbox_vars = []
-    for i, value in enumerate(unique_values):
-        var = tk.StringVar(filter_window, value=value)  # Pass 'filter_window' as the 'master' argument
-        checkbox_vars.append(var)
+            checkbox = tk.Checkbutton(filter_window, text=value, variable=var)
+            checkbox.grid(row=i, column=0, sticky='w')
 
-        checkbox = tk.Checkbutton(filter_window, text=value, variable=var)
-        checkbox.grid(row=i, column=0, sticky='w')
+        apply_button = tk.Button(filter_window, text="Apply Filter", command=apply_filter)
+        apply_button.grid(row=len(unique_values), column=0)
 
-    apply_button = tk.Button(filter_window, text="Apply Filter", command=apply_filter)
-    apply_button.grid(row=len(unique_values), column=0)
-
-    #Set properties and start window
-    filter_window.update()
-    screen_width = filter_window.winfo_screenwidth()
-    screen_height = filter_window.winfo_screenheight()
-    window_width = filter_window.winfo_reqwidth()
-    window_height = filter_window.winfo_reqheight()
-    x_pos = int((screen_width - window_width) / 2)
-    y_pos = int((screen_height - window_height) / 2)
-    filter_window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
-    filter_window.mainloop()
+        #Set properties and start window
+        filter_window.update()
+        screen_width = filter_window.winfo_screenwidth()
+        screen_height = filter_window.winfo_screenheight()
+        window_width = filter_window.winfo_reqwidth()
+        window_height = filter_window.winfo_reqheight()
+        x_pos = int((screen_width - window_width) / 2)
+        y_pos = int((screen_height - window_height) / 2)
+        filter_window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
+        filter_window.mainloop()
+    else:
+        print("Flow: No visitor items to filter by. Processing all visits.")
 
 def crop_engine():
     global points_of_interest_entry
