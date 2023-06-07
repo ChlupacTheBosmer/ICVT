@@ -35,6 +35,8 @@ def config_read():
     global frame_skip
     global frames_per_visit
     global filter_visitors
+    global yolo_processing
+    global default_label_category
     global randomize
     global whole_frame
     global cropped_frames
@@ -64,6 +66,8 @@ def config_read():
         'crop_interval_frames': '30',
         'frames_per_visit': '0',
         'filter_visitors': '0',
+        'yolo_processing': '0',
+        'default_label_category': '6',
         'randomize_interval': '0',
         'export_whole_frame': '0',
         'export_crops': '1',
@@ -99,6 +103,8 @@ def config_read():
         frame_skip = int(config['Crop settings'].get('crop_interval_frames', '30').strip())
         frames_per_visit = int(config['Crop settings'].get('frames_per_visit', '0').strip())
         filter_visitors = int(config['Crop settings'].get('filter_visitors', '0').strip())
+        yolo_processing = int(config['Crop settings'].get('yolo_processing', '0').strip())
+        default_label_category = int(config['Crop settings'].get('default_label_category', '6').strip())
         randomize = int(config['Crop settings'].get('randomize_interval', '0').strip())
         whole_frame = int(config['Crop settings'].get('export_whole_frame', '0').strip())
         cropped_frames = int(config['Crop settings'].get('export_crops', '1').strip())
@@ -217,6 +223,7 @@ def reload_points_of_interest():
 def get_excel_path(check, ini_dir):
     global logger
     global annotation_file_path
+    global root
     logger.debug(f'Running function get_excel_path({check}, {ini_dir})')
     # Set path to Excel file manually
     file_type = ["excel (watchers)", "excel (manual)"]
@@ -226,6 +233,12 @@ def get_excel_path(check, ini_dir):
                 title=f"Select the path to the {file_type[(crop_mode - 1)]} file",
                 initialdir=ini_dir,
                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
+        try:
+            if root.winfo_exists():
+                root.title(
+                    f"Insect Communities Crop Suite - Folder: {os.path.basename(os.path.normpath(video_folder_path))} - Table: {os.path.basename(os.path.normpath(annotation_file_path))}")
+        except:
+            print("Flow: Window does not exist.")
     else:
         #display message box that the crop mode does not require an annotation file
         messagebox.showinfo("Info", "The current crop mode does not require an annotation file. Switch crop mode to 1 (watchers) or 2 (manual) to use an annotation file.")
@@ -484,7 +497,7 @@ def get_text_manually(frame):
     while True:
         try:
             if root.winfo_exists():
-                break41
+                break
         except:
             time.sleep(0.1)
 
@@ -588,7 +601,6 @@ def get_metadata_from_video(video_filepath, start_or_end):
             success = True
         except:
             success = False
-    success = False
     return return_time, success
 
 def process_OCR_text(detected_text, frame, video_filepath, start_or_end):
@@ -933,9 +945,9 @@ def generate_frames(frame, success, tag, index):
             cap.release()
             cv2.destroyAllWindows()
             break
-    yolo_preprocessing(img_paths)
+    return img_paths
 
-def yolo_preprocessing(img_paths):
+def yolo_preprocessing(img_paths, valid_annotations_array, index):
     model = YOLO('resources/yolo/best.pt')
     results = model(img_paths, save=False, imgsz=crop_size, conf=0.25, save_txt=False, max_det=1, stream=True)
     for i, result in enumerate(results):
@@ -957,7 +969,11 @@ def yolo_preprocessing(img_paths):
                     txt_item = round(item, 6)
                     txt.append(txt_item)
                 txt = str(txt)
-                file.write(f"0 {txt.replace('[', '').replace(']', '').replace(',', '')}")
+                if any(len(row) < 7 for row in valid_annotations_array):
+                    visitor_category = default_label_category
+                else:
+                    visitor_category = valid_annotations_array[index][6]
+                file.write(f"{visitor_category} {txt.replace('[', '').replace(']', '').replace(',', '')}")
         else:
             shutil.move(original_path, empty_path)
 
@@ -1799,28 +1815,80 @@ def filter_array_by_visitors(valid_annotations_array):
 
     def apply_filter():
         global filtered_array
+        results = []
+        print(checkbox_vars)
+        for i, var in enumerate(checkbox_vars):
+            checkbox_value = var.get()
+            print(checkbox_value)
+            checkbox_text = checkboxes[i].cget("text")
+            print(checkbox_text)
+            dropdown_value = selected_items[i].get()
+            print(dropdown_value)
+            if not dropdown_value[0].isdigit():
+                dropdown_value = "6. empty"
+            results.append([int(checkbox_value), checkbox_text, int(dropdown_value[0])])
+        results = [row for row in results if row[0] != 0]
+        if yolo_processing == 1:
+            for row in results:
+                if row[2] == 6:
+                    filter_window.quit()
+                    filter_window.destroy()
+                    messagebox.showinfo("Warning",
+                                        f"One of the selected groups of visitors was not assigned a correct category for labelling. Please try again.")
+                    filtered_array = []
+                    return
+        print(results)
         selected_values = [value.get() for value in checkbox_vars]
-        filtered_array = [
-            row for row in valid_annotations_array if not row[5] in selected_values
-        ]
+        filtered_array = []
+        for row in valid_annotations_array:
+            if row[5] in [result[1] for result in results]:
+                matching_result = next(result for result in results if result[1] == row[5])
+                filtered_row = row + [matching_result[2]]
+                filtered_array.append(filtered_row)
         print(filtered_array)  # Do something with the filtered array
         filter_window.quit()
         filter_window.destroy()
 
+    def handle_selection(index, selection):
+        if selection in allowed_items:
+            selected_items[index].set(selection)
+            label_values[index].config(text=selection)
+        else:
+            selected_items[index].set("")
+            label_values[index].config(text="")
+
     # Get unique values from column index 5
     column_5_values = [row[5] for row in valid_annotations_array]
     unique_values = set(column_5_values)
+    allowed_items = ["0. Hymenoptera", "1. Diptera", "2. Lepidoptera", "3. Coleoptera", "4. Other"]
     if len(unique_values) > 0:
         checkbox_vars = []
+        checkboxes = []
+        selected_items = []
+        label_values = []
         for i, value in enumerate(unique_values):
-            var = tk.StringVar(filter_window, value=value)  # Pass 'filter_window' as the 'master' argument
+            var = tk.StringVar(filter_window, value=0)  # Pass 'filter_window' as the 'master' argument
             checkbox_vars.append(var)
 
             checkbox = tk.Checkbutton(filter_window, text=value, variable=var)
             checkbox.grid(row=i, column=0, sticky='w')
+            checkboxes.append(checkbox)
+
+            selected_item = tk.StringVar(filter_window)
+            selected_item.set("------------")
+            selected_items.append(selected_item)
+
+            option_menu = tk.OptionMenu(filter_window, selected_item, *allowed_items,
+                                        command=lambda selection, index=i: handle_selection(index, selection))
+            option_menu.config(width=35)
+            option_menu.grid(row=i, column=1, sticky='nsew')
+
+            label_value = tk.Label(filter_window, text="", width=40)
+            label_value.grid(row=i, column=2, sticky='nsew')
+            label_values.append(label_value)
 
         apply_button = tk.Button(filter_window, text="Apply Filter", command=apply_filter)
-        apply_button.grid(row=len(unique_values), column=0)
+        apply_button.grid(row=len(unique_values), column=0, columnspan=3, sticky='nsew', pady=(30, 0))
 
         #Set properties and start window
         filter_window.update()
@@ -1834,6 +1902,13 @@ def filter_array_by_visitors(valid_annotations_array):
         filter_window.mainloop()
     else:
         print("Flow: No visitor items to filter by. Processing all visits.")
+        filtered_array = []
+        for row in valid_annotations_array:
+                filtered_row = row + [0]
+                filtered_array.append(filtered_row)
+        print(filtered_array)  # Do something with the filtered array
+        filter_window.quit()
+        filter_window.destroy()
 
 def crop_engine():
     global points_of_interest_entry
@@ -1847,6 +1922,7 @@ def crop_engine():
     global loaded
     global logger
     global whole_frame
+    global visit_index
     logger.debug("Running function crop_engine()")
     result = ask_yes_no("Do you want to start the cropping process?")
     if result:
@@ -1901,9 +1977,15 @@ def crop_engine():
                         valid_annotation_data_entry = []
             if filter_visitors == 1:
                 filter_array_by_visitors(valid_annotations_array)
-                valid_annotations_array = filtered_array
+                if len(filtered_array) > 0:
+                    valid_annotations_array = filtered_array
+                else:
+                    print("No visitors of the selected type found.")
+                    reload(1, False)
+                    return
             for index in range(len(valid_annotations_array)):
                 print(f"Processing item {index}")
+                visit_index = index
                 annotation_time = pd.to_datetime(valid_annotations_array[index][1], format='%Y%m%d_%H_%M_%S')
                 annotation_offset = (annotation_time - valid_annotations_array[index][3]).total_seconds()
                 cap = cv2.VideoCapture(valid_annotations_array[index][2])
@@ -1914,10 +1996,12 @@ def crop_engine():
                 frame_number_start = int(annotation_offset * fps)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
-                generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
+                img_paths = generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
                                 video_filepaths.index(valid_annotations_array[index][2]))
+                if yolo_processing == 1:
+                    yolo_preprocessing(img_paths, valid_annotations_array, index)
         else:
-            video_ok= check_paths(True, False)
+            video_ok = check_paths(True, False)
             if not video_ok:
                 messagebox.showinfo("Warning",
                                     f"Unspecified path to a video folder.")
@@ -1932,7 +2016,7 @@ def crop_engine():
                 frame_number_start = 2
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
-                generate_frames(frame, success, os.path.basename(video_filepaths[i]), i)
+                img_paths = generate_frames(frame, success, os.path.basename(video_filepaths[i]), i)
             whole_frame = orig_wf
     reload(1, False)
     # try:
@@ -1965,6 +2049,8 @@ def open_menu():
     global frame_skip
     global frames_per_visit
     global filter_visitors
+    global yolo_processing
+    global default_label_category
     global randomize
     global whole_frame
     global cropped_frames
@@ -1980,13 +2066,13 @@ def open_menu():
     window.wm_attributes("-topmost", 1)
     # Create the labels and input fields
     label_text = ["Output folder path:", "Scan default folders:", "Filename prefix:", "Default crop mode:",
-                  "Frames to skip:", "Frames per visit:", "Filter visitors:", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
+                  "Frames to skip:", "Frames per visit:", "Filter visitors:", "Yolo processing", "Default label category", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
                   "Crop size:", "Offset size:"]
     labels = []
     fields = []
     outer_frame = tk.Frame(window, pady=20)
     outer_frame.pack(side=tk.TOP, fill=tk.BOTH)
-    for i in range(12):
+    for i in range(14):
         label = tk.Label(outer_frame, text=f"{label_text[i]}")
         label.grid(row=i, column=0, padx=10)
         labels.append(label)
@@ -2003,6 +2089,8 @@ def open_menu():
         global frame_skip
         global frames_per_visit
         global filter_visitors
+        global yolo_processing
+        global default_label_category
         global randomize
         global whole_frame
         global cropped_frames
@@ -2011,7 +2099,7 @@ def open_menu():
         global prefix
         global end_values
         end_values = []
-        for i in range(12):
+        for i in range(14):
             end_values.append(fields[i].get())
         output_folder = str(end_values[0])
         scan_folders = str(end_values[1])
@@ -2020,23 +2108,25 @@ def open_menu():
         frame_skip = int(end_values[4])
         frames_per_visit = int(end_values[5])
         filter_visitors = int(end_values[6])
-        randomize = int(end_values[7])
-        whole_frame = int(end_values[8])
-        cropped_frames = int(end_values[9])
-        crop_size = int(end_values[10])
-        offset_range = int(end_values[11])
+        yolo_processing = int(end_values[7])
+        default_label_category = int(end_values[8])
+        randomize = int(end_values[9])
+        whole_frame = int(end_values[10])
+        cropped_frames = int(end_values[11])
+        crop_size = int(end_values[12])
+        offset_range = int(end_values[13])
         config_write()
         create_dir(output_folder)
         create_dir(f"./{output_folder}/whole frames/")
         window.destroy()
 
     save_button = tk.Button(outer_frame, text="Save", command=save_fields)
-    save_button.grid(row=13, column=0, columnspan=2)
+    save_button.grid(row=15, column=0, columnspan=2)
 
     # Set initial values for the input fields
-    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, frames_per_visit, filter_visitors, randomize, whole_frame,
+    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, frames_per_visit, filter_visitors, yolo_processing, default_label_category, randomize, whole_frame,
                       cropped_frames, crop_size, offset_range]
-    for i in range(12):
+    for i in range(14):
         fields[i].insert(0, str(initial_values[i]))
 
     # Start the Tkinter event
@@ -2061,6 +2151,8 @@ def config_write():
     global frame_skip
     global frames_per_visit
     global filter_visitors
+    global yolo_processing
+    global default_label_category
     global randomize
     global whole_frame
     global cropped_frames
@@ -2084,6 +2176,8 @@ def config_write():
     config.set('Crop settings', 'crop_interval_frames', str(frame_skip))
     config.set('Crop settings', 'frames_per_visit', str(frames_per_visit))
     config.set('Crop settings', 'filter_visitors', str(filter_visitors))
+    config.set('Crop settings', 'yolo_processing', str(yolo_processing))
+    config.set('Crop settings', 'default_label_category', str(default_label_category))
     config.set('Crop settings', 'randomize_interval', str(randomize))
     config.set('Crop settings', 'export_whole_frame', str(whole_frame))
     config.set('Crop settings', 'export_crops', str(cropped_frames))
