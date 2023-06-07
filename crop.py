@@ -24,6 +24,10 @@ import keyboard
 from ultralytics import YOLO
 import torch
 import shutil
+import asyncio
+import cProfile
+import tracemalloc
+tracemalloc.start()
 
 def config_read():
     global ocr_tesseract_path
@@ -851,7 +855,7 @@ def load_csv(file_path):
     return annotation_data_array
 
 
-def capture_crop(frame, point):
+async def capture_crop(frame, point):
     global cap
     global fps
     global frame_number_start
@@ -859,13 +863,17 @@ def capture_crop(frame, point):
     global crop_size
     global logger
     logger.debug(f"Running function capture_crop({point})")
+
+    # Prepare local variables
     x, y = point
+
     # Add a random offset to the coordinates, but ensure they remain within the image bounds
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    # Check if any of the dimensions is smaller than Crop_size (640)
+    # Check if any of the dimensions is smaller than crop_size and if so upscale the image to prevent crops smaller than desired crop_size
     if frame_height < crop_size or frame_width < crop_size:
+
         # Calculate the scaling factor to upscale the image
         scaling_factor = crop_size / min(frame_height, frame_width)
 
@@ -875,23 +883,30 @@ def capture_crop(frame, point):
 
         # Upscale the frame using cv2.resize with Lanczos upscaling algorithm
         frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+
+    # Get the new frame size
     frame_height, frame_width = frame.shape[:2]
 
+    # Calculate the coordinates for the area that will be cropped
     x_offset = random.randint(-offset_range, offset_range)
     y_offset = random.randint(-offset_range, offset_range)
     x1 = max(0, min(((x - crop_size // 2) + x_offset), frame_width - crop_size))
     y1 = max(0, min(((y - crop_size // 2) + y_offset), frame_height - crop_size))
     x2 = max(crop_size, min(((x + crop_size // 2) + x_offset), frame_width))
     y2 = max(crop_size, min(((y + crop_size // 2) + y_offset), frame_height))
-    # crop the image
+
+    # Crop the image
     crop = frame[y1:y2, x1:x2]
-    # convert to correct color space
+
+    # Convert to correct color space
     crop_img = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
     if crop_img.shape[2] == 3:
         crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
+
+    # Return the cropped image and the coordinates for future reference
     return crop_img, x1, y1, x2, y2
 
-def generate_frames(frame, success, tag, index):
+async def generate_frames(frame, success, tag, index):
     global points_of_interest_entry
     global cap
     global fps
@@ -899,36 +914,42 @@ def generate_frames(frame, success, tag, index):
     global visit_duration
     global logger
     global frame_skip
+    global loop
     logger.debug(f"Running function generate_frames({index})")
+
+    # Prepare name elements
     species = tag[-27:-19].replace("_", "")
     timestamp = tag[-18:-4]
+
+    # Define local variables
     crop_counter = 1
     frame_skip_loc = frame_skip
 
-    # Loop through the video and crop y images every 30th frame
-    frame_count = 0
+    # Calculate the frame skip variable based on the limited number of frames per visit
     if frames_per_visit > 0:
         frame_skip_loc = int((visit_duration * fps)//frames_per_visit)
         if frame_skip_loc < 1:
             frame_skip_loc = 1
+
+    # Loop through the video and crop y images every n-th frame
+    frame_count = 0
     img_paths = []
+
     while success:
-        # Crop images every 30th frame
+        # Crop images every n-th frame
         if int(frame_count % frame_skip_loc) == 0:
             for i, point in enumerate(points_of_interest_entry[index]):
                 if cropped_frames == 1:
-                    crop_img, x1, y1, x2, y2 = capture_crop(frame, point)
-                    # save file
-                    cv2.imwrite(
-                        f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i+1}_{x1},{y1}_{x2},{y2}.jpg",
-                        crop_img)
-                    img_paths.append(f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i+1}_{x1},{y1}_{x2},{y2}.jpg")
+                    crop_img, x1, y1, x2, y2 = await capture_crop(frame, point)
+                    img_path = f"./{output_folder}/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i+1}_{x1},{y1}_{x2},{y2}.jpg"
+                    cv2.imwrite(img_path, crop_img)
+                    img_paths.append(img_path)
             if whole_frame == 1:
-                cv2.imwrite(
-                    f"./{output_folder}/whole frames/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg",
-                    frame)
+                img_path = f"./{output_folder}/whole frames/{prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
+                cv2.imwrite(img_path, frame)
             crop_counter += 1
 
+        # If the random frame skip interval is activated add a random number to the counter or add the set frame skip interval
         if randomize == 1:
             if (frame_skip_loc - frame_count == 1):
                 frame_count += 1
@@ -936,20 +957,26 @@ def generate_frames(frame, success, tag, index):
                 frame_count += random.randint(1, max((frame_skip_loc - frame_count), 2))
         else:
             frame_count += frame_skip_loc
+
         # Read the next frame
         frame_to_read = frame_number_start + frame_count
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_to_read)
         success, frame = cap.read()
+
+        # If the frame count is equal or larger than the amount of frames that comprises the duration of the visit end the loop
         if not (frame_count <= (visit_duration * fps)):
+
             # Release the video capture object and close all windows
             cap.release()
             cv2.destroyAllWindows()
             break
+
+    # Return the resulting list of image paths for future reference
     return img_paths
 
-def yolo_preprocessing(img_paths, valid_annotations_array, index):
+async def yolo_preprocessing(img_paths, valid_annotations_array, index):
     model = YOLO('resources/yolo/best.pt')
-    results = model(img_paths, save=False, imgsz=crop_size, conf=0.25, save_txt=False, max_det=1, stream=True)
+    results = model(img_paths, save=False, imgsz=crop_size, conf=0.25, save_txt=False, max_det=1, stream=True, device=0)
     for i, result in enumerate(results):
         boxes = result.boxes.data
         original_path = os.path.join(img_paths[i])
@@ -1996,10 +2023,13 @@ def crop_engine():
                 frame_number_start = int(annotation_offset * fps)
                 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                 success, frame = cap.read()
-                img_paths = generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
-                                video_filepaths.index(valid_annotations_array[index][2]))
+                img_paths = asyncio.run(generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
+                                    video_filepaths.index(valid_annotations_array[index][2])))
+                #loop.close()
+                #img_paths = generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
+                               # video_filepaths.index(valid_annotations_array[index][2]))
                 if yolo_processing == 1:
-                    yolo_preprocessing(img_paths, valid_annotations_array, index)
+                    asyncio.run(yolo_preprocessing(img_paths, valid_annotations_array, index))
         else:
             video_ok = check_paths(True, False)
             if not video_ok:
@@ -2260,5 +2290,14 @@ def check_paths(video_folder, annotation_file):
 
 
 # Main body of the script
+
+# Profile the generate_frames function
+profiler = cProfile.Profile()
+profiler.enable()
+
 initialise()
 open_ICCS_window()
+
+# Stop profiling
+profiler.disable()
+profiler.print_stats()
