@@ -980,12 +980,12 @@ async def yolo_preprocessing(img_paths, valid_annotations_array, index):
     for i, result in enumerate(results):
         boxes = result.boxes.data
         original_path = os.path.join(img_paths[i])
-        create_dir("output/empty")
-        create_dir("output/visitor")
-        create_dir("output/visitor/labels")
-        empty_path = os.path.join("output/empty", os.path.basename(img_paths[i]))
-        visitor_path = os.path.join("output/visitor", os.path.basename(img_paths[i]))
-        label_path = os.path.join("output/visitor/labels", os.path.basename(img_paths[i])[:-4])
+        create_dir(f"{output_folder}/empty")
+        create_dir(f"{output_folder}/visitor")
+        create_dir(f"{output_folder}/visitor/labels")
+        empty_path = os.path.join(f"{output_folder}/empty", os.path.basename(img_paths[i]))
+        visitor_path = os.path.join(f"{output_folder}/visitor", os.path.basename(img_paths[i]))
+        label_path = os.path.join(f"{output_folder}/visitor/labels", os.path.basename(img_paths[i])[:-4])
         if len(result.boxes.data) > 0:
             shutil.move(original_path, visitor_path)
             with open(f"{label_path}.txt", 'w') as file:
