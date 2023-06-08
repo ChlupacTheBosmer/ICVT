@@ -41,6 +41,7 @@ def config_read():
     global filter_visitors
     global yolo_processing
     global default_label_category
+    global yolo_conf
     global randomize
     global whole_frame
     global cropped_frames
@@ -72,6 +73,7 @@ def config_read():
         'filter_visitors': '0',
         'yolo_processing': '0',
         'default_label_category': '6',
+        'yolo_conf': '0.25',
         'randomize_interval': '0',
         'export_whole_frame': '0',
         'export_crops': '1',
@@ -109,6 +111,7 @@ def config_read():
         filter_visitors = int(config['Crop settings'].get('filter_visitors', '0').strip())
         yolo_processing = int(config['Crop settings'].get('yolo_processing', '0').strip())
         default_label_category = int(config['Crop settings'].get('default_label_category', '6').strip())
+        yolo_conf = float(config['Crop settings'].get('yolo_conf', '0.25').strip())
         randomize = int(config['Crop settings'].get('randomize_interval', '0').strip())
         whole_frame = int(config['Crop settings'].get('export_whole_frame', '0').strip())
         cropped_frames = int(config['Crop settings'].get('export_crops', '1').strip())
@@ -976,7 +979,7 @@ async def generate_frames(frame, success, tag, index):
 
 async def yolo_preprocessing(img_paths, valid_annotations_array, index):
     model = YOLO('resources/yolo/best.pt')
-    results = model(img_paths, save=False, imgsz=crop_size, conf=0.25, save_txt=False, max_det=1, stream=True)
+    results = model(img_paths, save=False, imgsz=crop_size, conf=yolo_conf, save_txt=False, max_det=1, stream=True)
     for i, result in enumerate(results):
         boxes = result.boxes.data
         original_path = os.path.join(img_paths[i])
@@ -2081,6 +2084,7 @@ def open_menu():
     global filter_visitors
     global yolo_processing
     global default_label_category
+    global yolo_conf
     global randomize
     global whole_frame
     global cropped_frames
@@ -2096,13 +2100,13 @@ def open_menu():
     window.wm_attributes("-topmost", 1)
     # Create the labels and input fields
     label_text = ["Output folder path:", "Scan default folders:", "Filename prefix:", "Default crop mode:",
-                  "Frames to skip:", "Frames per visit:", "Filter visitors:", "Yolo processing", "Default label category", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
+                  "Frames to skip:", "Frames per visit:", "Filter visitors:", "Yolo processing", "Default label category", "Yolo conf. tresh.", "Randomize interval:", "Export whole frames:", "Export cropped frames:",
                   "Crop size:", "Offset size:"]
     labels = []
     fields = []
     outer_frame = tk.Frame(window, pady=20)
     outer_frame.pack(side=tk.TOP, fill=tk.BOTH)
-    for i in range(14):
+    for i in range(15):
         label = tk.Label(outer_frame, text=f"{label_text[i]}")
         label.grid(row=i, column=0, padx=10)
         labels.append(label)
@@ -2121,6 +2125,7 @@ def open_menu():
         global filter_visitors
         global yolo_processing
         global default_label_category
+        global yolo_conf
         global randomize
         global whole_frame
         global cropped_frames
@@ -2129,7 +2134,7 @@ def open_menu():
         global prefix
         global end_values
         end_values = []
-        for i in range(14):
+        for i in range(15):
             end_values.append(fields[i].get())
         output_folder = str(end_values[0])
         scan_folders = str(end_values[1])
@@ -2140,23 +2145,24 @@ def open_menu():
         filter_visitors = int(end_values[6])
         yolo_processing = int(end_values[7])
         default_label_category = int(end_values[8])
-        randomize = int(end_values[9])
-        whole_frame = int(end_values[10])
-        cropped_frames = int(end_values[11])
-        crop_size = int(end_values[12])
-        offset_range = int(end_values[13])
+        yolo_conf = float(end_values[9])
+        randomize = int(end_values[10])
+        whole_frame = int(end_values[11])
+        cropped_frames = int(end_values[12])
+        crop_size = int(end_values[13])
+        offset_range = int(end_values[14])
         config_write()
         create_dir(output_folder)
         create_dir(f"./{output_folder}/whole frames/")
         window.destroy()
 
     save_button = tk.Button(outer_frame, text="Save", command=save_fields)
-    save_button.grid(row=15, column=0, columnspan=2)
+    save_button.grid(row=16, column=0, columnspan=2)
 
     # Set initial values for the input fields
-    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, frames_per_visit, filter_visitors, yolo_processing, default_label_category, randomize, whole_frame,
+    initial_values = [output_folder, scan_folders, prefix, crop_mode, frame_skip, frames_per_visit, filter_visitors, yolo_processing, default_label_category, yolo_conf, randomize, whole_frame,
                       cropped_frames, crop_size, offset_range]
-    for i in range(14):
+    for i in range(15):
         fields[i].insert(0, str(initial_values[i]))
 
     # Start the Tkinter event
@@ -2183,6 +2189,7 @@ def config_write():
     global filter_visitors
     global yolo_processing
     global default_label_category
+    global yolo_conf
     global randomize
     global whole_frame
     global cropped_frames
@@ -2208,6 +2215,7 @@ def config_write():
     config.set('Crop settings', 'filter_visitors', str(filter_visitors))
     config.set('Crop settings', 'yolo_processing', str(yolo_processing))
     config.set('Crop settings', 'default_label_category', str(default_label_category))
+    config.set('Crop settings', 'yolo_conf', str(yolo_conf))
     config.set('Crop settings', 'randomize_interval', str(randomize))
     config.set('Crop settings', 'export_whole_frame', str(whole_frame))
     config.set('Crop settings', 'export_crops', str(cropped_frames))
