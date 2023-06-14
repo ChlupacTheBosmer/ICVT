@@ -27,6 +27,8 @@ import shutil
 import asyncio
 import cProfile
 import tracemalloc
+from utils import ask_yes_no
+from utils import create_dir
 tracemalloc.start()
 
 def config_read():
@@ -122,18 +124,18 @@ def config_read():
         print('Error: Invalid crop settings specified in settings_crop.ini')
 
 
-def ask_yes_no(text):
-    global logger
-    logger.debug(f'Running function ask_yes_no({text})')
-    result: bool = messagebox.askyesno("Confirmation", text)
-    return result
+# def ask_yes_no(text):
+#     global logger
+#     logger.debug(f'Running function ask_yes_no({text})')
+#     result: bool = messagebox.askyesno("Confirmation", text)
+#     return result
 
 
-def create_dir(path):
-    global logger
-    logger.debug(f'Running function create_dir({path})')
-    if not os.path.exists(path):
-        os.makedirs(path)
+# def create_dir(path):
+#     global logger
+#     logger.debug(f'Running function create_dir({path})')
+#     if not os.path.exists(path):
+#         os.makedirs(path)
 
 
 def select_file(selected_file_index, index, root):
@@ -146,6 +148,7 @@ def select_file(selected_file_index, index, root):
 def scan_default_folders():
     global logger
     logger.debug('Running function scan_default_folders()')
+
     # scan default folders
     file_type = ["excel (watchers)", "excel (manual)"]
     video_folder_path: str = ""
@@ -227,17 +230,17 @@ def reload_points_of_interest():
         points_of_interest_entry.append([])
 
 
-def get_excel_path(check, ini_dir):
+def get_excel_path(check, ini_dir, excel_type):
     global logger
     global annotation_file_path
     global root
     logger.debug(f'Running function get_excel_path({check}, {ini_dir})')
     # Set path to Excel file manually
     file_type = ["excel (watchers)", "excel (manual)"]
-    if crop_mode == 1 or crop_mode == 2:
+    if excel_type == 1 or excel_type == 2:
         if not check_paths(False, True) or check == 0:
             annotation_file_path = filedialog.askopenfilename(
-                title=f"Select the path to the {file_type[(crop_mode - 1)]} file",
+                title=f"Select the path to the {file_type[(excel_type - 1)]} file",
                 initialdir=ini_dir,
                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
         try:
@@ -298,19 +301,9 @@ def switch_folder(which):
     if index > 0 and which == "left":
         video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index - 1])
         reload(0, True)
-        # load_videos()
-        # reload_points_of_interest()
-        # ICCS_window.destroy()
-        # load_video_frames()
-        # open_ICCS_window()
     if (index + 1) < len(scaned_folders) and which == "right":
         video_folder_path = os.path.join(os.path.dirname(video_folder_path), scaned_folders[index + 1])
         reload(0, True)
-        # load_videos()
-        # reload_points_of_interest()
-        # ICCS_window.destroy()
-        # load_video_frames()
-        # open_ICCS_window()
 
 
 def load_videos():
@@ -425,17 +418,23 @@ def get_text_from_video(video_filepath, start_or_end):
     except ValueError:
         # Handle cases where conversion to integer fails
         print('Error: Invalid integer value found in settings_crop.ini')
+
+    # Get the video capture and ROI defined
     cap = cv2.VideoCapture(video_filepath)
     text_roi = (x_coordinate, y_coordinate, width, height)  # x, y, width, height
+
+    # Define which frame to scan - start of end?
     if start_or_end == "end":
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         second_to_last_frame_idx = total_frames - 5
         cap.set(cv2.CAP_PROP_POS_FRAMES, second_to_last_frame_idx)
     else:
         cap.set(cv2.CAP_PROP_POS_FRAMES, 24)
+
+    # Get the video frame and process the image
     ret, frame = cap.read()
     if ret:
-        # Crop the image and pre-process it
+        #Crop the image and pre-process it
         #height, width, channels = frame.shape
         x, y, w, h = text_roi
         text_frame = frame[y:y + h, x:x + w]
@@ -1613,7 +1612,7 @@ def open_ICCS_window():
     et_icon = ImageTk.PhotoImage(file="resources/img/et.png")
 
     et_button = tk.Button(toolbar, image=et_icon, compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
-                          height=48, command=lambda j=j: get_excel_path(0, video_folder_path))
+                          height=48, command=lambda j=j: get_excel_path(0, video_folder_path, crop_mode))
     et_button.grid(row=0, column=6, padx=0, pady=5, sticky="ew")
 
     ocr_icon = Image.open("resources/img/ocr.png")
@@ -1829,7 +1828,7 @@ def initialise():
     video_folder_path, annotation_file_path = scan_default_folders()
     while not check_paths(True, False):
         get_video_folder(1)
-    get_excel_path(1, video_folder_path)
+    get_excel_path(1, video_folder_path, crop_mode)
     load_videos()
     create_dir(output_folder)
     create_dir(f"./{output_folder}/whole frames/")
