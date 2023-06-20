@@ -7,6 +7,11 @@ import json
 import logging
 import configparser
 from utils import ask_yes_no
+from utils import create_dir
+from utils import scan_default_folders
+from utils import check_path
+from utils import get_video_folder
+from utils import get_excel_path
 
 def config_read():
     global video_folder_path
@@ -48,87 +53,6 @@ def config_read():
     resources = [video_folder_path, annotation_file_path]
     settings = [scan_folders]
     return resources, settings
-
-def select_file(selected_file_index, index, root):
-    global logger
-    logger.debug(f'Running function select_file({selected_file_index}, {index}, {root})')
-    selected_file_index.set(index + 1)
-    root.destroy()
-
-def scan_default_folders():
-    global logger
-    logger.debug('Running function scan_default_folders()')
-
-    # scan default folders
-    file_type = ["excel (watchers)", "excel (manual)"]
-    video_folder_path: str = ""
-    annotation_file_path: str = ""
-
-    # Check if scan folder feature is on
-    if scan_folders == "1":
-
-        # Create directories if they do not exist
-        if not os.path.exists("videos/"):
-            os.makedirs("videos/")
-        if not os.path.exists("excel/"):
-            os.makedirs("excel/")
-
-        # Detect video files
-        scan_video_files = [f for f in os.listdir('videos') if f.endswith('.mp4')]
-        if scan_video_files:
-            response = ask_yes_no(f"Video files detected in the default folder. Do you want to continue?")
-            if response:
-                video_folder_path = 'videos'
-
-        # Check if the current default crop mode requires an annotation file
-        if crop_mode == 1 or crop_mode == 2:
-
-            # Detect Excel files
-            scan_excel_files = [f for f in os.listdir('excel') if f.endswith('.xlsx') or f.endswith('.xls')]
-            if scan_excel_files:
-                response = ask_yes_no(f"Excel files detected in the default folder. Do you want to continue?")
-                if response:
-
-                    # Create the window for selecting the Excel file
-                    excel_files_win = tk.Tk()
-                    excel_files_win.title("Select file")
-                    excel_files_win.wm_attributes("-topmost", 1)
-
-                    # Create window contents
-                    label_frame = tk.Frame(excel_files_win)
-                    label_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20)
-                    prompt_label = tk.Label(excel_files_win,
-                                            text=f"Please select the {file_type[(crop_mode - 1)]} file you\nwant to use as the source of visit times.")
-                    prompt_label.pack()
-                    label = tk.Label(excel_files_win, text="Excel files in the folder:")
-                    label.pack()
-                    outer_frame = tk.Frame(excel_files_win)
-                    outer_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20, pady=20)
-                    for i, f in enumerate(scan_excel_files):
-                        button = tk.Button(outer_frame, text=f"{i + 1}. {f}", width=30,
-                                           command=lambda i=i: select_file(selected_file_index, i, excel_files_win))
-                        button.pack(pady=0)
-                    selected_file_index = tk.IntVar()
-
-                    # Set the window position to the center of the screen
-                    excel_files_win.update()
-                    screen_width = excel_files_win.winfo_screenwidth()
-                    screen_height = excel_files_win.winfo_screenheight()
-                    window_width = excel_files_win.winfo_reqwidth()
-                    window_height = excel_files_win.winfo_reqheight()
-                    x_pos = int((screen_width - window_width) / 2)
-                    y_pos = int((screen_height - window_height) / 2)
-                    excel_files_win.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
-                    excel_files_win.mainloop()
-                    selection = selected_file_index.get()
-
-                    # Assign the path of the selected file to a variable
-                    if selection > 0 and selection <= len(scan_excel_files):
-                        annotation_file_path = os.path.join(("excel/"), scan_excel_files[selection - 1])
-                        print(f'Selected file: {annotation_file_path}')
-                    else:
-                        print('Invalid selection')
-    return video_folder_path, annotation_file_path
 
 def identify_insect(frame_image_path):
     url = "https://api.inaturalist.org/v1/identifications"
@@ -374,6 +298,15 @@ def open_ICID_window():
     print('terminate player.returned.')
 
 def initialise():
+    global video_folder_path
+    global annotation_file_path
+    global scaned_folders
+    global tree_allow
     log_write()
     logger.debug("Running function initialise()")
-    video_folder_path, annotation_file_path = scan_default_folders()
+    video_folder_path, annotation_file_path = scan_default_folders(scan_folders)
+    while not check_path(video_folder_path, 0):
+        video_folder_path, scaned_folders, tree_allow = get_video_folder(video_folder_path, 1)
+    get_excel_path(annotation_file_path, 1, video_folder_path, 1)
+
+

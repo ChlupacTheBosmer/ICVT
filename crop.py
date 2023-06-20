@@ -29,6 +29,10 @@ import cProfile
 import tracemalloc
 from utils import ask_yes_no
 from utils import create_dir
+from utils import scan_default_folders
+from utils import check_path
+from utils import get_video_folder
+from utils import get_excel_path
 tracemalloc.start()
 
 def config_read():
@@ -138,87 +142,87 @@ def config_read():
 #         os.makedirs(path)
 
 
-def select_file(selected_file_index, index, root):
-    global logger
-    logger.debug(f'Running function select_file({selected_file_index}, {index}, {root})')
-    selected_file_index.set(index + 1)
-    root.destroy()
+# def select_file(selected_file_index, index, root):
+#     global logger
+#     logger.debug(f'Running function select_file({selected_file_index}, {index}, {root})')
+#     selected_file_index.set(index + 1)
+#     root.destroy()
 
 
-def scan_default_folders():
-    global logger
-    logger.debug('Running function scan_default_folders()')
-
-    # scan default folders
-    file_type = ["excel (watchers)", "excel (manual)"]
-    video_folder_path: str = ""
-    annotation_file_path: str = ""
-
-    # Check if scan folder feature is on
-    if scan_folders == "1":
-
-        # Create directories if they do not exist
-        if not os.path.exists("videos/"):
-            os.makedirs("videos/")
-        if not os.path.exists("excel/"):
-            os.makedirs("excel/")
-
-        # Detect video files
-        scan_video_files = [f for f in os.listdir('videos') if f.endswith('.mp4')]
-        if scan_video_files:
-            response = ask_yes_no(f"Video files detected in the default folder. Do you want to continue?")
-            if response:
-                video_folder_path = 'videos'
-
-        # Check if the current default crop mode requires an annotation file
-        if crop_mode == 1 or crop_mode == 2:
-
-            # Detect Excel files
-            scan_excel_files = [f for f in os.listdir('excel') if f.endswith('.xlsx') or f.endswith('.xls')]
-            if scan_excel_files:
-                response = ask_yes_no(f"Excel files detected in the default folder. Do you want to continue?")
-                if response:
-
-                    # Create the window for selecting the Excel file
-                    excel_files_win = tk.Tk()
-                    excel_files_win.title("Select file")
-                    excel_files_win.wm_attributes("-topmost", 1)
-
-                    # Create window contents
-                    label_frame = tk.Frame(excel_files_win)
-                    label_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20)
-                    prompt_label = tk.Label(excel_files_win,
-                                            text=f"Please select the {file_type[(crop_mode - 1)]} file you\nwant to use as the source of visit times.")
-                    prompt_label.pack()
-                    label = tk.Label(excel_files_win, text="Excel files in the folder:")
-                    label.pack()
-                    outer_frame = tk.Frame(excel_files_win)
-                    outer_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20, pady=20)
-                    for i, f in enumerate(scan_excel_files):
-                        button = tk.Button(outer_frame, text=f"{i + 1}. {f}", width=30,
-                                           command=lambda i=i: select_file(selected_file_index, i, excel_files_win))
-                        button.pack(pady=0)
-                    selected_file_index = tk.IntVar()
-
-                    # Set the window position to the center of the screen
-                    excel_files_win.update()
-                    screen_width = excel_files_win.winfo_screenwidth()
-                    screen_height = excel_files_win.winfo_screenheight()
-                    window_width = excel_files_win.winfo_reqwidth()
-                    window_height = excel_files_win.winfo_reqheight()
-                    x_pos = int((screen_width - window_width) / 2)
-                    y_pos = int((screen_height - window_height) / 2)
-                    excel_files_win.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
-                    excel_files_win.mainloop()
-                    selection = selected_file_index.get()
-
-                    # Assign the path of the selected file to a variable
-                    if selection > 0 and selection <= len(scan_excel_files):
-                        annotation_file_path = os.path.join(("excel/"), scan_excel_files[selection - 1])
-                        print(f'Selected file: {annotation_file_path}')
-                    else:
-                        print('Invalid selection')
-    return video_folder_path, annotation_file_path
+# def scan_default_folders():
+#     global logger
+#     logger.debug('Running function scan_default_folders()')
+#
+#     # scan default folders
+#     file_type = ["excel (watchers)", "excel (manual)"]
+#     video_folder_path: str = ""
+#     annotation_file_path: str = ""
+#
+#     # Check if scan folder feature is on
+#     if scan_folders == "1":
+#
+#         # Create directories if they do not exist
+#         if not os.path.exists("videos/"):
+#             os.makedirs("videos/")
+#         if not os.path.exists("excel/"):
+#             os.makedirs("excel/")
+#
+#         # Detect video files
+#         scan_video_files = [f for f in os.listdir('videos') if f.endswith('.mp4')]
+#         if scan_video_files:
+#             response = ask_yes_no(f"Video files detected in the default folder. Do you want to continue?")
+#             if response:
+#                 video_folder_path = 'videos'
+#
+#         # Check if the current default crop mode requires an annotation file
+#         if crop_mode == 1 or crop_mode == 2:
+#
+#             # Detect Excel files
+#             scan_excel_files = [f for f in os.listdir('excel') if f.endswith('.xlsx') or f.endswith('.xls')]
+#             if scan_excel_files:
+#                 response = ask_yes_no(f"Excel files detected in the default folder. Do you want to continue?")
+#                 if response:
+#
+#                     # Create the window for selecting the Excel file
+#                     excel_files_win = tk.Tk()
+#                     excel_files_win.title("Select file")
+#                     excel_files_win.wm_attributes("-topmost", 1)
+#
+#                     # Create window contents
+#                     label_frame = tk.Frame(excel_files_win)
+#                     label_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20)
+#                     prompt_label = tk.Label(excel_files_win,
+#                                             text=f"Please select the {file_type[(crop_mode - 1)]} file you\nwant to use as the source of visit times.")
+#                     prompt_label.pack()
+#                     label = tk.Label(excel_files_win, text="Excel files in the folder:")
+#                     label.pack()
+#                     outer_frame = tk.Frame(excel_files_win)
+#                     outer_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20, pady=20)
+#                     for i, f in enumerate(scan_excel_files):
+#                         button = tk.Button(outer_frame, text=f"{i + 1}. {f}", width=30,
+#                                            command=lambda i=i: select_file(selected_file_index, i, excel_files_win))
+#                         button.pack(pady=0)
+#                     selected_file_index = tk.IntVar()
+#
+#                     # Set the window position to the center of the screen
+#                     excel_files_win.update()
+#                     screen_width = excel_files_win.winfo_screenwidth()
+#                     screen_height = excel_files_win.winfo_screenheight()
+#                     window_width = excel_files_win.winfo_reqwidth()
+#                     window_height = excel_files_win.winfo_reqheight()
+#                     x_pos = int((screen_width - window_width) / 2)
+#                     y_pos = int((screen_height - window_height) / 2)
+#                     excel_files_win.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
+#                     excel_files_win.mainloop()
+#                     selection = selected_file_index.get()
+#
+#                     # Assign the path of the selected file to a variable
+#                     if selection > 0 and selection <= len(scan_excel_files):
+#                         annotation_file_path = os.path.join(("excel/"), scan_excel_files[selection - 1])
+#                         print(f'Selected file: {annotation_file_path}')
+#                     else:
+#                         print('Invalid selection')
+#     return video_folder_path, annotation_file_path
 
 
 def reload_points_of_interest():
@@ -229,32 +233,74 @@ def reload_points_of_interest():
     for e in range(len(video_filepaths)):
         points_of_interest_entry.append([])
 
-
-def get_excel_path(check, ini_dir, excel_type):
+def change_excel_path():
     global logger
     global annotation_file_path
     global root
-    logger.debug(f'Running function get_excel_path({check}, {ini_dir})')
-    # Set path to Excel file manually
-    file_type = ["excel (watchers)", "excel (manual)"]
-    if excel_type == 1 or excel_type == 2:
-        if not check_paths(False, True) or check == 0:
-            annotation_file_path = filedialog.askopenfilename(
-                title=f"Select the path to the {file_type[(excel_type - 1)]} file",
-                initialdir=ini_dir,
-                filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
-        try:
-            if root.winfo_exists():
-                root.title(
-                    f"Insect Communities Crop Suite - Folder: {os.path.basename(os.path.normpath(video_folder_path))} - Table: {os.path.basename(os.path.normpath(annotation_file_path))}")
-        except:
-            print("Flow: Window does not exist.")
-    else:
-        #display message box that the crop mode does not require an annotation file
-        messagebox.showinfo("Info", "The current crop mode does not require an annotation file. Switch crop mode to 1 (watchers) or 2 (manual) to use an annotation file.")
+    logger.debug(f'Running function change_video_folder()')
+    annotation_file_path = get_excel_path(annotation_file_path, 0, video_folder_path, crop_mode)
+    reload(0, True)
+
+# def get_excel_path(check, ini_dir, excel_type):
+#     global logger
+#     global annotation_file_path
+#     global root
+#     logger.debug(f'Running function get_excel_path({check}, {ini_dir})')
+#     # Set path to Excel file manually
+#     file_type = ["excel (watchers)", "excel (manual)"]
+#     if excel_type == 1 or excel_type == 2:
+#         if not check_path(annotation_file_path, 1) or check == 0:
+#             annotation_file_path = filedialog.askopenfilename(
+#                 title=f"Select the path to the {file_type[(excel_type - 1)]} file",
+#                 initialdir=ini_dir,
+#                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
+#         try:
+#             if root.winfo_exists():
+#                 root.title(
+#                     f"Insect Communities Crop Suite - Folder: {os.path.basename(os.path.normpath(video_folder_path))} - Table: {os.path.basename(os.path.normpath(annotation_file_path))}")
+#         except:
+#             print("Flow: Window does not exist.")
+#     else:
+#         #display message box that the crop mode does not require an annotation file
+#         messagebox.showinfo("Info", "The current crop mode does not require an annotation file. Switch crop mode to 1 (watchers) or 2 (manual) to use an annotation file.")
 
 
-def get_video_folder(check):
+# def get_video_folder(check):
+#     global video_folder_path
+#     global points_of_interest_entry
+#     global scaned_folders
+#     global tree_allow
+#     global loaded
+#     global root
+#     global logger
+#     logger.debug(f'Running function get_video_folder({check})')
+#     loaded = 0
+#     # set path to folder containing mp4 files
+#     original_video_folder_path = video_folder_path
+#     if not check_path(video_folder_path, 0) or check == 0:
+#         video_folder_path = filedialog.askdirectory(title="Select the video folder",
+#                                                     initialdir=os.path.dirname(os.path.abspath(__file__)))
+#         if video_folder_path == "" and not original_video_folder_path == "":
+#             video_folder_path = original_video_folder_path
+#         if ((check == 0 and not video_folder_path == original_video_folder_path) or check == 1) and check_path(video_folder_path, 0):
+#             scan_video_files = [f for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
+#             parent = os.path.dirname(video_folder_path)
+#             scaned_folders = [f for f in os.listdir(video_folder_path) if
+#                               os.path.isdir(os.path.join(video_folder_path, f))]
+#             if not scan_video_files and scaned_folders:
+#                 scan_child_video_files = [f for f in os.listdir(os.path.join(video_folder_path, scaned_folders[0])) if
+#                                           f.endswith('.mp4')]
+#                 if scan_child_video_files:
+#                     video_folder_path = os.path.join(video_folder_path, scaned_folders[0])
+#                     tree_allow = 1
+#             else:
+#                 tree_allow = 0
+#             if not check == 1:
+#                 reload(0, True)
+#     else:
+#         print(f"Flow: obtained video folder path: {video_folder_path}")
+
+def change_video_folder():
     global video_folder_path
     global points_of_interest_entry
     global scaned_folders
@@ -262,33 +308,10 @@ def get_video_folder(check):
     global loaded
     global root
     global logger
-    logger.debug(f'Running function get_video_folder({check})')
+    logger.debug(f'Running function change_video_folder()')
     loaded = 0
-    # set path to folder containing mp4 files
-    original_video_folder_path = video_folder_path
-    if not check_paths(True, False) or check == 0:
-        video_folder_path = filedialog.askdirectory(title="Select the video folder",
-                                                    initialdir=os.path.dirname(os.path.abspath(__file__)))
-        if video_folder_path == "" and not original_video_folder_path == "":
-            video_folder_path = original_video_folder_path
-        if ((check == 0 and not video_folder_path == original_video_folder_path) or check == 1) and check_paths(True, False):
-            scan_video_files = [f for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
-            parent = os.path.dirname(video_folder_path)
-            scaned_folders = [f for f in os.listdir(video_folder_path) if
-                              os.path.isdir(os.path.join(video_folder_path, f))]
-            if not scan_video_files and scaned_folders:
-                scan_child_video_files = [f for f in os.listdir(os.path.join(video_folder_path, scaned_folders[0])) if
-                                          f.endswith('.mp4')]
-                if scan_child_video_files:
-                    video_folder_path = os.path.join(video_folder_path, scaned_folders[0])
-                    tree_allow = 1
-            else:
-                tree_allow = 0
-            if not check == 1:
-                reload(0, True)
-    else:
-        print(f"Flow: obtained video folder path: {video_folder_path}")
-
+    video_folder_path, scaned_folders, tree_allow = get_video_folder(video_folder_path, 0)
+    reload(0, True)
 
 def switch_folder(which):
     global scaned_folders
@@ -311,7 +334,7 @@ def load_videos():
     global logger
     logger.debug('Running function load_videos()')
     # Check if the video folder path is valid
-    if check_paths(True, False):
+    if check_path(video_folder_path, 0):
         # Load videos
         video_filepaths = []
         video_filepaths = [os.path.join(video_folder_path, f) for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
@@ -1402,7 +1425,7 @@ def load_video_frames():
     global logger
     logger.debug(f"Running function load_video_frames()")
     frames = []
-    if check_paths(True, False):
+    if check_path(video_folder_path, 0):
         for filename in os.listdir(video_folder_path):
             if filename.endswith(".mp4"):  # Modify file extension as needed
                 # Use OpenCV or other library to extract first frame of video
@@ -1434,7 +1457,7 @@ def save_progress():
     logger.debug(f"Running function save_progress()")
     result = ask_yes_no("Do you want to save the settings? This will overwrite any previous saves.")
     if result:
-        if check_paths(True, False):
+        if check_path(video_folder_path, 0):
             # Create an in-memory file object
             filepath = os.path.join(video_folder_path, 'crop_information.pkl')
             with open(filepath, 'wb') as f:
@@ -1456,7 +1479,7 @@ def load_progress():
     logger.debug(f"Running function load_progress()")
     result = ask_yes_no("Do you want to load settings? This will overwrite any unsaved progress.")
     if result:
-        if check_paths(True, False):
+        if check_path(video_folder_path, 0):
             # Create an in-memory file object
             filepath = os.path.join(video_folder_path, 'crop_information.pkl')
             if os.path.isfile(filepath):
@@ -1603,7 +1626,7 @@ def open_ICCS_window():
     fl_icon = ImageTk.PhotoImage(file="resources/img/fl.png")
 
     fl_button = tk.Button(toolbar, image=fl_icon, compound=tk.LEFT, text="Select video folder", padx=10, pady=5,
-                          height=48, command=lambda j=j: get_video_folder(0))
+                          height=48, command=lambda j=j: change_video_folder())
     fl_button.grid(row=0, column=5, padx=0, pady=5, sticky="ew")
 
     et_icon = Image.open("resources/img/et.png")
@@ -1612,7 +1635,7 @@ def open_ICCS_window():
     et_icon = ImageTk.PhotoImage(file="resources/img/et.png")
 
     et_button = tk.Button(toolbar, image=et_icon, compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
-                          height=48, command=lambda j=j: get_excel_path(0, video_folder_path, crop_mode))
+                          height=48, command=lambda j=j: change_excel_path())
     et_button.grid(row=0, column=6, padx=0, pady=5, sticky="ew")
 
     ocr_icon = Image.open("resources/img/ocr.png")
@@ -1667,7 +1690,7 @@ def open_ICCS_window():
     button_images = []
     buttons = []
     rows = math.ceil(len(video_filepaths) / 6)
-    per_row = math.ceil(len(video_filepaths) // rows)
+    #per_row = math.ceil(len(video_filepaths) // rows)
     label_frame = tk.Frame(target_frame, width=50)
     label_frame.pack(side=tk.LEFT)
     for i in range(rows):
@@ -1825,10 +1848,10 @@ def initialise():
     loaded = 0
     tree_allow = 0
     modified_frames = []
-    video_folder_path, annotation_file_path = scan_default_folders()
-    while not check_paths(True, False):
-        get_video_folder(1)
-    get_excel_path(1, video_folder_path, crop_mode)
+    video_folder_path, annotation_file_path = scan_default_folders(scan_folders, crop_mode)
+    while not check_path(video_folder_path, 0):
+        video_folder_path, scaned_folders, tree_allow = get_video_folder(video_folder_path, 1)
+    get_excel_path(annotation_file_path, 1, video_folder_path, crop_mode)
     load_videos()
     create_dir(output_folder)
     create_dir(f"./{output_folder}/whole frames/")
@@ -1955,12 +1978,17 @@ def crop_engine():
     logger.debug("Running function crop_engine()")
     result = ask_yes_no("Do you want to start the cropping process?")
     if result:
+        if len(points_of_interest_entry[0]) == 0:
+            messagebox.showinfo("Warning", "No points of interest selected. Please select at least one POI.")
+            reload(1, False)
+            return
         valid_annotations_array = []
         valid_annotation_data_entry = []
         print(f"Flow: Start cropping on the following videos: {video_filepaths}")
         root.withdraw()
         if not crop_mode == 3:
-            video_ok, excel_ok = check_paths(True, True)
+            video_ok = check_path(video_folder_path, 0)
+            excel_ok = check_path(annotation_file_path, 1)
             if not video_ok or not excel_ok:
                 messagebox.showinfo("Warning",
                                     f"Unspecified path to a video folder or a valid Excel file.")
@@ -2033,7 +2061,7 @@ def crop_engine():
                 if yolo_processing == 1:
                     asyncio.run(yolo_preprocessing(img_paths, valid_annotations_array, index))
         else:
-            video_ok = check_paths(True, False)
+            video_ok = check_path(video_folder_path, 0)
             if not video_ok:
                 messagebox.showinfo("Warning",
                                     f"Unspecified path to a video folder.")
@@ -2270,30 +2298,30 @@ def reload(is_loaded, reload_POIs):
     loaded = is_loaded
     open_ICCS_window()
 
-def check_paths(video_folder, annotation_file):
-    global annotation_file_path
-    global video_folder_path
-
-    if annotation_file:
-        # Check if the annotation file path is valid path to an Excel file
-        if not os.path.isfile(annotation_file_path) or not annotation_file_path.endswith(".xlsx"):
-            logger.error(f"Annotation file path is not valid: {annotation_file_path}")
-            excel_ok = False
-        else:
-            excel_ok = True
-    if video_folder:
-        # Check if the video folder path is valid path to a folder
-        if not os.path.isdir(video_folder_path):
-            logger.error(f"Video folder path is not valid: {video_folder_path}")
-            video_ok = False
-        else:
-            video_ok = True
-    if annotation_file and video_folder:
-        return [video_ok, excel_ok]
-    elif annotation_file:
-        return excel_ok
-    elif video_folder:
-        return video_ok
+# def check_paths(video_folder, annotation_file):
+#     global annotation_file_path
+#     global video_folder_path
+#
+#     if annotation_file:
+#         # Check if the annotation file path is valid path to an Excel file
+#         if not os.path.isfile(annotation_file_path) or not annotation_file_path.endswith(".xlsx"):
+#             logger.error(f"Annotation file path is not valid: {annotation_file_path}")
+#             excel_ok = False
+#         else:
+#             excel_ok = True
+#     if video_folder:
+#         # Check if the video folder path is valid path to a folder
+#         if not os.path.isdir(video_folder_path):
+#             logger.error(f"Video folder path is not valid: {video_folder_path}")
+#             video_ok = False
+#         else:
+#             video_ok = True
+#     if annotation_file and video_folder:
+#         return [video_ok, excel_ok]
+#     elif annotation_file:
+#         return excel_ok
+#     elif video_folder:
+#         return video_ok
 
 
 # Main body of the script
