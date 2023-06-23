@@ -127,104 +127,6 @@ def config_read():
     except ValueError:
         print('Error: Invalid crop settings specified in settings_crop.ini')
 
-
-# def ask_yes_no(text):
-#     global logger
-#     logger.debug(f'Running function ask_yes_no({text})')
-#     result: bool = messagebox.askyesno("Confirmation", text)
-#     return result
-
-
-# def create_dir(path):
-#     global logger
-#     logger.debug(f'Running function create_dir({path})')
-#     if not os.path.exists(path):
-#         os.makedirs(path)
-
-
-# def select_file(selected_file_index, index, root):
-#     global logger
-#     logger.debug(f'Running function select_file({selected_file_index}, {index}, {root})')
-#     selected_file_index.set(index + 1)
-#     root.destroy()
-
-
-# def scan_default_folders():
-#     global logger
-#     logger.debug('Running function scan_default_folders()')
-#
-#     # scan default folders
-#     file_type = ["excel (watchers)", "excel (manual)"]
-#     video_folder_path: str = ""
-#     annotation_file_path: str = ""
-#
-#     # Check if scan folder feature is on
-#     if scan_folders == "1":
-#
-#         # Create directories if they do not exist
-#         if not os.path.exists("videos/"):
-#             os.makedirs("videos/")
-#         if not os.path.exists("excel/"):
-#             os.makedirs("excel/")
-#
-#         # Detect video files
-#         scan_video_files = [f for f in os.listdir('videos') if f.endswith('.mp4')]
-#         if scan_video_files:
-#             response = ask_yes_no(f"Video files detected in the default folder. Do you want to continue?")
-#             if response:
-#                 video_folder_path = 'videos'
-#
-#         # Check if the current default crop mode requires an annotation file
-#         if crop_mode == 1 or crop_mode == 2:
-#
-#             # Detect Excel files
-#             scan_excel_files = [f for f in os.listdir('excel') if f.endswith('.xlsx') or f.endswith('.xls')]
-#             if scan_excel_files:
-#                 response = ask_yes_no(f"Excel files detected in the default folder. Do you want to continue?")
-#                 if response:
-#
-#                     # Create the window for selecting the Excel file
-#                     excel_files_win = tk.Tk()
-#                     excel_files_win.title("Select file")
-#                     excel_files_win.wm_attributes("-topmost", 1)
-#
-#                     # Create window contents
-#                     label_frame = tk.Frame(excel_files_win)
-#                     label_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20)
-#                     prompt_label = tk.Label(excel_files_win,
-#                                             text=f"Please select the {file_type[(crop_mode - 1)]} file you\nwant to use as the source of visit times.")
-#                     prompt_label.pack()
-#                     label = tk.Label(excel_files_win, text="Excel files in the folder:")
-#                     label.pack()
-#                     outer_frame = tk.Frame(excel_files_win)
-#                     outer_frame.pack(side=tk.TOP, expand=True, fill=tk.BOTH, padx=20, pady=20)
-#                     for i, f in enumerate(scan_excel_files):
-#                         button = tk.Button(outer_frame, text=f"{i + 1}. {f}", width=30,
-#                                            command=lambda i=i: select_file(selected_file_index, i, excel_files_win))
-#                         button.pack(pady=0)
-#                     selected_file_index = tk.IntVar()
-#
-#                     # Set the window position to the center of the screen
-#                     excel_files_win.update()
-#                     screen_width = excel_files_win.winfo_screenwidth()
-#                     screen_height = excel_files_win.winfo_screenheight()
-#                     window_width = excel_files_win.winfo_reqwidth()
-#                     window_height = excel_files_win.winfo_reqheight()
-#                     x_pos = int((screen_width - window_width) / 2)
-#                     y_pos = int((screen_height - window_height) / 2)
-#                     excel_files_win.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
-#                     excel_files_win.mainloop()
-#                     selection = selected_file_index.get()
-#
-#                     # Assign the path of the selected file to a variable
-#                     if selection > 0 and selection <= len(scan_excel_files):
-#                         annotation_file_path = os.path.join(("excel/"), scan_excel_files[selection - 1])
-#                         print(f'Selected file: {annotation_file_path}')
-#                     else:
-#                         print('Invalid selection')
-#     return video_folder_path, annotation_file_path
-
-
 def reload_points_of_interest():
     global logger
     logger.debug('Running function reload_points_of_interest()')
@@ -240,65 +142,6 @@ def change_excel_path():
     logger.debug(f'Running function change_video_folder()')
     annotation_file_path = get_excel_path(annotation_file_path, 0, video_folder_path, crop_mode)
     reload(0, True)
-
-# def get_excel_path(check, ini_dir, excel_type):
-#     global logger
-#     global annotation_file_path
-#     global root
-#     logger.debug(f'Running function get_excel_path({check}, {ini_dir})')
-#     # Set path to Excel file manually
-#     file_type = ["excel (watchers)", "excel (manual)"]
-#     if excel_type == 1 or excel_type == 2:
-#         if not check_path(annotation_file_path, 1) or check == 0:
-#             annotation_file_path = filedialog.askopenfilename(
-#                 title=f"Select the path to the {file_type[(excel_type - 1)]} file",
-#                 initialdir=ini_dir,
-#                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
-#         try:
-#             if root.winfo_exists():
-#                 root.title(
-#                     f"Insect Communities Crop Suite - Folder: {os.path.basename(os.path.normpath(video_folder_path))} - Table: {os.path.basename(os.path.normpath(annotation_file_path))}")
-#         except:
-#             print("Flow: Window does not exist.")
-#     else:
-#         #display message box that the crop mode does not require an annotation file
-#         messagebox.showinfo("Info", "The current crop mode does not require an annotation file. Switch crop mode to 1 (watchers) or 2 (manual) to use an annotation file.")
-
-
-# def get_video_folder(check):
-#     global video_folder_path
-#     global points_of_interest_entry
-#     global scaned_folders
-#     global tree_allow
-#     global loaded
-#     global root
-#     global logger
-#     logger.debug(f'Running function get_video_folder({check})')
-#     loaded = 0
-#     # set path to folder containing mp4 files
-#     original_video_folder_path = video_folder_path
-#     if not check_path(video_folder_path, 0) or check == 0:
-#         video_folder_path = filedialog.askdirectory(title="Select the video folder",
-#                                                     initialdir=os.path.dirname(os.path.abspath(__file__)))
-#         if video_folder_path == "" and not original_video_folder_path == "":
-#             video_folder_path = original_video_folder_path
-#         if ((check == 0 and not video_folder_path == original_video_folder_path) or check == 1) and check_path(video_folder_path, 0):
-#             scan_video_files = [f for f in os.listdir(video_folder_path) if f.endswith('.mp4')]
-#             parent = os.path.dirname(video_folder_path)
-#             scaned_folders = [f for f in os.listdir(video_folder_path) if
-#                               os.path.isdir(os.path.join(video_folder_path, f))]
-#             if not scan_video_files and scaned_folders:
-#                 scan_child_video_files = [f for f in os.listdir(os.path.join(video_folder_path, scaned_folders[0])) if
-#                                           f.endswith('.mp4')]
-#                 if scan_child_video_files:
-#                     video_folder_path = os.path.join(video_folder_path, scaned_folders[0])
-#                     tree_allow = 1
-#             else:
-#                 tree_allow = 0
-#             if not check == 1:
-#                 reload(0, True)
-#     else:
-#         print(f"Flow: obtained video folder path: {video_folder_path}")
 
 def change_video_folder():
     global video_folder_path
@@ -342,7 +185,6 @@ def load_videos():
         messagebox.showerror("Error", "Invalid video folder path")
         video_filepaths = []
 
-
 def set_ocr_roi(video_filepath):
 
     # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the
@@ -351,10 +193,29 @@ def set_ocr_roi(video_filepath):
     global y_coordinate
     global width
     global height
-    global config
     global cap
+    global config
     global logger
     logger.debug(f'Running function set_ocr_roi({video_filepath})')
+
+    def draw_rectangle(event, x, y, flags, param):
+        global x_coordinate
+        global y_coordinate
+        global width
+        global height
+        global cap
+        global text_roi
+        frame = cap.read()[1]
+        if event == cv2.EVENT_LBUTTONDOWN:
+            x_coordinate = x
+            y_coordinate = y
+        elif event == cv2.EVENT_LBUTTONUP:
+            width = x - x_coordinate
+            height = y - y_coordinate
+            text_roi = (x_coordinate, y_coordinate, width, height)
+            cv2.rectangle(frame, (x_coordinate, y_coordinate), (x, y), (0, 255, 0), 2)
+            cv2.imshow('image', frame)
+            # cv2.waitKey(0)
 
     # Read settings from settings_crop.ini
     config.read('settings_crop.ini', encoding='utf-8')
@@ -399,27 +260,6 @@ def set_ocr_roi(video_filepath):
     config['OCR settings']['height'] = str(height)
     with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
         config.write(configfile)
-
-
-def draw_rectangle(event, x, y, flags, param):
-    global x_coordinate
-    global y_coordinate
-    global width
-    global height
-    global cap
-    global text_roi
-    frame = cap.read()[1]
-    if event == cv2.EVENT_LBUTTONDOWN:
-        x_coordinate = x
-        y_coordinate = y
-    elif event == cv2.EVENT_LBUTTONUP:
-        width = x - x_coordinate
-        height = y - y_coordinate
-        text_roi = (x_coordinate, y_coordinate, width, height)
-        cv2.rectangle(frame, (x_coordinate, y_coordinate), (x, y), (0, 255, 0), 2)
-        cv2.imshow('image', frame)
-        #cv2.waitKey(0)
-
 
 def get_text_from_video(video_filepath, start_or_end):
     global x_coordinate
@@ -1531,6 +1371,20 @@ def open_ICCS_window():
     root = tk.Tk()
     ICCS_window = root
     root.focus()
+    global gui_imgs
+    gui_imgs = []
+
+    def load_icon(path, size: tuple = (50, 50)):
+        global gui_imgs
+        # Load an image in the script
+        img = (Image.open(path))
+
+        # Resize the Image using resize method
+        resized_image = img.resize(size)
+        new_img = ImageTk.PhotoImage(resized_image)
+        gui_imgs.append(new_img)
+        return new_img
+
     j = 0
     root.title(f"Insect Communities Crop Suite - Folder: {os.path.basename(os.path.normpath(video_folder_path))} - Table: {os.path.basename(os.path.normpath(annotation_file_path))}")
 
@@ -1545,12 +1399,13 @@ def open_ICCS_window():
     pil_img = left_arrow.resize((50, 50))
     pil_img.save("resources/img/la.png")
     left_arrow = ImageTk.PhotoImage(file="resources/img/la.png")
-    if tree_allow == 1 and not scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path))) == 0:
+    if tree_allow and not scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path))) == 0:
         btn_state = "normal"
     else:
         btn_state = "disabled"
-    left_button = tk.Button(toolbar, image=left_arrow, compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
+    left_button = tk.Button(toolbar, image=load_icon("resources/img/la.png"), compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
                             height=48, width=200, state=btn_state, command=lambda j=j: switch_folder("left"))
+    left_button.image = load_icon("resources/img/la.png")
     left_button.grid(row=0, column=0, padx=0, pady=5, sticky="ew")
 
     menu_icon = Image.open("resources/img/mn.png")
@@ -1650,7 +1505,7 @@ def open_ICCS_window():
     pil_img = right_arrow.resize((50, 50))
     pil_img.save("resources/img/ra.png")
     right_arrow = ImageTk.PhotoImage(file="resources/img/ra.png")
-    if tree_allow == 1 and not (scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path))) + 1) == len(
+    if tree_allow and not (scaned_folders.index(os.path.basename(os.path.normpath(video_folder_path))) + 1) == len(
             scaned_folders):
         btn_state1 = "normal"
     else:
@@ -1682,8 +1537,9 @@ def open_ICCS_window():
     canvas.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
     # Create target frame for the rest
-    target_frame = tk.Frame(root)
+    target_frame = tk.Frame(outer_frame)
     target_frame.pack(side=tk.TOP)
+    toolbar.lift(target_frame)
 
     global button_images
     global buttons
@@ -1732,21 +1588,36 @@ def open_ICCS_window():
                 row.append(dummy_frame)
         buttons.append(row)
 
-    fl_button = tk.Button(root, image=fl_icon, compound=tk.LEFT, text="", padx=10, pady=5, height=58,
+    # Update the canvas to show the buttons
+    canvas.create_window((0, 0), window=target_frame, anchor=tk.NW)
+    target_frame.update_idletasks()
+
+    # Configure the canvas to show the entire frame
+    canvas.configure(scrollregion=canvas.bbox("all"))
+
+    # Bind mouse wheel event to canvas
+    canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(-1 * (event.delta // 120), "units"))
+
+    bottom_left_panel = tk.Frame(root, pady=0)
+    bottom_left_panel.pack(side=tk.LEFT)
+
+    fl_button = tk.Button(bottom_left_panel, image=fl_icon, compound=tk.LEFT, text="", padx=10, pady=5, width=60, height=58,
                           command=lambda j=j: os.startfile(video_folder_path))
     fl_button.pack(side=tk.LEFT)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, annotation_file_path)
-    et_button = tk.Button(root, image=et_icon, compound=tk.LEFT, text="", padx=10, pady=5, height=58,
+
+    bottom_right_panel = tk.Frame(root, pady=0)
+    bottom_right_panel.pack(side=tk.RIGHT)
+
+    et_button = tk.Button(bottom_right_panel, image=et_icon, compound=tk.LEFT, text="", padx=10, pady=5, width=60, height=58,
                           command=lambda j=j: os.startfile(annotation_file_path))
     et_button.pack(side=tk.RIGHT)
 
-    sheet_dir = os.path.dirname(annotation_file_path)
+
     ef_icon = Image.open("resources/img/ef.png")
     pil_img = ef_icon.resize((50, 50))
     pil_img.save("resources/img/ef.png")
     ef_icon = ImageTk.PhotoImage(file="resources/img/ef.png")
-    ef_button = tk.Button(root, image=ef_icon, compound=tk.LEFT, text="", padx=0, pady=5, height=58,
+    ef_button = tk.Button(bottom_right_panel, image=ef_icon, compound=tk.LEFT, text="", padx=0, pady=5, width=60, height=58,
                           command=lambda j=j: os.startfile(os.path.dirname(annotation_file_path)))
     ef_button.pack(side=tk.RIGHT)
 
@@ -1798,16 +1669,6 @@ def open_ICCS_window():
     bottom_toolbar.grid_columnconfigure(4, weight=2)
     bottom_toolbar.grid_columnconfigure(5, weight=1)
 
-    # Update the canvas to show the buttons
-    canvas.create_window((0, 0), window=target_frame, anchor=tk.NW)
-    target_frame.update_idletasks()
-
-    # Configure the canvas to show the entire frame
-    canvas.configure(scrollregion=canvas.bbox("all"))
-
-    # Bind mouse wheel event to canvas
-    canvas.bind_all("<MouseWheel>", lambda event: canvas.yview_scroll(-1 * (event.delta // 120), "units"))
-
     # Get the screen width and height
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
@@ -1846,12 +1707,12 @@ def initialise():
     pytesseract.pytesseract.tesseract_cmd = ocr_tesseract_path
     auto = 0
     loaded = 0
-    tree_allow = 0
+    tree_allow = False
     modified_frames = []
     video_folder_path, annotation_file_path = scan_default_folders(scan_folders, crop_mode)
     while not check_path(video_folder_path, 0):
         video_folder_path, scaned_folders, tree_allow = get_video_folder(video_folder_path, 1)
-    get_excel_path(annotation_file_path, 1, video_folder_path, crop_mode)
+    annotation_file_path = get_excel_path(annotation_file_path, 1, video_folder_path, crop_mode)
     load_videos()
     create_dir(output_folder)
     create_dir(f"./{output_folder}/whole frames/")
@@ -2087,7 +1948,6 @@ def crop_engine():
     # loaded = 1
     # open_ICCS_window()
 
-
 def sort_engine():
     global logger
     logger.debug("Running function sort_engine()")
@@ -2297,32 +2157,6 @@ def reload(is_loaded, reload_POIs):
         print("Error: Unexpected, window destroyed before reference. Odpruženo.")
     loaded = is_loaded
     open_ICCS_window()
-
-# def check_paths(video_folder, annotation_file):
-#     global annotation_file_path
-#     global video_folder_path
-#
-#     if annotation_file:
-#         # Check if the annotation file path is valid path to an Excel file
-#         if not os.path.isfile(annotation_file_path) or not annotation_file_path.endswith(".xlsx"):
-#             logger.error(f"Annotation file path is not valid: {annotation_file_path}")
-#             excel_ok = False
-#         else:
-#             excel_ok = True
-#     if video_folder:
-#         # Check if the video folder path is valid path to a folder
-#         if not os.path.isdir(video_folder_path):
-#             logger.error(f"Video folder path is not valid: {video_folder_path}")
-#             video_ok = False
-#         else:
-#             video_ok = True
-#     if annotation_file and video_folder:
-#         return [video_ok, excel_ok]
-#     elif annotation_file:
-#         return excel_ok
-#     elif video_folder:
-#         return video_ok
-
 
 # Main body of the script
 

@@ -57,7 +57,7 @@ def scan_default_folders(scan_folders, file_type_index: int = 1):
     global logger
     logger.debug('Running function scan_default_folders()')
 
-    # set which file type will be excpected
+    # set which file type will be expected
     file_types = ["excel (watchers)", "excel (manual)"]
 
     # Check if scan folder feature is on
@@ -150,16 +150,14 @@ def check_path(path, path_type: int = 0):
     return path_ok
 
 def get_video_folder(video_folder_path, check):
-    global points_of_interest_entry
-    global loaded
-    global root
 
-    global scaned_folders
-    global tree_allow
+    # Define logger
     global logger
     logger.debug(f'Running function get_video_folder({check})')
-    loaded = 0
-    tree_allow = 0
+
+    # Define variables
+    tree_allow = False
+
     # set path to folder containing mp4 files
     original_video_folder_path = video_folder_path
 
@@ -187,9 +185,9 @@ def get_video_folder(video_folder_path, check):
                                           f.endswith('.mp4')]
                 if scan_child_video_files:
                     video_folder_path = os.path.join(video_folder_path, scanned_folders[0])
-                    tree_allow = 1
+                    tree_allow = True
             else:
-                tree_allow = 0
+                tree_allow = False
             # If check was bypassed - which is a situation when user is calling this function from the GUI. then reload the window.
             # if check == 0:
             #     reload(0, True)
@@ -208,10 +206,11 @@ def get_excel_path(annotation_file_path, check, ini_dir, excel_type):
                 title=f"Select the path to the {file_type[(excel_type - 1)]} file",
                 initialdir=ini_dir,
                 filetypes=[("Excel Files", "*.xlsx"), ("Excel Files", "*.xls")])
-            return annotation_file_path
+        return annotation_file_path
     else:
         #display message box that the crop mode does not require an annotation file
         messagebox.showinfo("Info", "The current mode does not require an annotation file.")
+
 
 def log_write():
     global logger

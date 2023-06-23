@@ -307,6 +307,6 @@ def initialise():
     video_folder_path, annotation_file_path = scan_default_folders(scan_folders)
     while not check_path(video_folder_path, 0):
         video_folder_path, scaned_folders, tree_allow = get_video_folder(video_folder_path, 1)
-    get_excel_path(annotation_file_path, 1, video_folder_path, 1)
+    annotation_file_path = get_excel_path(annotation_file_path, 1, video_folder_path, 1)
 
 
