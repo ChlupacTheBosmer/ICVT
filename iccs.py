@@ -691,6 +691,282 @@ class ICCS(icvt.AppAncestor):
         filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
         return annotation_data_array
 
+    ######################################### CROP FUNCTIONALITY ######################################################
+
+    def get_video_data(self, video_filepaths):
+
+        # Define logger
+        self.logger.debug(f"Running function get_video_data({video_filepaths})")
+
+        # loop through time annotations and open corresponding video file
+        # extract video data beforehand to save processing time
+        video_data = []
+        i: int
+        for i, filepath in enumerate(video_filepaths):
+            if filepath.endswith('.mp4'):
+                video_start_time, video_end_time = self.get_video_start_end_times(video_filepaths[i])
+                video_data_entry = [video_filepaths[i], video_start_time, video_end_time]
+                video_data.append(video_data_entry)
+        return video_data
+
+    async def capture_crop(self, frame, point):
+
+       # Define logger
+        self.logger.debug(f"Running function capture_crop({point})")
+
+        # Prepare local variables
+        x, y = point
+
+        # Add a random offset to the coordinates, but ensure they remain within the image bounds
+        frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # Check if any of the dimensions is smaller than crop_size and if so upscale the image to prevent crops smaller than desired crop_size
+        if frame_height < self.crop_size or frame_width < self.crop_size:
+            # Calculate the scaling factor to upscale the image
+            scaling_factor = self.crop_size / min(frame_height, frame_width)
+
+            # Calculate the new dimensions for the upscaled frame
+            new_width = int(round(frame_width * scaling_factor))
+            new_height = int(round(frame_height * scaling_factor))
+
+            # Upscale the frame using cv2.resize with Lanczos upscaling algorithm
+            frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+
+        # Get the new frame size
+        frame_height, frame_width = frame.shape[:2]
+
+        # Calculate the coordinates for the area that will be cropped
+        x_offset = random.randint(-self.offset_range, self.offset_range)
+        y_offset = random.randint(-self.offset_range, self.offset_range)
+        x1 = max(0, min(((x - self.crop_size // 2) + x_offset), frame_width - self.crop_size))
+        y1 = max(0, min(((y - self.crop_size // 2) + y_offset), frame_height - self.crop_size))
+        x2 = max(self.crop_size, min(((x + self.crop_size // 2) + x_offset), frame_width))
+        y2 = max(self.crop_size, min(((y + self.crop_size // 2) + y_offset), frame_height))
+
+        # Crop the image
+        crop = frame[y1:y2, x1:x2]
+
+        # Convert to correct color space
+        crop_img = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+        if crop_img.shape[2] == 3:
+            crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
+
+        # Return the cropped image and the coordinates for future reference
+        return crop_img, x1, y1, x2, y2
+
+    async def generate_frames(self, frame, success, tag, index, frame_number_start):
+
+        # Define logger
+        self.logger.debug(f"Running function generate_frames({index})")
+
+        # Prepare name elements
+        species = tag[-27:-19].replace("_", "")
+        timestamp = tag[-18:-4]
+
+        # Define local variables
+        crop_counter = 1
+        frame_skip_loc = self.frame_skip
+
+        # Calculate the frame skip variable based on the limited number of frames per visit
+        if self.frames_per_visit > 0:
+            frame_skip_loc = int((self.visit_duration * self.fps) // self.frames_per_visit)
+            if frame_skip_loc < 1:
+                frame_skip_loc = 1
+
+        # Loop through the video and crop y images every n-th frame
+        frame_count = 0
+        img_paths = []
+
+        while success:
+            # Crop images every n-th frame
+            if int(frame_count % frame_skip_loc) == 0:
+                for i, point in enumerate(self.points_of_interest_entry[index]):
+                    if self.cropped_frames == 1:
+                        crop_img, x1, y1, x2, y2 = await self.capture_crop(frame, point)
+                        img_path = f"./{self.output_folder}/{self.prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
+                        cv2.imwrite(img_path, crop_img)
+                        img_paths.append(img_path)
+                if self.whole_frame == 1:
+                    img_path = f"./{self.output_folder}/whole frames/{self.prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
+                    cv2.imwrite(img_path, frame)
+                crop_counter += 1
+
+            # If the random frame skip interval is activated add a random number to the counter or add the set frame skip interval
+            if self.randomize == 1:
+                if (frame_skip_loc - frame_count == 1):
+                    frame_count += 1
+                else:
+                    frame_count += random.randint(1, max((frame_skip_loc - frame_count), 2))
+            else:
+                frame_count += frame_skip_loc
+
+            # Read the next frame
+            frame_to_read = frame_number_start + frame_count
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_to_read)
+            success, frame = self.cap.read()
+
+            # If the frame count is equal or larger than the amount of frames that comprises the duration of the visit end the loop
+            if not (frame_count <= (self.visit_duration * self.fps)):
+                # Release the video capture object and close all windows
+                self.cap.release()
+                cv2.destroyAllWindows()
+                break
+
+        # Return the resulting list of image paths for future reference
+        return img_paths
+
+    async def yolo_preprocessing(self, img_paths, valid_annotations_array, index):
+        model = YOLO('resources/yolo/best.pt')
+        results = model(img_paths, save=False, imgsz=self.crop_size, conf=self.yolo_conf, save_txt=False, max_det=1, stream=True)
+        for i, result in enumerate(results):
+            boxes = result.boxes.data
+            original_path = os.path.join(img_paths[i])
+            utils.create_dir(f"{self.output_folder}/empty")
+            utils.create_dir(f"{self.output_folder}/visitor")
+            utils.create_dir(f"{self.output_folder}/visitor/labels")
+            empty_path = os.path.join(f"{self.output_folder}/empty", os.path.basename(img_paths[i]))
+            visitor_path = os.path.join(f"{self.output_folder}/visitor", os.path.basename(img_paths[i]))
+            label_path = os.path.join(f"{self.output_folder}/visitor/labels", os.path.basename(img_paths[i])[:-4])
+            if len(result.boxes.data) > 0:
+                shutil.move(original_path, visitor_path)
+                with open(f"{label_path}.txt", 'w') as file:
+                    # Write the box_data to the file
+                    txt = []
+                    lst = result.boxes.xywhn[0].tolist()
+                    for item in lst:
+                        txt_item = round(item, 6)
+                        txt.append(txt_item)
+                    txt = str(txt)
+                    if any(len(row) < 7 for row in valid_annotations_array):
+                        visitor_category = self.default_label_category
+                    else:
+                        visitor_category = valid_annotations_array[index][6]
+                    file.write(f"{visitor_category} {txt.replace('[', '').replace(']', '').replace(',', '')}")
+            else:
+                shutil.move(original_path, empty_path)
+
+    def crop_engine(self):
+
+        # Define logger
+        self.logger.debug("Running function crop_engine()")
+
+        # Define variables
+        root = self.main_window
+
+        # Ask to confirm whether the process should begin
+        result = utils.ask_yes_no("Do you want to start the cropping process?")
+        if result:
+            if len(self.points_of_interest_entry[0]) == 0:
+                messagebox.showinfo("Warning", "No points of interest selected. Please select at least one POI.")
+                self.reload(1, False)
+                return
+            valid_annotations_array = []
+            valid_annotation_data_entry = []
+            print(f"Flow: Start cropping on the following videos: {self.video_filepaths}")
+            root.withdraw()
+            if not self.crop_mode == 3:
+                video_ok = utils.check_path(self.video_folder_path, 0)
+                excel_ok = utils.check_path(self.annotation_file_path, 1)
+                if not video_ok or not excel_ok:
+                    messagebox.showinfo("Warning",
+                                        f"Unspecified path to a video folder or a valid Excel file.")
+                    self.reload(1, False)
+                    return
+                if self.crop_mode == 1:
+                    video_data = get_video_data(self.video_filepaths)
+                    annotation_data_array, visitor_id = load_excel_table(self.annotation_file_path)
+                if self.crop_mode == 2:
+                    annotation_data_array = load_csv(self.annotation_file_path)
+                if annotation_data_array is None:
+                    messagebox.showinfo("Warning",
+                                        f"Attempted to fix errors in the selected Excel file. Attempt failed. Please fix the errors manually and try again.")
+                    self.reload(1, False)
+                    return
+                if self.crop_mode == 2:
+                    video_filepaths_temp = self.video_filepaths
+                    self.video_filepaths = []
+                    for index, list in enumerate(annotation_data_array):
+                        for filepath in video_filepaths_temp:
+                            filename = os.path.basename(filepath)  # get just the filename from the full path
+                            if annotation_data_array[index][1][:-9] in filename:
+                                if datetime.timedelta() <= datetime.datetime.strptime(
+                                        annotation_data_array[index][1][-8:-3], '%H_%M') - datetime.datetime.strptime(
+                                    filename[-9:-4], '%H_%M') <= datetime.timedelta(minutes=15):
+                                    self.video_filepaths.append(filepath)
+                    video_data = self.get_video_data(self.video_filepaths)
+                print(f"Flow: Start cropping according to the following annotations: {annotation_data_array}")
+                print(f"Flow: Start cropping with the following video data: {video_data}")
+                for index, list in enumerate(annotation_data_array):
+                    print(' '.join(["Flow: Annotation number:", str(index + 1)]))
+                    annotation_time = pd.to_datetime(annotation_data_array[index][1], format='%Y%m%d_%H_%M_%S')
+                    for i, list in enumerate(video_data):
+                        print(f"{video_data[i][1]} <= {annotation_time} <= {video_data[i][2]}")
+                        if video_data[i][1] <= annotation_time <= video_data[i][2]:
+                            for each in range(len(annotation_data_array[index])):
+                                valid_annotation_data_entry.append(annotation_data_array[index][each])
+                            for each in range(3):
+                                valid_annotation_data_entry.append(video_data[i][each])
+                            if self.crop_mode == 1:
+                                valid_annotation_data_entry.append(visitor_id[index][0])
+                            print(f"Flow: Relevant annotations: {valid_annotation_data_entry}")
+                            valid_annotations_array.append(valid_annotation_data_entry)
+                            valid_annotation_data_entry = []
+                if self.filter_visitors == 1:
+                    filter_array_by_visitors(valid_annotations_array)
+                    if len(self.filtered_array) > 0:
+                        valid_annotations_array = self.filtered_array
+                    else:
+                        print("No visitors of the selected type found.")
+                        self.reload(1, False)
+                        return
+                for index in range(len(valid_annotations_array)):
+                    print(f"Processing item {index}")
+                    self.visit_index = index
+                    annotation_time = pd.to_datetime(valid_annotations_array[index][1], format='%Y%m%d_%H_%M_%S')
+                    annotation_offset = (annotation_time - valid_annotations_array[index][3]).total_seconds()
+                    self.cap = cv2.VideoCapture(valid_annotations_array[index][2])
+                    total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+                    self.visit_duration = (min(((annotation_offset * self.fps) + (int(valid_annotations_array[index][0]) * self.fps)),
+                                          total_frames) - (annotation_offset * self.fps)) // self.fps
+                    frame_number_start = int(annotation_offset * self.fps)
+                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
+                    success, frame = self.cap.read()
+                    img_paths = asyncio.run(
+                        self.generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
+                                        self.video_filepaths.index(valid_annotations_array[index][2])))
+                    # loop.close()
+                    # img_paths = generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
+                    # video_filepaths.index(valid_annotations_array[index][2]))
+                    if self.yolo_processing == 1:
+                        asyncio.run(self.yolo_preprocessing(img_paths, valid_annotations_array, index))
+            else:
+                video_ok = utils.check_path(self.video_folder_path, 0)
+                if not video_ok:
+                    messagebox.showinfo("Warning",
+                                        f"Unspecified path to a video folder.")
+                    self.reload(1, False)
+                    return
+                orig_wf = self.whole_frame
+                self.whole_frame = 1
+                for i, filepath in enumerate(self.video_filepaths):
+                    self.cap = cv2.VideoCapture(self.video_filepaths[i])
+                    self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+                    self.visit_duration = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) // self.fps
+                    frame_number_start = 2
+                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
+                    success, frame = self.cap.read()
+                    img_paths = self.generate_frames(frame, success, os.path.basename(self.video_filepaths[i]), i)
+                self.whole_frame = orig_wf
+        self.reload(1, False)
+        # try:
+        #     if root.winfo_exists():
+        #         root.destroy()
+        # except:
+        #     print("Error: Unexpected, window destroyed before reference. Odpruženo.")
+        # loaded = 1
+        # open_ICCS_window()
 
 ######################################### SECTION DEALS WITH THE GUI ###################################################
 ########################################################################################################################
@@ -1057,20 +1333,13 @@ class ICCS(icvt.AppAncestor):
         self.reload(False, True)
 
     def change_video_folder(self):
-        global video_folder_path
-        global points_of_interest_entry
-        global scaned_folders
-        global tree_allow
-        global loaded
-        global root
-        global logger
         self.logger.debug(f'Running function change_video_folder()')
 
         # Set loaded to false as when video folder is changed, the GUI must be reloaded.
         self.loaded = False
 
         # Get new video fodler and reload the GUI
-        self.video_folder_path, self.scanned_folders, self.dir_hierarchy = utils.get_video_folder(video_folder_path, 0)
+        self.video_folder_path, self.scanned_folders, self.dir_hierarchy = utils.get_video_folder(self.video_folder_path, 0)
         self.reload(False, True)
 
     def switch_folder(self, which):
@@ -1162,3 +1431,481 @@ class ICCS(icvt.AppAncestor):
         self.config['OCR settings']['height'] = str(self.height)
         with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
             self.config.write(configfile)
+
+    def update_entries(self, index, original_points):
+        global points_of_interest_entry
+        global modified_frames
+        global logger
+        logger.debug(f"Running function update_entries({index}, {original_points})")
+        for each in range(index + 1, len(points_of_interest_entry)):
+            if len(points_of_interest_entry[each]) == 0:
+                points_of_interest_entry[each] = points_of_interest_entry[index].copy()
+            else:
+                if points_of_interest_entry[each] == original_points:
+                    points_of_interest_entry[each] = points_of_interest_entry[index].copy()
+                else:
+                    break
+        first = 1
+        for each in range(index, len(video_filepaths)):
+            first = first - 1
+            if first >= 0 and (
+                    index == 0 or not points_of_interest_entry[max(index - 1, 0)] == points_of_interest_entry[index]):
+                modified_frames.append(each)
+            update_button_image(frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
+
+    def get_mouse_position(event, x, y, flags, mode, i, j):
+        global points_of_interest_entry
+        global modified_frames
+        if event == cv2.EVENT_LBUTTONUP:
+            index = j + ((i) * 6)
+            if flags & cv2.EVENT_FLAG_SHIFTKEY:
+                closest_point = None
+                closest_distance = float('inf')
+                for point in points_of_interest_entry[index]:
+                    distance = math.sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
+                    if distance < closest_distance:
+                        closest_point = point
+                        closest_distance = distance
+                if closest_distance < 30:
+                    points_of_interest_entry[index].remove(closest_point)
+                print(f"Flow: retrieved POIs: {points_of_interest_entry}")
+                cv2.destroyAllWindows()
+            elif flags & cv2.EVENT_FLAG_CTRLKEY and flags & cv2.EVENT_FLAG_ALTKEY:
+                points_of_interest_entry[index] = []
+                if index in modified_frames:
+                    modified_frames.remove(index)
+                cv2.destroyAllWindows()
+            else:
+                if not mode == 0:
+                    points_of_interest_entry[index].append((x, y))
+                else:
+                    points_of_interest_entry.append((x, y))
+                print(f"Flow: retrieved POIs: {points_of_interest_entry}")
+                cv2.destroyAllWindows()
+
+    def update_button_image(frame, i, j, first):
+        global points_of_interest_entry
+        global modified_frames
+        global button_images
+        global buttons
+        global logger
+        logger.debug(f"Running function update_button_image({i}, {j}, {first})")
+        index = j + ((i) * 6)
+        frame = frame.copy()
+        height, width, channels = frame.shape
+        for point in points_of_interest_entry[index]:
+            x1, y1 = max(0, point[0] - (crop_size // 2)), max(0, point[1] - (crop_size // 2))
+            x2, y2 = min(width, point[0] + (crop_size // 2)), min(height, point[1] + (crop_size // 2))
+            cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            pos_off = 0
+            rectangles = [
+                [(
+                 max(pos_off, min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
+                 max(pos_off,
+                     min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
+                 (max(crop_size - pos_off,
+                      min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
+                  max(crop_size - pos_off,
+                      min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))],
+                # Rectangle 1: (upper_left, bottom_right)
+                [(max(pos_off,
+                      min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
+                  max(pos_off,
+                      min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
+                 (max(crop_size - pos_off,
+                      min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
+                  max(crop_size - pos_off,
+                      min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
+                # Rectangle 2: (upper_left, bottom_right)
+                [(max(pos_off,
+                      min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
+                  max(pos_off,
+                      min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
+                 (max(crop_size - pos_off,
+                      min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
+                  max(crop_size - pos_off,
+                      min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
+                # Rectangle 3: (upper_left, bottom_right)
+                [(max(pos_off,
+                      min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
+                  max(pos_off,
+                      min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
+                 (max(crop_size - pos_off,
+                      min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
+                  max(crop_size - pos_off,
+                      min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))]
+                # Rectangle 4: (upper_left, bottom_right)
+            ]
+
+            # Find the overlapping area
+            x_min = max(rect[0][0] for rect in rectangles)
+            y_min = max(rect[0][1] for rect in rectangles)
+            x_max = min(rect[1][0] for rect in rectangles)
+            y_max = min(rect[1][1] for rect in rectangles)
+
+            # Calculate the coordinates of the overlapping area
+            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+
+        if (first >= 0 or index in modified_frames) and (
+                (index == 0 and not len(points_of_interest_entry[0]) == 0) or not points_of_interest_entry[
+                                                                                      max(index - 1, 0)] ==
+                                                                                  points_of_interest_entry[index]):
+            # Define the ROI
+            frame = cv2.resize(frame, (276, 156), interpolation=cv2.INTER_AREA)
+            height, width, channels = frame.shape
+            x, y, w, h = 0, 0, height // 5, height // 5
+            roi = frame[y:y + h, x:x + w]
+
+            # Load the overlay image
+            overlay = cv2.imread('resources/img/sp.png', cv2.IMREAD_UNCHANGED)
+
+            # Resize the overlay image to fit the ROI
+            overlay = cv2.resize(overlay, (w, h))
+
+            # Merge the overlay image and the ROI
+            alpha = overlay[:, :, 3] / 255.0
+            alpha = cv2.merge([alpha, alpha, alpha])
+            background = cv2.multiply(1.0 - alpha, roi, dtype=cv2.CV_8UC3)
+            foreground = cv2.multiply(alpha, overlay[:, :, 0:3], dtype=cv2.CV_8UC3)
+            result = cv2.add(background, foreground)
+
+            # Copy the result back into the original image
+            frame[y:y + h, x:x + w] = result
+        pil_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(pil_img, mode='RGB')
+        # Resize image to fit button
+        pil_img = pil_img.resize((276, 156))
+        # Convert PIL image to tkinter image
+        img = ImageTk.PhotoImage(pil_img)
+        button_images[index] = img
+        buttons[i][j].configure(image=button_images[index])
+
+    def on_key_press(event):
+        global b_l
+        global b_r
+        global u_l
+        global u_r
+        print("execd")
+        if keyboard.is_pressed('left') and keyboard.is_pressed('down'):
+            b_l = b_l * -1
+        elif keyboard.is_pressed('right') and keyboard.is_pressed('down'):
+            b_r = b_r * -1
+        elif keyboard.is_pressed('left') and keyboard.is_pressed('up'):
+            u_l = u_l * -1
+        elif keyboard.is_pressed('right') and keyboard.is_pressed('up'):
+            u_r = u_r * -1
+        elif keyboard.is_pressed('q'):
+            b_l = b_l * -1
+            b_r = b_r * -1
+            u_l = u_l * -1
+            u_r = u_r * -1
+
+    def on_button_click(i, j, button_images):
+        global points_of_interest_entry
+        global logger
+        global b_l
+        global b_r
+        global u_l
+        global u_r
+        logger.debug(f"Running function on_button_click({i}, {j})")
+        index = j + ((i) * 6)
+        mode = 1
+        frame_tmp = frames[index].copy()
+        b_l = -1
+        b_r = -1
+        u_l = -1
+        u_r = -1
+        # Ask the user if they want to select additional points of interest
+        while True:
+            original_points = points_of_interest_entry[index].copy()
+            frame = frame_tmp.copy()
+
+            # Draw a rectangle around the already selected points of interest
+            height, width, channels = frame.shape
+            for point in points_of_interest_entry[index]:
+                x1, y1 = max(0, point[0] - (crop_size // 2)), max(0, point[1] - (crop_size // 2))
+                x2, y2 = min(width, point[0] + (crop_size // 2)), min(height, point[1] + (crop_size // 2))
+                cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+                cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                if True:
+                    if b_r > 0:
+                        pos_off = 0
+                        o_x1 = max(pos_off,
+                                   min(((point[0] - crop_size // 2) + offset_range) - pos_off,
+                                       width - crop_size - pos_off))
+                        o_y1 = max(pos_off,
+                                   min(((point[1] - crop_size // 2) + offset_range) - pos_off,
+                                       height - crop_size - pos_off))
+                        o_x2 = max(crop_size - pos_off,
+                                   min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off))
+                        o_y2 = max(crop_size - pos_off,
+                                   min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off))
+                        cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                        # Add label text
+                        label_text = 'BR'
+                        label_color = (255, 229, 0)
+                        label_font = cv2.FONT_HERSHEY_SIMPLEX
+                        label_scale = 1
+                        label_thickness = 2
+
+                        (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale,
+                                                                         label_thickness)
+                        label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                        label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                        # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                        #             label_thickness)
+                        # cv2.line(frame, (o_x1, o_y1),
+                        #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                        #          label_color, label_thickness)
+                    if u_l > 0:
+                        pos_off = 0
+                        o_x1 = max(pos_off,
+                                   min(((point[0] - crop_size // 2) - offset_range) - pos_off,
+                                       width - crop_size - pos_off))
+                        o_y1 = max(pos_off,
+                                   min(((point[1] - crop_size // 2) - offset_range) - pos_off,
+                                       height - crop_size - pos_off))
+                        o_x2 = max(crop_size - pos_off,
+                                   min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off))
+                        o_y2 = max(crop_size - pos_off,
+                                   min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off))
+                        cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                        # Add label text
+                        label_text = 'UL'
+                        label_color = (255, 229, 0)
+                        label_font = cv2.FONT_HERSHEY_SIMPLEX
+                        label_scale = 1
+                        label_thickness = 2
+
+                        (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale,
+                                                                         label_thickness)
+                        label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                        label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                        # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                        #             label_thickness)
+                        # cv2.line(frame, (o_x1, o_y1),
+                        #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                        #          label_color, label_thickness)
+                    if u_r > 0:
+                        pos_off = 0
+                        o_x1 = max(pos_off,
+                                   min(((point[0] - crop_size // 2) + offset_range) - pos_off,
+                                       width - crop_size - pos_off))
+                        o_y1 = max(pos_off,
+                                   min(((point[1] - crop_size // 2) - offset_range) - pos_off,
+                                       height - crop_size - pos_off))
+                        o_x2 = max(crop_size - pos_off,
+                                   min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off))
+                        o_y2 = max(crop_size - pos_off,
+                                   min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off))
+                        cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                        # Add label text
+                        label_text = 'UR'
+                        label_color = (255, 229, 0)
+                        label_font = cv2.FONT_HERSHEY_SIMPLEX
+                        label_scale = 1
+                        label_thickness = 2
+
+                        (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale,
+                                                                         label_thickness)
+                        label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                        label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                        # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                        #             label_thickness)
+                        # cv2.line(frame, (o_x1, o_y1),
+                        #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                        #          label_color, label_thickness)
+                    if b_l > 0:
+                        pos_off = 0
+                        o_x1 = max(pos_off,
+                                   min(((point[0] - crop_size // 2) - offset_range) - pos_off,
+                                       width - crop_size - pos_off))
+                        o_y1 = max(pos_off,
+                                   min(((point[1] - crop_size // 2) + offset_range) - pos_off,
+                                       height - crop_size - pos_off))
+                        o_x2 = max(crop_size - pos_off,
+                                   min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off))
+                        o_y2 = max(crop_size - pos_off,
+                                   min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off))
+                        cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+                        # Add label text
+                        label_text = 'BL'
+                        label_color = (255, 229, 0)
+                        label_font = cv2.FONT_HERSHEY_SIMPLEX
+                        label_scale = 1
+                        label_thickness = 2
+
+                        (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale,
+                                                                         label_thickness)
+                        label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
+                        label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
+
+                        # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
+                        #             label_thickness)
+                        # cv2.line(frame, (o_x1, o_y1),
+                        #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
+                        #          label_color, label_thickness)
+                # Define rectangles by their upper left and bottom right corners
+                pos_off = 0
+                rectangles = [
+                    [(max(pos_off,
+                          min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
+                      max(pos_off,
+                          min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
+                     (max(crop_size - pos_off,
+                          min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
+                      max(crop_size - pos_off,
+                          min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))],
+                    # Rectangle 1: (upper_left, bottom_right)
+                    [(max(pos_off,
+                          min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
+                      max(pos_off,
+                          min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
+                     (max(crop_size - pos_off,
+                          min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
+                      max(crop_size - pos_off,
+                          min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
+                    # Rectangle 2: (upper_left, bottom_right)
+                    [(max(pos_off,
+                          min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
+                      max(pos_off,
+                          min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
+                     (max(crop_size - pos_off,
+                          min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
+                      max(crop_size - pos_off,
+                          min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
+                    # Rectangle 3: (upper_left, bottom_right)
+                    [(max(pos_off,
+                          min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
+                      max(pos_off,
+                          min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
+                     (max(crop_size - pos_off,
+                          min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
+                      max(crop_size - pos_off,
+                          min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))]
+                    # Rectangle 4: (upper_left, bottom_right)
+                ]
+
+                # Find the overlapping area
+                x_min = max(rect[0][0] for rect in rectangles)
+                y_min = max(rect[0][1] for rect in rectangles)
+                x_max = min(rect[1][0] for rect in rectangles)
+                y_max = min(rect[1][1] for rect in rectangles)
+
+                # Calculate the coordinates of the overlapping area
+                cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+
+            # Display the image with the rectangles marking the already selected points of interest
+            cv2.imshow("Frame", frame)
+            cv2.setWindowProperty("Frame", cv2.WND_PROP_TOPMOST, 1)
+            screen_width, screen_height = cv2.getWindowImageRect("Frame")[2:]
+            window_width, window_height = int(1 * screen_width), int(1 * screen_height)
+            cv2.resizeWindow("Frame", window_width, window_height)
+            cv2.moveWindow("Frame", int((screen_width // 2) - (window_width // 2)), 0)
+
+            # Prompt the user to click on the next point of interest
+            cv2.setMouseCallback("Frame",
+                                 lambda event, x, y, flags, mode: get_mouse_position(event, x, y, flags, mode, i, j),
+                                 mode)
+            key = cv2.waitKey(0)
+            if key == 27 or key == 13:  # Check if the Esc key was pressed
+                cv2.destroyAllWindows()
+                break
+            elif key == ord("q"):
+                u_l = u_l * -1
+            elif key == ord("w"):
+                u_r = u_r * -1
+            elif key == ord("e"):
+                b_l = b_l * -1
+            elif key == ord("r"):
+                b_r = b_r * -1
+            update_entries(index, original_points)
+
+    def update_crop_mode(var):
+        global crop_mode
+        global logger
+        logger.debug(f"Running function update_crop_mode({var})")
+        crop_mode = var
+
+    def save_progress():
+        global auto_processing
+        global points_of_interest_entry
+        global video_filepaths
+        global logger
+        logger.debug(f"Running function save_progress()")
+        result = ask_yes_no("Do you want to save the settings? This will overwrite any previous saves.")
+        if result:
+            if check_path(video_folder_path, 0):
+                # Create an in-memory file object
+                filepath = os.path.join(video_folder_path, 'crop_information.pkl')
+                with open(filepath, 'wb') as f:
+                    # Use the pickle module to write the data to the file
+                    pickle.dump([auto_processing.get(), points_of_interest_entry, video_filepaths], f)
+            else:
+                # display message box with error message
+                messagebox.showerror("Error", "Invalid video folder path")
+
+    def load_progress():
+        global auto_processing
+        global points_of_interest_entry
+        global video_filepaths
+        global frames
+        global loaded
+        global auto
+        global root
+        global logger
+        logger.debug(f"Running function load_progress()")
+        result = ask_yes_no("Do you want to load settings? This will overwrite any unsaved progress.")
+        if result:
+            if check_path(video_folder_path, 0):
+                # Create an in-memory file object
+                filepath = os.path.join(video_folder_path, 'crop_information.pkl')
+                if os.path.isfile(filepath):
+                    try:
+                        if root.winfo_exists():
+                            root.destroy()
+                    except:
+                        print("Error: Unexpected, window destroyed before reference. Odpruženo.")
+                    points_of_interest_entry = []
+                    with open(filepath, 'rb') as f:
+                        data = pickle.load(f)
+                    # print(data)
+                    auto = data[0]
+                    points_of_interest_entry = data[1].copy()
+                    video_filepaths_new = data[2].copy()
+                    set1 = set(video_filepaths_new)
+                    set2 = set(video_filepaths)
+                    if not set1 == set2:
+                        messagebox.showinfo("Discrepancy detected",
+                                            "The contents of the video folder have changed since the save has been made. Cannot load the progress. Please start over.")
+                        reload_points_of_interest()
+                    else:
+                        video_filepaths = []
+                        video_filepaths = video_filepaths_new.copy()
+                    reload(1, False)
+                    # load_videos()
+                    # load_video_frames()
+                    # loaded = 1
+                    # open_ICCS_window()
+                else:
+                    messagebox.showinfo("No save detected",
+                                        "There are no save files in the current directory.")
+            else:
+                # display message box with error message
+                messagebox.showerror("Error", "Invalid video folder path")
