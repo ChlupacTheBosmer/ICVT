@@ -119,9 +119,9 @@ def scan_default_folders(scan_folders, file_type_index: int = 1):
                     # Assign the path of the selected file to a variable
                     if selection > 0 and selection <= len(scan_excel_files):
                         annotation_file_path = os.path.join(("excel/"), scan_excel_files[selection - 1])
-                        logger.info(f'Selected file: {annotation_file_path}')
+                        logger.debug(f'Selected file: {annotation_file_path}')
                     else:
-                        logger.info('Invalid selection')
+                        logger.warning('Invalid selection')
     return video_folder_path, annotation_file_path
 
 def check_path(path, path_type: int = 0):
@@ -192,7 +192,7 @@ def get_video_folder(video_folder_path, check):
             # if check == 0:
             #     reload(0, True)
     else:
-        print(f"Flow: obtained video folder path: {video_folder_path}")
+        logger.debug(f"Obtained video folder path: {video_folder_path}")
     return video_folder_path, scanned_folders, tree_allow
 
 def get_excel_path(annotation_file_path, check, ini_dir, excel_type):
@@ -221,7 +221,7 @@ def log_write():
     # Create a file handler that logs all messages, and set its formatter
     file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(filename)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 

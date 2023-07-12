@@ -945,63 +945,9 @@ def update_button_image(frame, i, j, first):
     logger.debug(f"Running function update_button_image({i}, {j}, {first})")
     index = j + ((i) * 6)
     frame = frame.copy()
-    height, width, channels = frame.shape
-    for point in points_of_interest_entry[index]:
-        x1, y1 = max(0, point[0] - (crop_size // 2)), max(0, point[1] - (crop_size // 2))
-        x2, y2 = min(width, point[0] + (crop_size // 2)), min(height, point[1] + (crop_size // 2))
-        cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-        cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-        cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-        cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-        cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-        pos_off = 0
-        rectangles = [
-            [(max(pos_off, min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
-              max(pos_off,
-                  min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
-             (max(crop_size - pos_off,
-                  min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
-              max(crop_size - pos_off,
-                  min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))],
-            # Rectangle 1: (upper_left, bottom_right)
-            [(max(pos_off,
-                  min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
-              max(pos_off,
-                  min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
-             (max(crop_size - pos_off,
-                  min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
-              max(crop_size - pos_off,
-                  min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
-            # Rectangle 2: (upper_left, bottom_right)
-            [(max(pos_off,
-                  min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)),
-              max(pos_off,
-                  min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))),
-             (max(crop_size - pos_off,
-                  min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)),
-              max(crop_size - pos_off,
-                  min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],
-            # Rectangle 3: (upper_left, bottom_right)
-            [(max(pos_off,
-                  min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)),
-              max(pos_off,
-                  min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))),
-             (max(crop_size - pos_off,
-                  min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)),
-              max(crop_size - pos_off,
-                  min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))]
-            # Rectangle 4: (upper_left, bottom_right)
-        ]
 
-        # Find the overlapping area
-        x_min = max(rect[0][0] for rect in rectangles)
-        y_min = max(rect[0][1] for rect in rectangles)
-        x_max = min(rect[1][0] for rect in rectangles)
-        y_max = min(rect[1][1] for rect in rectangles)
-
-        # Calculate the coordinates of the overlapping area
-        cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+    # Draw roi area guides and offset overlap
+    frame = draw_roi_offset_boundaries(frame, points_of_interest_entry[index], [-1,-1,-1,-1], True, False, True)
 
     if (first >= 0 or index in modified_frames) and (
             (index == 0 and not len(points_of_interest_entry[0]) == 0) or not points_of_interest_entry[
@@ -1057,6 +1003,61 @@ def on_key_press(event):
         u_l = u_l * -1
         u_r = u_r * -1
 
+def draw_roi_offset_boundaries(frame, list_of_ROIs, list_of_extremes_to_draw, draw_roi: bool, draw_extremes: bool, draw_overlap: bool):
+
+    # Define variables
+    u_l, u_r, b_l, b_r = list_of_extremes_to_draw
+    rectangles = []
+    labels = ['BR', 'UL', 'UR', 'BL']
+    offsets = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
+    conditions = [b_r > 0, u_l > 0, u_r > 0, b_l > 0]
+    pos_off = 0
+    height, width, channels = frame.shape
+
+    # For each point draw desired shapes
+    for point in list_of_ROIs:
+
+        # Draw basic roi area
+        if draw_roi:
+            x1, y1 = max(0, point[0] - (crop_size // 2)), max(0, point[1] - (crop_size // 2))
+            x2, y2 = min(width, point[0] + (crop_size // 2)), min(height, point[1] + (crop_size // 2))
+            cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+            cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+
+        # Draw the offset extremes rectangles
+        if draw_extremes or draw_overlap:
+            for i, (label, (offset_x, offset_y), condition) in enumerate(zip(labels, offsets, conditions)):
+                o_x1 = max(pos_off, min(((point[0] - crop_size // 2) + offset_x * offset_range) - pos_off,
+                                        width - crop_size - pos_off))
+                o_y1 = max(pos_off, min(((point[1] - crop_size // 2) + offset_y * offset_range) - pos_off,
+                                        height - crop_size - pos_off))
+                o_x2 = max(crop_size - pos_off,
+                           min(((point[0] + crop_size // 2) + offset_x * offset_range) - pos_off,
+                               width - pos_off))
+                o_y2 = max(crop_size - pos_off,
+                           min(((point[1] + crop_size // 2) + offset_y * offset_range) - pos_off,
+                               height - pos_off))
+                rectangles.append([(o_x1, o_y1), (o_x2, o_y2)])
+                if condition:
+                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+
+            # Draw overlap area
+            if draw_overlap:
+
+                # Find the overlapping area
+                x_min = max(rect[0][0] for rect in rectangles)
+                y_min = max(rect[0][1] for rect in rectangles)
+                x_max = min(rect[1][0] for rect in rectangles)
+                y_max = min(rect[1][1] for rect in rectangles)
+
+                # Calculate the coordinates of the overlapping area
+                cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+    return frame
+
 def on_button_click(i, j, button_images):
     global points_of_interest_entry
     global logger
@@ -1076,163 +1077,10 @@ def on_button_click(i, j, button_images):
     while True:
         original_points = points_of_interest_entry[index].copy()
         frame = frame_tmp.copy()
+        list_of_extremes_to_draw = [u_l, u_r, b_l, b_r]
 
         # Draw a rectangle around the already selected points of interest
-        height, width, channels = frame.shape
-        for point in points_of_interest_entry[index]:
-            x1, y1 = max(0, point[0] - (crop_size//2)), max(0, point[1] - (crop_size//2))
-            x2, y2 = min(width, point[0] + (crop_size//2)), min(height, point[1] + (crop_size//2))
-            cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-            cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-            cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-            cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-            cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-            if True:
-                if b_r > 0:
-                    pos_off = 0
-                    o_x1 = max(pos_off,
-                               min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off))
-                    o_y1 = max(pos_off,
-                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))
-                    o_x2 = max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off))
-                    o_y2 = max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off))
-                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
-
-                    # Add label text
-                    label_text = 'BR'
-                    label_color = (255, 229, 0)
-                    label_font = cv2.FONT_HERSHEY_SIMPLEX
-                    label_scale = 1
-                    label_thickness = 2
-
-                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
-                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
-                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
-
-                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
-                    #             label_thickness)
-                    # cv2.line(frame, (o_x1, o_y1),
-                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
-                    #          label_color, label_thickness)
-                if u_l > 0:
-                    pos_off = 0
-                    o_x1 = max(pos_off,
-                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off))
-                    o_y1 = max(pos_off,
-                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))
-                    o_x2 = max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off))
-                    o_y2 = max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off))
-                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
-
-                    # Add label text
-                    label_text = 'UL'
-                    label_color = (255, 229, 0)
-                    label_font = cv2.FONT_HERSHEY_SIMPLEX
-                    label_scale = 1
-                    label_thickness = 2
-
-                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
-                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
-                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
-
-                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
-                    #             label_thickness)
-                    # cv2.line(frame, (o_x1, o_y1),
-                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
-                    #          label_color, label_thickness)
-                if u_r > 0:
-                    pos_off = 0
-                    o_x1 = max(pos_off,
-                               min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off))
-                    o_y1 = max(pos_off,
-                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))
-                    o_x2 = max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off))
-                    o_y2 = max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off))
-                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
-
-                    # Add label text
-                    label_text = 'UR'
-                    label_color = (255, 229, 0)
-                    label_font = cv2.FONT_HERSHEY_SIMPLEX
-                    label_scale = 1
-                    label_thickness = 2
-
-                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
-                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
-                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
-
-                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
-                    #             label_thickness)
-                    # cv2.line(frame, (o_x1, o_y1),
-                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
-                    #          label_color, label_thickness)
-                if b_l > 0:
-                    pos_off = 0
-                    o_x1 = max(pos_off,
-                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off))
-                    o_y1 = max(pos_off,
-                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))
-                    o_x2 = max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off))
-                    o_y2 = max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off))
-                    cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
-
-                    # Add label text
-                    label_text = 'BL'
-                    label_color = (255, 229, 0)
-                    label_font = cv2.FONT_HERSHEY_SIMPLEX
-                    label_scale = 1
-                    label_thickness = 2
-
-                    (label_width, label_height), _ = cv2.getTextSize(label_text, label_font, label_scale, label_thickness)
-                    label_x = o_x1 + (o_x2 - o_x1) // 2 - label_width // 2
-                    label_y = o_y1 + (o_y2 - o_y1) // 2 + label_height // 2
-
-                    # cv2.putText(frame, label_text, (label_x, label_y), label_font, label_scale, label_color,
-                    #             label_thickness)
-                    # cv2.line(frame, (o_x1, o_y1),
-                    #          (label_x - (label_width // 4), label_y - label_height - (label_height // 4)),
-                    #          label_color, label_thickness)
-            # Define rectangles by their upper left and bottom right corners
-            pos_off = 0
-            rectangles = [
-                [(max(pos_off, min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
-                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))],  # Rectangle 1: (upper_left, bottom_right)
-                [(max(pos_off,
-                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
-                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],  # Rectangle 2: (upper_left, bottom_right)
-                [(max(pos_off,
-                               min(((point[0] - crop_size // 2) + offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
-                               min(((point[1] - crop_size // 2) - offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) + offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) - offset_range) - pos_off, height - pos_off)))],  # Rectangle 3: (upper_left, bottom_right)
-                [(max(pos_off,
-                               min(((point[0] - crop_size // 2) - offset_range) - pos_off, width - crop_size - pos_off)), max(pos_off,
-                               min(((point[1] - crop_size // 2) + offset_range) - pos_off, height - crop_size - pos_off))), (max(crop_size - pos_off,
-                               min(((point[0] + crop_size // 2) - offset_range) - pos_off, width - pos_off)), max(crop_size - pos_off,
-                               min(((point[1] + crop_size // 2) + offset_range) - pos_off, height - pos_off)))]  # Rectangle 4: (upper_left, bottom_right)
-            ]
-
-            # Find the overlapping area
-            x_min = max(rect[0][0] for rect in rectangles)
-            y_min = max(rect[0][1] for rect in rectangles)
-            x_max = min(rect[1][0] for rect in rectangles)
-            y_max = min(rect[1][1] for rect in rectangles)
-
-            # Calculate the coordinates of the overlapping area
-            cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+        frame = draw_roi_offset_boundaries(frame, points_of_interest_entry[index], list_of_extremes_to_draw, True, True, True)
 
         # Display the image with the rectangles marking the already selected points of interest
         cv2.imshow("Frame", frame)
@@ -1245,18 +1093,29 @@ def on_button_click(i, j, button_images):
         # Prompt the user to click on the next point of interest
         cv2.setMouseCallback("Frame",
                              lambda event, x, y, flags, mode: get_mouse_position(event, x, y, flags, mode, i, j), mode)
+
+        # Wait for key press
         key = cv2.waitKey(0)
-        if key == 27 or key == 13:  # Check if the Esc key was pressed
-            cv2.destroyAllWindows()
-            break
-        elif key == ord("q"):
-            u_l = u_l * -1
-        elif key == ord ("w"):
-            u_r = u_r * -1
-        elif key == ord("e"):
-            b_l = b_l * -1
-        elif key == ord("r"):
-            b_r = b_r * -1
+
+        # Define which keys will result in multiplying which variable by which value
+        key_mappings = {
+            27: ('esc', None),
+            13: ('enter', None),
+            ord('q'): ('u_l', -1),
+            ord('w'): ('u_r', -1),
+            ord('e'): ('b_l', -1),
+            ord('r'): ('b_r', -1)
+        }
+
+        # If key is in the dictionary then check whether the value for this key is none - if so then it is esc or enter
+        # and the window should be closed. If not then d othe multiplication.
+        if key in key_mappings:
+            action, value = key_mappings[key]
+            if value is None:  # Check if the Esc key was pressed
+                cv2.destroyAllWindows()
+                break
+            elif value is not None:
+                globals()[action] *= value
         update_entries(index, original_points)
 
 def load_video_frames():
@@ -2021,23 +1880,28 @@ def open_menu():
         global prefix
         global end_values
         end_values = []
-        for i in range(15):
-            end_values.append(fields[i].get())
-        output_folder = str(end_values[0])
-        scan_folders = str(end_values[1])
-        prefix = str(end_values[2])
-        crop_mode = int(end_values[3])
-        frame_skip = int(end_values[4])
-        frames_per_visit = int(end_values[5])
-        filter_visitors = int(end_values[6])
-        yolo_processing = int(end_values[7])
-        default_label_category = int(end_values[8])
-        yolo_conf = float(end_values[9])
-        randomize = int(end_values[10])
-        whole_frame = int(end_values[11])
-        cropped_frames = int(end_values[12])
-        crop_size = int(end_values[13])
-        offset_range = int(end_values[14])
+        variable_mappings = [
+            ('output_folder', str),
+            ('scan_folders', str),
+            ('prefix', str),
+            ('crop_mode', int),
+            ('frame_skip', int),
+            ('frames_per_visit', int),
+            ('filter_visitors', int),
+            ('yolo_processing', int),
+            ('default_label_category', int),
+            ('yolo_conf', float),
+            ('randomize', int),
+            ('whole_frame', int),
+            ('cropped_frames', int),
+            ('crop_size', int),
+            ('offset_range', int)
+        ]
+
+        end_values = [var_type(fields[i].get()) for i, (var_name, var_type) in enumerate(variable_mappings)]
+        print(end_values)
+        for i, (var_name, _) in enumerate(variable_mappings):
+            globals()[var_name] = end_values[i]
         config_write()
         create_dir(output_folder)
         create_dir(f"./{output_folder}/whole frames/")
@@ -2091,9 +1955,9 @@ def config_write():
     config.read('settings_crop.ini')
 
     # Update values in the config file
-    config.set('Resource Paths', 'OCR_tesseract_path', ocr_tesseract_path)
-    config.set('Resource Paths', 'video_folder_path', video_folder_path)
-    config.set('Resource Paths', 'annotation_file_path', annotation_file_path)
+    #config.set('Resource Paths', 'OCR_tesseract_path', ocr_tesseract_path)
+    #config.set('Resource Paths', 'video_folder_path', video_folder_path)
+    #config.set('Resource Paths', 'annotation_file_path', annotation_file_path)
     config.set('Resource Paths', 'output_folder', output_folder)
     config.set('Workflow settings', 'Scan_default_folders', scan_folders)
     config.set('Crop settings', 'crop_mode', str(crop_mode))

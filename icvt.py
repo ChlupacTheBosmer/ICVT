@@ -3,6 +3,7 @@ import utils
 import os
 import tkinter as tk
 import logging
+import inspect
 
 class AppAncestor:
     def __init__(self):
@@ -18,10 +19,10 @@ class AppAncestor:
         self.dir_hierarchy = False
 
         # Load up functions to get the video and excel folders
-        self.scan_default_folders()
-        while not self.check_path():
-            self.get_video_folder(1)
-        self.get_excel_path(1, 1)
+        # self.scan_default_folders()
+        # while not self.check_path():
+        #     self.get_video_folder(1)
+        # self.get_excel_path(1, 1)
 
     def scan_default_folders(self):
         self.video_folder_path, self.annotation_file_path = utils.scan_default_folders(self.scan_folders)
@@ -67,26 +68,34 @@ class AppAncestor:
             if root.winfo_exists():
                 root.destroy()
         except:
-            logger.info("Error: Unexpected, window destroyed before reference.")
+            logger.debug("Unexpected, window destroyed before reference.")
 
     def log_define(self):
 
+        def get_caller_name():
+            frame = inspect.currentframe().f_back
+            module = inspect.getmodule(frame)
+            return module.__name__ if module else '__main__'
+
+
         # Create a logger instance
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.DEBUG)
 
         # Create a file handler that logs all messages, and set its formatter
         file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        caller_name = get_caller_name()
+        formatter = logging.Formatter('%(asctime)s - %(filename)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
-        self.logger.addHandler(file_handler)
+        logger.addHandler(file_handler)
 
         # Create a console handler that logs only messages with level INFO or higher, and set its formatter
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
         console_formatter = logging.Formatter('%(levelname)s: %(message)s')
         console_handler.setFormatter(console_formatter)
-        self.logger.addHandler(console_handler)
+        logger.addHandler(console_handler)
 
-app = AppAncestor()
+        return logger
+
