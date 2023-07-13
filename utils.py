@@ -212,8 +212,7 @@ def get_excel_path(annotation_file_path, check, ini_dir, excel_type):
         messagebox.showinfo("Info", "The current mode does not require an annotation file.")
 
 
-def log_write():
-    global logger
+def log_define():
     # Create a logger instance
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
@@ -231,5 +230,7 @@ def log_write():
     console_formatter = logging.Formatter('%(levelname)s: %(message)s')
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
+    return logger
 
-log_write()
+global logger
+logger = log_define()

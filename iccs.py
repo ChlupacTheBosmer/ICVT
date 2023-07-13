@@ -1,9 +1,12 @@
 # This file contains the ICCS app class that inherits from ICVT AppAncestor class
 import utils
+import anno_data
+import vid_data
 import icvt
 import pandas as pd
 import os
 import subprocess
+import threading
 import re
 import cv2
 import pytesseract
@@ -31,19 +34,30 @@ import asyncio
 import cProfile
 import tracemalloc
 from typing import Dict, Callable
+from datetime import datetime
+from datetime import timedelta
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):
+
         # Define logger
         self.logger = self.log_define()
 
         # First log
         self.logger.info("Initializing ICCS - Insect Communities Crop Suite application class...")
 
+        # Start the loading bar in a separate thread
+        time.sleep(0.2)
+        loading_thread = threading.Thread(target=self.loading_bar)
+        loading_thread.start()
+        self.loading_progress = 1
+
         # Init basic instance variables and get config
         self.app_title = "Insect Communities Crop Suite"
         self.config = self.config_create()
+        self.loading_progress = 10
         self.config_read()
+        self.loading_progress = 20
         self.scanned_folders = []
         self.dir_hierarchy = False
         self.loaded = False
@@ -57,23 +71,34 @@ class ICCS(icvt.AppAncestor):
         self.buttons = []
         self.gui_imgs = []
         self.cap = None
+        self.loading_progress = 25
 
         # Initiation functions - get directories and files
         self.scan_default_folders()
+        self.loading_progress = 35
         while not self.check_path():
             self.get_video_folder(1)
+        self.loading_progress = 40
         self.get_excel_path(1, 1)
+        self.loading_progress = 45
         self.load_videos()
+        self.loading_progress = 55
         self.reload_points_of_interest()
+        self.loading_progress = 65
         self.load_video_frames()
+        self.loading_progress = 85
 
         # Create output folders
         utils.create_dir(self.output_folder)
         utils.create_dir(os.path.join(".", self.output_folder, "whole frames"))
 
         # Open window
-        self.logger.info("Initialization complete - Opening ICCS main application window...")
+        self.loading_progress = 100
+        time.sleep(0.5)
+        self.stop_loading = True
+        loading_thread.join()
         self.open_main_window()
+
 
     def config_create(self):
         # Set default values
@@ -157,9 +182,6 @@ class ICCS(icvt.AppAncestor):
         config.read('settings_crop.ini')
 
         # Update values in the config file
-        #config.set('Resource Paths', 'OCR_tesseract_path', self.ocr_tesseract_path)
-        #config.set('Resource Paths', 'video_folder_path', self.video_folder_path)
-        #config.set('Resource Paths', 'annotation_file_path', self.annotation_file_path)
         config.set('Resource Paths', 'output_folder', self.output_folder)
         config.set('Workflow settings', 'Scan_default_folders', self.scan_folders)
         config.set('Crop settings', 'crop_mode', str(self.crop_mode))
@@ -180,34 +202,13 @@ class ICCS(icvt.AppAncestor):
         with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
             config.write(configfile)
 
-    def load_videos(self):
-
-        # Define logger
-        self.logger.debug('Running function load_videos()')
-
-        # Check if the video folder path is valid
-        if utils.check_path(self.video_folder_path, 0):
-            # Load videos
-            try:
-                self.video_filepaths = [
-                    os.path.join(self.video_folder_path, f)
-                    for f in os.listdir(self.video_folder_path)
-                    if f.endswith('.mp4')
-                ]
-            except OSError as e:
-                self.logger.error(f"Error: Failed to load videos: {e}")
-                self.video_filepaths = []
-        else:
-            messagebox.showerror("Error", "Invalid video folder path")
-            self.video_filepaths = []
-
     def reload_points_of_interest(self):
         logger = self.logger
         logger.debug('Running function reload_points_of_interest()')
 
         # Clear the array of POIs and reconstruct it with empty lists.
         self.points_of_interest_entry.clear()
-        self.points_of_interest_entry = [[] for _ in range(len(self.video_filepaths))]
+        self.points_of_interest_entry = [[[], filepath] for filepath in self.video_filepaths]
 
     def load_video_frames(self):
         # Define logger
@@ -246,507 +247,7 @@ class ICCS(icvt.AppAncestor):
 ########################################################################################################################
 ########################################################################################################################
 
-######################################### EXTRACT TIME FROM VIDEO ######################################################
-    def get_video_start_end_times(self, video_filepath):
-
-        # Define logger
-        self.logger.debug(f"Running function get_video_start_end_times({video_filepath})")
-        video_filename = os.path.basename(video_filepath)
-        self.logger.debug(' '.join(["Processing video file -", video_filepath]))
-
-        # get start time
-        # get the time from filename
-        parts = video_filename[:-4].split("_")
-        if len(parts) == 6:
-            start_time_minutes = "_".join([parts[3], parts[4], parts[5]])
-            self.logger.debug(' '.join(
-                ["Video name format with prefixes detected. Extracted the time values -", start_time_minutes]))
-        else:
-            self.logger.error(
-                "Some video file names have an unsupported format. Expected format is "
-                "CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
-            start_time_minutes = video_filename[:-4]
-        start_time_seconds, success = self.get_metadata_from_video(video_filepath, "start")
-        if not success:
-            text, frame = self.get_text_from_video(video_filepath, "start")
-            start_time_seconds, success = self.process_OCR_text(text, frame, video_filepath, "start")
-            if not success:
-                start_time_seconds, success = self.get_text_manually(frame)
-        start_time_str = '_'.join([start_time_minutes, start_time_seconds])
-        start_time = pd.to_datetime(start_time_str, format='%Y%m%d_%H_%M_%S')
-
-        # get end time
-        end_time_seconds, success = self.get_metadata_from_video(video_filepath, "end")
-        if not success:
-            text, frame = self.get_text_from_video(video_filepath, "end")
-            end_time_seconds, success = self.process_OCR_text(text, frame, video_filepath, "end")
-            if not success:
-                end_time_seconds, success = self.get_text_manually(frame)
-        try:
-            parser = createParser(video_filepath)
-            metadata = extractMetadata(parser)
-            duration = str(metadata.get("duration"))
-            time_parts = duration.split(":")
-            delta = int(time_parts[1])
-        except:
-            delta = 15 + (int(end_time_seconds) // 60)
-        # print(start_time_minutes)
-        # print(end_time_seconds)
-        end_time_seconds = str(int(end_time_seconds) % 60)
-        end_time_str = pd.to_datetime('_'.join([start_time_minutes, end_time_seconds]), format='%Y%m%d_%H_%M_%S')
-        end_time = end_time_str + pd.Timedelta(minutes=int(delta))
-        return start_time, end_time
-
-    def get_metadata_from_video(self, video_filepath, start_or_end):
-        if start_or_end == "start":
-            try:
-                parser = createParser(video_filepath)
-                metadata = extractMetadata(parser)
-                modify_date = str(metadata.get("creation_date"))
-                return_time = modify_date[-2:]
-                self.logger.debug("Obtained video start time from metadata.")
-                success = True
-            except:
-                success = False
-        elif start_or_end == "end":
-            try:
-                parser = createParser(video_filepath)
-                metadata = extractMetadata(parser)
-                modify_date = str(metadata.get("creation_date"))
-                start_seconds = int(modify_date[-2:])
-                duration = str(metadata.get("duration"))
-                time_parts = duration.split(":")
-                seconds = int(time_parts[2].split(".")[0])
-                return_time = str(seconds + start_seconds)
-                self.logger.debug("Obtained video end time from metadata.")
-                success = True
-            except:
-                success = False
-        return return_time, success
-
-    def get_text_from_video(self, video_filepath, start_or_end):
-
-        #Define logger
-        self.logger.debug(f'Running function get_text_from_video({video_filepath}, {start_or_end})')
-
-        # Define config
-        config = self.config
-
-        # Read settings from settings_crop.ini
-        config.read('settings_crop.ini', encoding='utf-8')
-        try:
-            self.x_coordinate = int(config['OCR settings'].get('x_coordinate', '0').strip())
-            self.y_coordinate = int(config['OCR settings'].get('y_coordinate', '0').strip())
-            self.width = int(config['OCR settings'].get('width', '500').strip())
-            self.height = int(config['OCR settings'].get('height', '40').strip())
-        except ValueError:
-            # Handle cases where conversion to integer fails
-            self.logger.warning('Error: Invalid integer value found in settings_crop.ini')
-
-        # Get the video capture and ROI defined
-        self.cap = cv2.VideoCapture(video_filepath)
-        self.text_roi = (self.x_coordinate, self.y_coordinate, self.width, self.height)  # x, y, width, height
-
-        # Define which frame to scan - start of end?
-        if start_or_end == "end":
-            total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            second_to_last_frame_idx = total_frames - 5
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, second_to_last_frame_idx)
-        else:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 24)
-
-        # Get the video frame and process the image
-        ret, frame = self.cap.read()
-        if ret:
-            # Crop the image and pre-process it
-            # height, width, channels = frame.shape
-            x, y, w, h = self.text_roi
-            text_frame = frame[y:y + h, x:x + w]
-            HSV_img = cv2.cvtColor(text_frame, cv2.COLOR_BGR2HSV)
-            h, s, v = cv2.split(HSV_img)
-            v = cv2.GaussianBlur(v, (1, 1), 0)
-            thresh = cv2.threshold(v, 220, 255, cv2.THRESH_BINARY_INV)[
-                1]  # change the second number to change the threshold - anything over that value will be turned into white
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=(1, 1))
-            thresh = cv2.dilate(thresh, kernel)
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, ksize=(1, 1))
-            thresh = cv2.erode(thresh, kernel)
-            # text recognition
-            OCR_text = pytesseract.image_to_string(thresh)
-
-            # debug OCR file creation
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            output_dir = os.path.join(script_dir, "OCR images")
-            utils.create_dir(output_dir)
-            OCR_file_name = ''.join([os.path.basename(video_filepath)[:-4], "_", start_or_end, ".png"])
-            OCR_file_path = os.path.join(output_dir, OCR_file_name)
-            # cv2.imwrite(OCR_file_path, thresh)
-            with open(OCR_file_path, 'wb') as f:
-                f.write(cv2.imencode('.png', thresh)[1].tobytes())
-        else:
-            OCR_text = "none"
-        self.cap.release()
-        return OCR_text, frame
-
-    def process_OCR_text(self, detected_text, frame, video_filepath, start_or_end):
-
-        # Define logger
-        self.logger.debug(f'Running function process_OCR_text({detected_text}, {video_filepath}, {start_or_end})')
-
-        # Define variables
-        return_time = "00"
-        if "\n" in detected_text:
-            detected_text = detected_text.replace("\n", "")
-        if not len(detected_text) <= 23:
-            detected_text = detected_text.rstrip()
-            while not detected_text[-1].isdigit():
-                detected_text = detected_text[:-1]
-        correct_format = r"(0[0-9]|[1-5][0-9]):(0[0-9]|[1-5][0-9]):(0[0-9]|[1-5][0-9])"
-        if re.match(correct_format, detected_text[-8:]):
-            self.logger.debug(' '.join(["Text detection successful -", detected_text[-8:]]))
-            return_time = detected_text[-2:]
-            success = True
-        else:
-            self.logger.debug(' '.join(["Text detection failed -", detected_text]))
-            success = False
-        return return_time, success
-
-    def get_text_manually(self, frame):
-
-        def submit_time(input_field):
-            self.logger.debug(f'Running function submit_time({input_field})')
-
-            # Define variables
-            text = input_field.get()
-            dialog = self.manual_text_input_window
-
-            # Validate text
-            if not text.isdigit() or len(text) != 2 or int(text) > 59:
-                # execute code here for when text is not in "SS" format
-                self.logger.warning(
-                    "OCR detected text does not follow the expected format. Manual input is not in the correct format. The value will be set to an arbitrary 00.")
-                text = '00'
-            else:
-                self.logger.debug("OCR detected text does not follow the expected format. Resolved manually.")
-            self.sec_OCR = text
-            while True:
-                try:
-                    if dialog.winfo_exists():
-                        dialog.quit()
-                        dialog.destroy()
-                        break
-                except:
-                    time.sleep(0.1)
-                    break
-
-        # Define variables
-        root = self.main_window
-
-        # Loop until the main window is created
-        while True:
-            try:
-                if root.winfo_exists():
-                    break
-            except:
-                time.sleep(0.1)
-
-        # Create the dialog window
-        dialog = tk.Toplevel(root)
-        self.manual_text_input_window = dialog
-        try:
-            screen_width = dialog.winfo_screenwidth()
-            screen_height = dialog.winfo_screenheight()
-        except:
-            screen_width = 1920
-            screen_height = 1080
-
-        dialog.wm_attributes("-topmost", 1)
-        dialog.title("Time Input")
-
-        # convert frame to tkinter image
-        self.text_roi = (self.x_coordinate, self.y_coordinate, self.width, self.height)
-        x, y, w, h = self.text_roi
-        img_frame_width = min(screen_width // 2, w * 2)
-        img_frame_height = min(screen_height // 2, h * 2)
-        frame = frame[y:y + h, x:x + w]
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (img_frame_width, img_frame_height), Image.LANCZOS)
-        img = Image.fromarray(img)
-        img = ImageTk.PhotoImage(img)
-        img_width = img.width()
-        img_height = img.height()
-
-        # Add image frame containing the video frame
-        img_frame = tk.Frame(dialog, width=img_width, height=img_height)
-        img_frame.pack(side=tk.TOP, pady=(0, 0))
-        img_frame.pack_propagate(0)
-
-        # Add image to image frame
-        img_label = tk.Label(img_frame, image=img)
-        img_label.pack(side=tk.TOP, pady=(0, 0))
-
-        # Add label
-        text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
-        text_field.insert(tk.END,
-                          "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
-        text_field.configure(state="disabled", highlightthickness=1, relief="flat", background=dialog.cget('bg'))
-        text_field.tag_configure("center", justify="center")
-        text_field.tag_add("center", "1.0", "end")
-        text_field.pack(side=tk.TOP, padx=(0, 0))
-        label = tk.Label(dialog, text="Enter text", font=("Arial", 10), background=dialog.cget('bg'))
-        label.pack(pady=2)
-
-        # Add input field
-        j = 0
-        input_field = tk.Entry(dialog, font=("Arial", 10), width=4)
-        input_field.pack(pady=2)
-        input_field.bind("<Return>", lambda j=j: submit_time(input_field))
-        input_field.focus()
-
-        # Add submit button
-        submit_button = tk.Button(dialog, text="Submit", font=("Arial", 10),
-                                  command=lambda j=j: submit_time(input_field))
-        submit_button.pack(pady=2)
-
-        # Position the window
-        dialog_width = dialog.winfo_reqwidth() + img_frame_width
-        dialog_height = dialog.winfo_reqheight() + img_frame_height
-        dialog_pos_x = int((screen_width // 2) - (img_frame_width // 2))
-        dialog_pos_y = 0
-        dialog.geometry(f"{dialog_width}x{dialog_height}+{dialog_pos_x}+{dialog_pos_y}")
-
-        # Start the dialog
-        dialog.mainloop()
-
-        # When dialog is closed
-        return_time = self.sec_OCR
-        if len(return_time) > 0:
-            success = True
-        else:
-            success = False
-        return return_time, success
-
-######################################### EXTRACT DATA FROM EXCEL ######################################################
-
-    def evaluate_string_formula(self, cell):
-
-        # If the cell contains a number, return the value as is
-        if isinstance(cell, (int, float)):
-            return cell
-        # If the cell contains an Excel formula, use openpyxl to evaluate it
-        elif cell.startswith('='):
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws['A1'].value = cell
-            value = ws['A1'].value
-            wb.close()
-            return value
-        # If the cell contains text, return the text as is
-        else:
-            return cell
-
-    def load_excel_table(self, file_path):
-
-        # The default values of cols to be extracted are:
-        # 0 - A - Year
-        # 1 - B - Month - !
-        # ...
-        # 5 - F - Seconds
-        # 15 - P - Visitor arrival - filter column
-        # 18 - S - Visit duration in seconds
-        # 19 - T - Time of departure - Hours
-        # 20 - U - Time of departure - Minutes
-        # 21 - V - Time of departure - Seconds
-        # 23 - X - Insect species
-        # 24 - Y - Insect Order
-
-        # Define logger
-        self.logger.debug(f"Running function load_excel_table({file_path})")
-
-        # Read the Excel file, skipping the first two rows
-        cols: list[int] = [0, 1, 2, 3, 4, 5, 15, 18, 19, 20, 21, 23, 24]
-        converters: Dict[int, Callable] = {0: self.evaluate_string_formula, 1: self.evaluate_string_formula,
-                                           2: self.evaluate_string_formula, 3: self.evaluate_string_formula,
-                                           4: self.evaluate_string_formula, 18: self.evaluate_string_formula}
-        try:
-            df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
-                               converters=converters)
-        except ValueError as e:
-            self.logger.error(f"Error reading Excel file {file_path}. Error message: {e}")
-
-            # Open the Excel workbook using xlwings
-            wb = xw.Book(file_path)
-            sheet = wb.sheets[0]
-
-            # Remove any filters
-            if sheet.api.AutoFilterMode:
-                sheet.api.AutoFilterMode = False
-
-            # Save to temporary file
-            utils.create_dir("resources/exc")
-            temp_file_path = os.path.join("resources/exc", "temp.xlsx")
-            wb.save(temp_file_path)
-            wb.close()
-
-            # Read with pandas
-            try:
-                df = pd.read_excel(temp_file_path, usecols=cols, skiprows=2, header=None,
-                                   converters=converters)
-            except ValueError as e:
-                self.logger.error(
-                    f"Attempted to fix errors in Excel file {file_path}. Attempt failed. Error message: {e}. Please fix the errors manually and try again.")
-                return None
-            self.logger.info(
-                f"Attempted to remove filters from Excel file {file_path}. Saved a copy of the file to {temp_file_path}")
-
-        self.logger.debug(f"Retrieved dataframe from Excel:\n{df}")
-
-        # Filter data frame based on whether the value in the column of index 6 (P - visitor arrival) is 1.
-        col_to_filter_by: int = 6
-        filtered_df = df[df.iloc[:, col_to_filter_by] == 1]
-
-        # Convert year to integer
-        col_year = 0
-        filtered_df.iloc[:, col_year] = filtered_df.iloc[:, col_year].astype(int)
-
-        # Convert the month abbreviations in column 2 to month numbers
-        col_month = 1
-        months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-                  'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
-        filtered_df.iloc[:, col_month] = filtered_df.iloc[:, col_month].replace(months)
-        filtered_df.iloc[:, col_month] = filtered_df.iloc[:, col_month].astype(int)
-        filtered_df = filtered_df.copy()
-
-        # Convert integers of hours/minutes/seconds into 02 format.
-        cols_time = [2,3,4,5,6]
-        for i in range(len(cols_time)):
-            j = cols_time[i]
-            filtered_df.iloc[:, j] = filtered_df.iloc[:, j].astype(int).apply(lambda x: f'{x:02}')
-
-        # Add another column and move the 11th
-        num_columns = filtered_df.shape[1]
-        filtered_df.loc[:, num_columns] = filtered_df.iloc[:, 11]
-        filtered_df.iloc[:, 12] = filtered_df.iloc[:, 12]
-        filtered_df.iloc[:, 11] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}", axis=1)
-
-        # Debug check
-        #print(f"Flow: Filtered dataframe:\n {filtered_df}")
-
-        # Take visit duration and the assembled timestamp
-        filtered_data = filtered_df.iloc[:, [7, 11]].values.tolist()
-
-
-        # Get the column names
-        column_1 = filtered_df.columns[12]
-        column_2 = filtered_df.columns[13]
-
-        # Count the number of NAs in each column
-        na_count_1 = filtered_df[column_1].isna().sum()
-        na_count_2 = filtered_df[column_2].isna().sum()
-
-        # Check which column has fewer NAs
-        if na_count_1 <= na_count_2:
-            chosen_column = column_1
-            other_column = column_2
-        else:
-            chosen_column = column_2
-            other_column = column_1
-
-        # Replace NAs in chosen_column with values from other_column if they are not NAs
-        visitor_id = filtered_df[[chosen_column, other_column]].copy()
-        visitor_id[chosen_column].fillna(visitor_id[other_column], inplace=True)
-        visitor_id = visitor_id[[chosen_column]].values.tolist()
-        #print(visitor_id)
-
-        annotation_data_array = filtered_data
-        utils.create_dir("resources/exc/")
-        filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
-        return annotation_data_array, visitor_id
-
-    def load_csv(self, file_path):
-
-        # Define logger
-        self.logger.debug(f"Running function load_csv({file_path})")
-
-        # Define the columns to extract
-        cols: list[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-        converters: Dict[int, Callable] = {0: self.evaluate_string_formula, 1: self.evaluate_string_formula,
-                                                    2: self.evaluate_string_formula,
-                                                    3: self.evaluate_string_formula, 4: self.evaluate_string_formula,
-                                                    6: self.evaluate_string_formula}
-
-        # Read the Excel file, skipping the first two rows - follow the custom format
-        try:
-            filtered_df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
-                                        converters=converters)
-        except ValueError as e:
-            self.logger.error(f"Error reading Excel file {file_path}. Error message: {e}")
-            # Open the Excel workbook using xlwings
-            wb = xw.Book(file_path)
-
-            sheet = wb.sheets[0]
-
-            # Remove any filters
-            if sheet.api.AutoFilterMode:
-                sheet.api.AutoFilterMode = False
-
-            # Save to temporary file
-            utils.create_dir("resources/exc")
-            temp_file_path = os.path.join("resources/exc", "temp.xlsx")
-            wb.save(temp_file_path)
-            wb.close()
-
-            # Read with pandas
-            try:
-                filtered_df = pd.read_excel(file_path, usecols=cols, skiprows=2, header=None,
-                                            converters=converters)
-            except ValueError as e:
-                self.logger.error(
-                    f"Attempted to fix errors in Excel file {file_path}. Attempt failed. Error message: {e}. Please fix the errors manually and try again.")
-                return None
-            self.logger.info(
-                f"Attempted to remove filters from Excel file {file_path}. Saved a copy of the file to {temp_file_path}")
-        self.logger.debug(f"Retrieved dataframe from Excel:\n{filtered_df}")
-
-        # Convert the month abbreviations in column 2(1) to month numbers
-        months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-                  'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
-        filtered_df.iloc[:, 1] = filtered_df.iloc[:, 1].replace(months)
-        filtered_df.iloc[:, 1] = filtered_df.iloc[:, 1].astype(int)
-        filtered_df = filtered_df.copy()
-        for i in range(5):
-            j = i + 1
-            filtered_df.iloc[:, j] = filtered_df.iloc[:, j].astype(int).apply(lambda x: f'{x:02}')
-        filtered_df.loc[:, 10] = filtered_df.iloc[:, 0:6].apply(lambda x: f"{x[0]}{x[1]}{x[2]}_{x[3]}_{x[4]}_{x[5]}",
-                                                                axis=1)
-        filtered_df.iloc[:, 0] = filtered_df.iloc[:, 0].astype(int)
-        self.logger.debug(f"Filtered dataframe:\n {filtered_df}")
-
-        # convert to list
-        filtered_data = filtered_df.iloc[:, [6, 10]].values.tolist()
-
-        annotation_data_array = filtered_data
-        utils.create_dir("resources/exc/")
-        filtered_df.to_excel("resources/exc/output_filtered_crop.xlsx", index=False)
-        return annotation_data_array
-
     ######################################### CROP FUNCTIONALITY ######################################################
-
-    def get_video_data(self, video_filepaths):
-
-        # Define logger
-        self.logger.debug(f"Running function get_video_data({video_filepaths})")
-
-        # loop through time annotations and open corresponding video file
-        # extract video data beforehand to save processing time
-        video_data = []
-        i: int
-        for i, filepath in enumerate(video_filepaths):
-            if filepath.endswith('.mp4'):
-                video_start_time, video_end_time = self.get_video_start_end_times(video_filepaths[i])
-                video_data_entry = [video_filepaths[i], video_start_time, video_end_time]
-                video_data.append(video_data_entry)
-        return video_data
 
     async def capture_crop(self, frame, point):
 
@@ -820,7 +321,7 @@ class ICCS(icvt.AppAncestor):
         while success:
             # Crop images every n-th frame
             if int(frame_count % frame_skip_loc) == 0:
-                for i, point in enumerate(self.points_of_interest_entry[index]):
+                for i, point in enumerate(self.points_of_interest_entry[index][0]):
                     if self.cropped_frames == 1:
                         crop_img, x1, y1, x2, y2 = await self.capture_crop(frame, point)
                         img_path = f"./{self.output_folder}/{self.prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
@@ -998,6 +499,25 @@ class ICCS(icvt.AppAncestor):
 
     def crop_engine(self):
 
+        def loading_bar():
+            chars = "/—\|"
+            index = 0
+
+            while not stop_loading:
+                sys.stdout.write("\r" + "Loading:  " + "|")
+                if index > 100:
+                    sys.stdout.flush()
+                    index = 0
+                time.sleep(0.1)
+                index += 1
+
+        # Create a flag to stop the loading bar
+        stop_loading = False
+
+        # Start the loading bar in a separate thread
+        loading_thread = threading.Thread(target=loading_bar)
+        loading_thread.start()
+
         # Define logger
         self.logger.debug("Running function crop_engine()")
 
@@ -1008,15 +528,25 @@ class ICCS(icvt.AppAncestor):
         result = utils.ask_yes_no("Do you want to start the cropping process?")
         if result:
             self.logger.info("Initializing the cropping engine...")
-            if len(self.points_of_interest_entry[0]) == 0:
-                messagebox.showinfo("Warning", "No points of interest selected. Please select at least one POI.")
+
+            # Check if some ROIs were selected
+            if len(self.points_of_interest_entry[0][0]) == 0:
+                messagebox.showinfo("Warning", "No regions of interest selected. Please select at least one ROI.")
                 self.reload(True, False)
                 return
+
+            # Define arrays
             valid_annotations_array = []
             valid_annotation_data_entry = []
+
+            # Close window and start cropping
             self.logger.debug(f"Start cropping on the following videos: {self.video_filepaths}")
             root.withdraw()
+
+            # This code is for cases when cropping runs according to either watchers, or croplog Excel files
             if not self.crop_mode == 3:
+
+                # Check validity of paths
                 video_ok = utils.check_path(self.video_folder_path, 0)
                 excel_ok = utils.check_path(self.annotation_file_path, 1)
                 if not video_ok or not excel_ok:
@@ -1024,46 +554,50 @@ class ICCS(icvt.AppAncestor):
                                         f"Unspecified path to a video folder or a valid Excel file.")
                     self.reload(True, False)
                     return
+
+                # Gather video and excel data - Watcher file
                 if self.crop_mode == 1:
-                    video_data = self.get_video_data(self.video_filepaths)
-                    annotation_data_array, visitor_id = self.load_excel_table(self.annotation_file_path)
+
+                    # Load data from excel
+                    excel = anno_data.Annotation_watcher_file(self.annotation_file_path, True, True, True, True)
+                    annotation_data_array = excel.dataframe.loc[:, ['duration', 'ts']].values.tolist()
+                    visitor_id = excel.dataframe.loc[:, ['vis_id']].values.tolist()
+
+                # Gather video and excel data - Croplog file
                 if self.crop_mode == 2:
-                    annotation_data_array = self.load_csv(self.annotation_file_path)
+
+                    # Load data from excel
+                    excel = anno_data.Annotation_custom_file(self.annotation_file_path)
+                    annotation_data_array = excel.dataframe.loc[:, ['duration', 'ts']].values.tolist()
+
+                # If no annotations were extracted end cropping process
                 if annotation_data_array is None:
                     messagebox.showinfo("Warning",
                                         f"Attempted to fix errors in the selected Excel file. Attempt failed. Please fix the errors manually and try again.")
                     self.reload(True, False)
                     return
-                if self.crop_mode == 2:
-                    video_filepaths_temp = self.video_filepaths
-                    self.video_filepaths = []
-                    for index, list in enumerate(annotation_data_array):
-                        for filepath in video_filepaths_temp:
-                            filename = os.path.basename(filepath)  # get just the filename from the full path
-                            if annotation_data_array[index][1][:-9] in filename:
-                                if datetime.timedelta() <= datetime.datetime.strptime(
-                                        annotation_data_array[index][1][-8:-3], '%H_%M') - datetime.datetime.strptime(
-                                    filename[-9:-4], '%H_%M') <= datetime.timedelta(minutes=15):
-                                    self.video_filepaths.append(filepath)
-                    video_data = self.get_video_data(self.video_filepaths)
+
+                # Filter video filepaths to only those relevant for the annotations that are to be processed
+                sorted_video_filepaths = self.get_relevant_video_paths(self.video_filepaths, annotation_data_array)
+
+                # Get video data
+                video_data = self.get_video_data(sorted_video_filepaths)
+
+                # Log the information that are fed into the rest of the engine
                 self.logger.debug(f"Start cropping according to the following annotations: {annotation_data_array}")
                 self.logger.debug(f"Start cropping with the following video data: {video_data}")
-                for index, list in enumerate(annotation_data_array):
-                    self.logger.debug(' '.join(["Flow: Annotation number:", str(index + 1)]))
-                    annotation_time = pd.to_datetime(annotation_data_array[index][1], format='%Y%m%d_%H_%M_%S')
-                    for i, list in enumerate(video_data):
-                        self.logger.debug(f"{video_data[i][1]} <= {annotation_time} <= {video_data[i][2]}")
-                        if video_data[i][1] <= annotation_time <= video_data[i][2]:
-                            for each in range(len(annotation_data_array[index])):
-                                valid_annotation_data_entry.append(annotation_data_array[index][each])
-                            for each in range(3):
-                                valid_annotation_data_entry.append(video_data[i][each])
-                            if self.crop_mode == 1:
-                                valid_annotation_data_entry.append(visitor_id[index][0])
-                            self.logger.debug(f"Flow: Relevant annotations: {valid_annotation_data_entry}")
-                            valid_annotations_array.append(valid_annotation_data_entry)
-                            valid_annotation_data_entry = []
-                if self.filter_visitors == 1:
+
+                # Construct the valid annotation data array which contains visit data coupled with the path to the
+                # video containing the visit
+                valid_annotations_array = self.construct_valid_annotation_array(annotation_data_array, video_data)
+
+                # If following Watchers file append also visitor id
+                if self.crop_mode == 1:
+                    for annotation, vis_id in zip(valid_annotations_array, visitor_id):
+                        annotation += vis_id
+
+                # If relevant allow user to choose to filter the visits by visitor type.
+                if self.filter_visitors == 1 and self.crop_mode == 1:
                     self.filter_array_by_visitors(valid_annotations_array)
                     if len(self.filtered_array) > 0:
                         valid_annotations_array = self.filtered_array
@@ -1071,36 +605,80 @@ class ICCS(icvt.AppAncestor):
                         self.logger.info("No visitors of the selected type found.")
                         self.reload(True, False)
                         return
+
+                # Stop the loading bar, set the flag to True
+                stop_loading = True
+                # Wait for the loading thread to finish
+                loading_thread.join()
+
+                # Process the visits and generate cropped images
                 for index in range(len(valid_annotations_array)):
                     self.logger.info(f"Processing visit {index+1}")
+
+                    # Define index which will be shared to sync the stage of the process
                     self.visit_index = index
-                    annotation_time = pd.to_datetime(valid_annotations_array[index][1], format='%Y%m%d_%H_%M_%S')
-                    annotation_offset = (annotation_time - valid_annotations_array[index][3]).total_seconds()
-                    self.cap = cv2.VideoCapture(valid_annotations_array[index][2])
+
+                    # Define the variables
+                    visit_duration, visit_timestamp, video_filepath, video_start_time, *_ = valid_annotations_array[index]
+
+                    # Turn timestamp into datetime and calculate how many seconds from the start_time of the video recording does the visit take place
+                    visit_time = pd.to_datetime(visit_timestamp, format='%Y%m%d_%H_%M_%S')
+                    visit_time_from_start = (visit_time - video_start_time).total_seconds()
+
+                    # Define shared cap to open the video filepath
+                    self.cap = cv2.VideoCapture(video_filepath)
+
+                    # Calculat the total number of video frames, fps ... and figure out where t oset the cap and read a frame
                     total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-                    self.visit_duration = (min(((annotation_offset * self.fps) + (int(valid_annotations_array[index][0]) * self.fps)),
-                                          total_frames) - (annotation_offset * self.fps)) // self.fps
-                    frame_number_start = int(annotation_offset * self.fps)
+
+                    # The actual duration is taken as limited by the end of the video, therefore cropping wont carry on for longer than one entire video file.
+                    self.visit_duration = (min(((visit_time_from_start * self.fps) + (int(visit_duration) * self.fps)),
+                                          total_frames) - (visit_time_from_start * self.fps)) // self.fps
+
+                    # First frame to capture - start of the visit
+                    frame_number_start = int(visit_time_from_start * self.fps)
+
+                    # Read the frame
                     self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                     success, frame = self.cap.read()
+
+                    # Iterate over the list of lists to find which points of interest entry index to summon for each visit-video combo
+                    roi_index = 0
+                    for ix, sublist in enumerate(self.points_of_interest_entry):
+                        if sublist[1] == video_filepath:
+                            # Found the specific filepath
+                            roi_index = ix
+                            break
+                    else:
+                        # Filepath not found in any of the nested lists
+                        self.logger.warning("No ROI entry found for a video file. Defaults to index 0")
+
+                    # Generate frames and get back their paths
                     img_paths = asyncio.run(
-                        self.generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
-                                        self.video_filepaths.index(valid_annotations_array[index][2]), frame_number_start))
-                    # loop.close()
-                    # img_paths = generate_frames(frame, success, os.path.basename(valid_annotations_array[index][2]),
-                    # video_filepaths.index(valid_annotations_array[index][2]))
+                        self.generate_frames(frame, success, os.path.basename(video_filepath),
+                                        roi_index, frame_number_start))
+
+                    # If relevant preprocess the images using yolo
                     if self.yolo_processing == 1:
                         asyncio.run(self.yolo_preprocessing(img_paths, valid_annotations_array, index))
+
+            # This is for when the crop_mode is 3 and no annotation file is supplied
             else:
+
+                # Check validy of paths
                 video_ok = utils.check_path(self.video_folder_path, 0)
                 if not video_ok:
                     messagebox.showinfo("Warning",
                                         f"Unspecified path to a video folder.")
                     self.reload(True, False)
                     return
+
+                # The whole frame setings is artificially altered to allow for whole frame generation - messy
                 orig_wf = self.whole_frame
                 self.whole_frame = 1
+
+                # Starting from the second frame of every video frames are generated.
                 for i, filepath in enumerate(self.video_filepaths):
                     self.cap = cv2.VideoCapture(self.video_filepaths[i])
                     self.fps = self.cap.get(cv2.CAP_PROP_FPS)
@@ -1110,6 +688,8 @@ class ICCS(icvt.AppAncestor):
                     success, frame = self.cap.read()
                     img_paths = self.generate_frames(frame, success, os.path.basename(self.video_filepaths[i]), i, frame_number_start)
                 self.whole_frame = orig_wf
+
+        # When done, reload the application
         self.reload(True, False)
 
     def sort_engine(self):
@@ -1576,7 +1156,7 @@ class ICCS(icvt.AppAncestor):
         fields = []
         outer_frame = tk.Frame(window, pady=20)
         outer_frame.pack(side=tk.TOP, fill=tk.BOTH)
-        for i in range(15):
+        for i in range(len(label_text)):
             label = tk.Label(outer_frame, text=f"{label_text[i]}")
             label.grid(row=i, column=0, padx=10)
             labels.append(label)
@@ -1683,23 +1263,23 @@ class ICCS(icvt.AppAncestor):
                 if flags & cv2.EVENT_FLAG_SHIFTKEY:
                     closest_point = None
                     closest_distance = float('inf')
-                    for point in self.points_of_interest_entry[index]:
+                    for point in self.points_of_interest_entry[index][0]:
                         distance = math.sqrt((x - point[0]) ** 2 + (y - point[1]) ** 2)
                         if distance < closest_distance:
                             closest_point = point
                             closest_distance = distance
                     if closest_distance < 30:
-                        self.points_of_interest_entry[index].remove(closest_point)
+                        self.points_of_interest_entry[index][0].remove(closest_point)
                     self.logger.debug(f"Retrieved POIs: {self.points_of_interest_entry}")
                     cv2.destroyAllWindows()
                 elif flags & cv2.EVENT_FLAG_CTRLKEY and flags & cv2.EVENT_FLAG_ALTKEY:
-                    self.points_of_interest_entry[index] = []
+                    self.points_of_interest_entry[index][0] = []
                     if index in self.modified_frames:
                         self.modified_frames.remove(index)
                     cv2.destroyAllWindows()
                 else:
                     if not mode == 0:
-                        self.points_of_interest_entry[index].append((x, y))
+                        self.points_of_interest_entry[index][0].append((x, y))
                     else:
                         self.points_of_interest_entry.append((x, y))
                     self.logger.debug(f"Retrieved POIs: {self.points_of_interest_entry}")
@@ -1721,11 +1301,11 @@ class ICCS(icvt.AppAncestor):
 
         # Ask the user if they want to select additional points of interest
         while True:
-            original_points = self.points_of_interest_entry[index].copy()
+            original_points = self.points_of_interest_entry[index][0].copy()
             frame = frame_tmp.copy()
 
             # Draw a rectangle around the already selected points of interest
-            frame = self.draw_roi_offset_boundaries(frame, self.points_of_interest_entry[index], dict_of_extremes_to_draw, True,
+            frame = self.draw_roi_offset_boundaries(frame, self.points_of_interest_entry[index][0], dict_of_extremes_to_draw, True,
                                                True, True)
 
             # Display the image with the rectangles marking the already selected points of interest
@@ -1777,18 +1357,18 @@ class ICCS(icvt.AppAncestor):
         # the edit, then make it also inherit the newly edited ones. Otherwise that is when there is a different set of POIs
         # do not propagate the changes.
         for each in range(index + 1, len(self.points_of_interest_entry)):
-            if len(self.points_of_interest_entry[each]) == 0:
-                self.points_of_interest_entry[each] = self.points_of_interest_entry[index].copy()
+            if len(self.points_of_interest_entry[each][0]) == 0:
+                self.points_of_interest_entry[each][0] = self.points_of_interest_entry[index][0].copy()
             else:
-                if self.points_of_interest_entry[each] == original_points:
-                    self.points_of_interest_entry[each] = self.points_of_interest_entry[index].copy()
+                if self.points_of_interest_entry[each][0] == original_points:
+                    self.points_of_interest_entry[each][0] = self.points_of_interest_entry[index][0].copy()
                 else:
                     break
         first = 1
         for each in range(index, len(self.video_filepaths)):
             first = first - 1
             if first >= 0 and (
-                    index == 0 or not self.points_of_interest_entry[max(index - 1, 0)] == self.points_of_interest_entry[index]):
+                    index == 0 or not self.points_of_interest_entry[max(index - 1, 0)][0] == self.points_of_interest_entry[index][0]):
                 self.modified_frames.append(each)
             self.update_button_image(self.frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
 
@@ -1802,7 +1382,7 @@ class ICCS(icvt.AppAncestor):
         frame = frame.copy()
 
         # Draw roi area guides and offset overlap
-        frame = self.draw_roi_offset_boundaries(frame, self.points_of_interest_entry[index], {
+        frame = self.draw_roi_offset_boundaries(frame, self.points_of_interest_entry[index][0], {
             'u_l': -1,
             'u_r': -1,
             'b_l': -1,
@@ -1810,9 +1390,9 @@ class ICCS(icvt.AppAncestor):
         }, True, False, True)
 
         if (first >= 0 or index in self.modified_frames) and (
-                (index == 0 and not len(self.points_of_interest_entry[0]) == 0) or not self.points_of_interest_entry[
-                                                                                      max(index - 1, 0)] ==
-                                                                                  self.points_of_interest_entry[index]):
+                (index == 0 and not len(self.points_of_interest_entry[0][0]) == 0) or not self.points_of_interest_entry[
+                                                                                      max(index - 1, 0)][0] ==
+                                                                                  self.points_of_interest_entry[index][0]):
             # Define the ROI
             frame = cv2.resize(frame, (276, 156), interpolation=cv2.INTER_AREA)
             height, width, channels = frame.shape
@@ -1934,6 +1514,7 @@ class ICCS(icvt.AppAncestor):
 
         # Confirm with the user if they want to load the settings
         result = utils.ask_yes_no("Do you want to load settings? This will overwrite any unsaved progress.")
+
         if result:
             if utils.check_path(self.video_folder_path, 0):
 

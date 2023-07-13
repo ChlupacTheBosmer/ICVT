@@ -1,9 +1,18 @@
 # This file contains the ancestral class of application used in ICVT. Any other tool can inherit from this.
 import utils
+import vid_data
 import os
 import tkinter as tk
+from tkinter import messagebox
 import logging
 import inspect
+from datetime import datetime, timedelta
+from datetime import timedelta
+import pandas as pd
+import sys
+import time
+import threading
+import random
 
 class AppAncestor:
     def __init__(self):
@@ -35,6 +44,83 @@ class AppAncestor:
 
     def get_excel_path(self, check, excel_type):
         self.annotation_file_path = utils.get_excel_path(self.annotation_file_path, check, self.video_folder_path, excel_type)
+
+    def load_videos(self):
+
+        # Define logger
+        self.logger.debug('Running function load_videos()')
+
+        self.video_filepaths = []
+
+        # Check if the video folder path is valid
+        if utils.check_path(self.video_folder_path, 0):
+            # Load videos
+            try:
+                self.video_filepaths = [
+                    os.path.join(self.video_folder_path, f)
+                    for f in os.listdir(self.video_folder_path)
+                    if f.endswith('.mp4')
+                ]
+            except OSError as e:
+                self.logger.error(f"Failed to load videos: {e}")
+                self.video_filepaths = []
+        else:
+            messagebox.showerror("Error", "Invalid video folder path")
+            self.video_filepaths = []
+
+    def get_video_data(self, video_filepaths):
+
+        # Define logger
+        self.logger.debug(f"Running function get_video_data({video_filepaths})")
+
+        # loop through time annotations and open corresponding video file
+        # extract video data beforehand to save processing time
+        video_data = []
+        i: int
+        for i, filepath in enumerate(video_filepaths):
+            if filepath.endswith('.mp4'):
+                video = vid_data.Video_file(video_filepaths[i], self.main_window)
+                video_data_entry = [video.filepath, video.start_time, video.end_time]
+                video_data.append(video_data_entry)
+        return video_data
+
+    def get_relevant_video_paths(self, video_filepaths, annotation_data_array):
+        new_video_filepaths = set()
+        for visit_data in annotation_data_array:
+            for filepath in video_filepaths:
+                if visit_data[1][:-9] in os.path.basename(filepath):
+                    time_difference = datetime.strptime(visit_data[1][-8:-3], '%H_%M') - datetime.strptime(
+                        filepath[-9:-4], '%H_%M')
+                    if timedelta() <= time_difference <= timedelta(minutes=15):
+                        new_video_filepaths.add(filepath)
+                        break  # Exit the inner loop after finding a match
+
+        # Convert the set back to a list
+        new_video_filepaths = list(new_video_filepaths)
+        return new_video_filepaths
+
+    def construct_valid_annotation_array(self, annotation_data_array, video_data):
+        # Iterate over annotation_data_array along with the index and construct the valid annotation data array which
+        # contains visit data coupled with the path to the video containing the visit
+        valid_annotations_array = []
+        for index, annotation_data in enumerate(annotation_data_array):
+            # Get the annotation time
+            annotation_time = pd.to_datetime(annotation_data[1], format='%Y%m%d_%H_%M_%S')
+
+            # Find the corresponding video data entry
+            relevant_video_data = next(
+                (video_data_entry for video_data_entry in video_data if video_data_entry[1] <= annotation_time <= video_data_entry[2]),
+                None)
+
+            if relevant_video_data:
+                valid_annotation_data_entry = annotation_data + relevant_video_data
+
+                self.logger.debug(f"Relevant annotations: {valid_annotation_data_entry}")
+                valid_annotations_array.append(valid_annotation_data_entry)
+
+            # Clear the list if no longer needed
+            valid_annotation_data_entry = []
+        return valid_annotations_array
 
     def open_main_window(self):
 
@@ -70,13 +156,21 @@ class AppAncestor:
         except:
             logger.debug("Unexpected, window destroyed before reference.")
 
+    def loading_bar(self):
+        self.loading_progress = 0
+        self.stop_loading = False
+        while not self.stop_loading:
+            index = int(self.loading_progress//1)
+            bar = "█" * (index) + "▒" * (100 - index)
+            sys.stdout.write("\r" + "Loading:  " + bar)
+            if not index == 100:
+                self.loading_progress += random.uniform(0.1, 1)
+                time.sleep(0.1)
+            else:
+                time.sleep(0.1)
+        sys.stdout.flush()
+
     def log_define(self):
-
-        def get_caller_name():
-            frame = inspect.currentframe().f_back
-            module = inspect.getmodule(frame)
-            return module.__name__ if module else '__main__'
-
 
         # Create a logger instance
         logger = logging.getLogger(__name__)
@@ -85,7 +179,6 @@ class AppAncestor:
         # Create a file handler that logs all messages, and set its formatter
         file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
-        caller_name = get_caller_name()
         formatter = logging.Formatter('%(asctime)s - %(filename)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
