@@ -9,7 +9,6 @@ import os
 import subprocess
 import re
 import cv2
-import pytesseract
 import configparser
 import tkinter as tk
 from tkinter import messagebox

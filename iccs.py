@@ -9,7 +9,6 @@ import subprocess
 import threading
 import re
 import cv2
-import pytesseract
 import configparser
 import tkinter as tk
 from tkinter import messagebox
@@ -54,10 +53,13 @@ class ICCS(icvt.AppAncestor):
 
         # Init basic instance variables and get config
         self.app_title = "Insect Communities Crop Suite"
+
+        # Create config and read file
         self.config = self.config_create()
-        self.loading_progress = 10
         self.config_read()
         self.loading_progress = 20
+
+        # Define variables
         self.scanned_folders = []
         self.dir_hierarchy = False
         self.loaded = False
@@ -76,15 +78,25 @@ class ICCS(icvt.AppAncestor):
         # Initiation functions - get directories and files
         self.scan_default_folders()
         self.loading_progress = 35
+
+        # If video folder path not supplied ask user to specify it
         while not self.check_path():
             self.get_video_folder(1)
         self.loading_progress = 40
-        self.get_excel_path(1, 1)
+
+        # Ask the user to specify the Excel path
+        self.get_excel_path(1, self.crop_mode)
         self.loading_progress = 45
+
+        # Load the videos
         self.load_videos()
         self.loading_progress = 55
+
+        # Construct ROI data
         self.reload_points_of_interest()
         self.loading_progress = 65
+
+        # Load video frames for buttons
         self.load_video_frames()
         self.loading_progress = 85
 
@@ -141,8 +153,9 @@ class ICCS(icvt.AppAncestor):
         return config
 
     def config_read(self):
-        logger = self.logger
-        logger.debug('Running function config_read()')
+
+        # Define logger
+        self.logger.debug('Running function config_read()')
 
         try:
             # Read settings from settings_crop.ini
@@ -172,7 +185,7 @@ class ICCS(icvt.AppAncestor):
             self.prefix = self.config['Crop settings'].get('filename_prefix', '').strip()
 
         except ValueError:
-            logger.warning('Invalid folder/file path or crop settings found in settings_crop.ini')
+            self.logger.warning('Invalid folder/file path or crop settings found in settings_crop.ini')
 
     def config_write(self):
 
