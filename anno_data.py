@@ -19,7 +19,6 @@ import utils
 import pandas as pd
 import os
 import openpyxl
-import logging
 import xlwings as xw
 from typing import Dict, Callable
 

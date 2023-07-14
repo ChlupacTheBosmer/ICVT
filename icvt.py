@@ -5,13 +5,11 @@ import os
 import tkinter as tk
 from tkinter import messagebox
 import logging
-import inspect
 from datetime import datetime, timedelta
 from datetime import timedelta
 import pandas as pd
 import sys
 import time
-import threading
 import random
 
 class AppAncestor:

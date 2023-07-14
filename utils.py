@@ -1,30 +1,10 @@
 # This file contains all shared functions and classes
 
-import pandas as pd
 import os
-import subprocess
-import re
-import cv2
-import configparser
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import filedialog
-from PIL import Image, ImageTk
-import pickle
-import datetime
-import sys
-import random
-import openpyxl
-import math
-import time
-from hachoir.metadata import extractMetadata
-from hachoir.parser import createParser
 import logging
-import xlwings as xw
-import keyboard
-from ultralytics import YOLO
-import torch
-import shutil
 
 def ask_yes_no(text):
     global logger
