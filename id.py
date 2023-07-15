@@ -13,46 +13,6 @@ from utils import check_path
 from utils import get_video_folder
 from utils import get_excel_path
 
-def config_read():
-    global video_folder_path
-    global annotation_file_path
-    global scan_folders
-    global config
-    global logger
-    logger.debug('Running function config_read()')
-    # load config or create the file
-    # Set default values
-    config = configparser.ConfigParser()
-    config['Resource Paths'] = {
-        'video_folder_path': '',
-        'annotation_file_path': ''
-    }
-    config['ICID settings'] = {
-        'Scan_default_folders': '1'
-    }
-
-    # Check if settings_crop.ini exists, and create it with default values if not
-    if not os.path.exists('settings_ICID.ini'):
-        with open('settings_ICID.ini', 'w', encoding='utf-8') as configfile:
-            config.write(configfile)
-
-    # Read settings from settings_crop.ini
-    config.read('settings_ICID.ini', encoding='utf-8')
-
-    # Get values from the config file
-    try:
-        video_folder_path = config['Resource Paths'].get('video_folder_path', '').strip()
-        annotation_file_path = config['Resource Paths'].get('annotation_file_path', '').strip()
-    except ValueError:
-        print('Error: Invalid folder/file path found in settings_ICID.ini')
-    # Get ICID settings values from config
-    try:
-        scan_folders = config['ICID settings'].get('Scan_default_folders', '0').strip()
-    except ValueError:
-        print('Error: Invalid ICID settings specified in settings_ICID.ini')
-    resources = [video_folder_path, annotation_file_path]
-    settings = [scan_folders]
-    return resources, settings
 
 def identify_insect(frame_image_path):
     url = "https://api.inaturalist.org/v1/identifications"
@@ -143,33 +103,6 @@ def id_insect():
         print(f"Insect Family: {family}")
     else:
         print("Unable to identify the insect.")
-
-def log_write():
-    global logger
-    # Create a logger instance
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-
-    # Create a file handler that logs all messages, and set its formatter
-    file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
-
-    # Create a console handler that logs only messages with level INFO or higher, and set its formatter
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
-
-    # Write log messages
-    # logger.debug('This message will be written to the file only.')
-    # logger.info('This message will be written to both the file and the console.')
-    # logger.warning('This message will be written to both the file and the console.')
-    # logger.error('This message will be written to both the file and the console.')
-    # logger.critical('This message will be written to both the file and the console.')
 
 def open_ICID_window():
     global zoom_level
@@ -296,17 +229,5 @@ def open_ICID_window():
     print('calling player.terminate.')
     player.terminate()
     print('terminate player.returned.')
-
-def initialise():
-    global video_folder_path
-    global annotation_file_path
-    global scaned_folders
-    global tree_allow
-    log_write()
-    logger.debug("Running function initialise()")
-    video_folder_path, annotation_file_path = scan_default_folders(scan_folders)
-    while not check_path(video_folder_path, 0):
-        video_folder_path, scaned_folders, tree_allow = get_video_folder(video_folder_path, 1)
-    annotation_file_path = get_excel_path(annotation_file_path, 1, video_folder_path, 1)
 
 

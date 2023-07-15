@@ -496,25 +496,6 @@ class ICCS(icvt.AppAncestor):
 
     def crop_engine(self):
 
-        def loading_bar():
-            chars = "/—\|"
-            index = 0
-
-            while not stop_loading:
-                sys.stdout.write("\r" + "Loading:  " + "|")
-                if index > 100:
-                    sys.stdout.flush()
-                    index = 0
-                time.sleep(0.1)
-                index += 1
-
-        # Create a flag to stop the loading bar
-        stop_loading = False
-
-        # Start the loading bar in a separate thread
-        loading_thread = threading.Thread(target=loading_bar)
-        loading_thread.start()
-
         # Define logger
         self.logger.debug("Running function crop_engine()")
 
@@ -602,11 +583,6 @@ class ICCS(icvt.AppAncestor):
                         self.logger.info("No visitors of the selected type found.")
                         self.reload(True, False)
                         return
-
-                # Stop the loading bar, set the flag to True
-                stop_loading = True
-                # Wait for the loading thread to finish
-                loading_thread.join()
 
                 # Process the visits and generate cropped images
                 for index in range(len(valid_annotations_array)):
