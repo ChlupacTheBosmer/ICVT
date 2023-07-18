@@ -38,32 +38,35 @@ class Video_file():
         video_filename = os.path.basename(self.filepath)
         self.logger.debug(' '.join(["Processing video file -", self.filepath]))
 
-        # Get start time, first from metadata and then from video filename and manually
-        start_time, success = self.get_metadata_from_video(self.filepath, "start")
+        # Get start time from metadata but because the metadata often contain wrong hour number, we will only use the seconds
+        start_time_meta, success = self.get_metadata_from_video(self.filepath, "start")
+
+        # If failed to get time from metadata obtain it manually
         if not success:
-            # Get the time from filename
-            parts = video_filename[:-4].split("_")
-            if len(parts) == 6:
-                start_time_minutes = "_".join([parts[3], parts[4], parts[5]])
-                self.logger.debug(' '.join(
-                    ["Video name format with prefixes detected. Extracted the time values -", start_time_minutes]))
-            else:
-                self.logger.error(
-                    "Some video file names have an unsupported format. Expected format is "
-                    "CO_LO1_SPPSPP1_YYYYMMDD_HH_MM. Script assumes format YYYYMMDD_HH_MM.")
-                start_time_minutes = video_filename[:-4]
 
             # Get the time in seconds manually
             frame = self.get_video_frame("start")
             start_time_seconds, success = self.get_text_manually(frame)
 
-            # Construct the string
-            start_time_str = '_'.join([start_time_minutes, start_time_seconds])
-            start_time = pd.to_datetime(start_time_str, format='%Y%m%d_%H_%M_%S')
         else:
-            start_time = pd.to_datetime(start_time, format='%Y%m%d_%H_%M_%S')
+            start_time_seconds = start_time_meta[-2:]
+
+        # Now get the date, hour and minute from the filename
+        filename_parts = video_filename[:-4].split("_")
+        start_time_minutes = "_".join(
+            [filename_parts[len(filename_parts) - 3], filename_parts[len(filename_parts) - 2],
+             filename_parts[len(filename_parts) - 1]])  # creates timestamp
+
+        # Construct the string
+        start_time_str = '_'.join([start_time_minutes, start_time_seconds])
+        print(start_time_str)
+        start_time = pd.to_datetime(start_time_str, format='%Y%m%d_%H_%M_%S')
+        print(start_time)
+
         # Get end time
-        end_time, success = self.get_metadata_from_video(self.filepath, "end")
+        end_time_meta, success = self.get_metadata_from_video(self.filepath, "end")
+
+        # If failed to get time from metadata obtain it manually
         if not success:
             # Get the time in seconds manually
             frame = self.get_video_frame("end")
@@ -74,10 +77,13 @@ class Video_file():
             end_time_seconds = str(int(end_time_seconds) % 60)
 
             # Construct the string
-            end_time_str = pd.to_datetime('_'.join([start_time_minutes, end_time_seconds]), format='%Y%m%d_%H_%M_%S')
-            end_time = end_time_str + pd.Timedelta(minutes=int(delta))
+            end_time_str = '_'.join([start_time_minutes, end_time_seconds])
+            end_time = pd.to_datetime(end_time_str, format='%Y%m%d_%H_%M_%S')
+            end_time = end_time + pd.Timedelta(minutes=int(delta))
         else:
-            end_time = pd.to_datetime(end_time, format='%Y%m%d_%H_%M_%S')
+            end_time_str = '_'.join(
+                [filename_parts[len(filename_parts) - 3], filename_parts[len(filename_parts) - 2], end_time_meta[-5:]])
+            end_time = pd.to_datetime(end_time_str, format='%Y%m%d_%H_%M_%S')
         return start_time, end_time
 
     def get_metadata_from_video(self, video_filepath, start_or_end):
