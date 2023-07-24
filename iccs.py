@@ -687,13 +687,6 @@ class ICCS(icvt.AppAncestor):
 ########################################################################################################################
 ########################################################################################################################
 
-    def load_icon(self, path, size: tuple = (50, 50)):
-        img = Image.open(path)
-        img = img.resize(size)
-        img = ImageTk.PhotoImage(img)
-        self.gui_imgs.append(img)
-        return img
-
     def open_main_window(self):
 
         # Define logger
@@ -1404,7 +1397,6 @@ class ICCS(icvt.AppAncestor):
                                    draw_overlap: bool):
 
         # Define variables
-        rectangles = []
         labels = ['BR', 'UL', 'UR', 'BL']
         offsets = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
         conditions = [dict_of_extremes_to_draw["b_r"] > 0, dict_of_extremes_to_draw["u_l"] > 0, dict_of_extremes_to_draw["u_r"] > 0, dict_of_extremes_to_draw["b_l"] > 0]
@@ -1413,6 +1405,9 @@ class ICCS(icvt.AppAncestor):
 
         # For each point draw desired shapes
         for point in list_of_ROIs:
+
+            # Define variables
+            rectangles = []
 
             # Draw basic roi area
             if draw_roi:
@@ -1450,7 +1445,7 @@ class ICCS(icvt.AppAncestor):
                     x_max = min(rect[1][0] for rect in rectangles)
                     y_max = min(rect[1][1] for rect in rectangles)
 
-                    # Calculate the coordinates of the overlapping area
+                    # Draw the rectangle of the overlap
                     cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
         return frame
 
