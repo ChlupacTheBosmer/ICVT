@@ -11,6 +11,7 @@ import pandas as pd
 import sys
 import time
 import random
+from PIL import Image, ImageTk
 
 class AppAncestor:
     def __init__(self):
@@ -24,6 +25,7 @@ class AppAncestor:
         self.scan_folders = "1"
         self.scanned_folders = []
         self.dir_hierarchy = False
+        self.gui_imgs = []
 
         # Load up functions to get the video and excel folders
         # self.scan_default_folders()
@@ -189,4 +191,16 @@ class AppAncestor:
         logger.addHandler(console_handler)
 
         return logger
+
+    def load_icon(self, path, size: tuple = (50, 50), master = None):
+        #print(path)
+        #print(master)
+        img = Image.open(path)
+        img = img.resize(size)
+        if not master == None:
+            img = ImageTk.PhotoImage(master=master, image=img)
+        else:
+            img = ImageTk.PhotoImage(img)
+        self.gui_imgs.append(img)
+        return img
 

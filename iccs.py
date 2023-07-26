@@ -633,7 +633,7 @@ class ICCS(icvt.AppAncestor):
                         self.generate_frames(frame, success, os.path.basename(video_filepath),
                                         roi_index, frame_number_start))
 
-                    print(img_paths)
+                    #print(img_paths)
 
                     # If relevant preprocess the images using yolo
                     if self.yolo_processing == 1:
