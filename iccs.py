@@ -298,8 +298,9 @@ class ICCS(icvt.AppAncestor):
         self.logger.debug(f"Running function generate_frames({index})")
 
         # Prepare name elements
-        species = tag[-27:-19].replace("_", "")
-        timestamp = tag[-18:-4]
+        filename_parts = tag[:-4].split("_")
+        recording_identifier = "_".join(filename_parts[:-3])
+        timestamp = "_".join(filename_parts[-3:])
 
         # Define local variables
         crop_counter = 1
@@ -321,11 +322,11 @@ class ICCS(icvt.AppAncestor):
                 for i, point in enumerate(self.points_of_interest_entry[index][0]):
                     if self.cropped_frames == 1:
                         crop_img, x1, y1, x2, y2 = await self.capture_crop(frame, point)
-                        img_path = f"./{self.output_folder}/{self.prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
+                        img_path = f"./{self.output_folder}/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
                         cv2.imwrite(img_path, crop_img)
                         img_paths.append(img_path)
                 if self.whole_frame == 1:
-                    img_path = f"./{self.output_folder}/whole frames/{self.prefix}{species}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
+                    img_path = f"./{self.output_folder}/whole frames/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
                     cv2.imwrite(img_path, frame)
                 crop_counter += 1
 
@@ -631,6 +632,8 @@ class ICCS(icvt.AppAncestor):
                     img_paths = asyncio.run(
                         self.generate_frames(frame, success, os.path.basename(video_filepath),
                                         roi_index, frame_number_start))
+
+                    print(img_paths)
 
                     # If relevant preprocess the images using yolo
                     if self.yolo_processing == 1:
