@@ -51,13 +51,21 @@ class Ancestor_annotation_file():
 
     def convert_months(self, cell):
         cell = self.evaluate_string_formula(cell)
-        months = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-                  'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+        months_short = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+                        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+        months_long = {'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06',
+                       'July': '07', 'August': '08', 'September': '09', 'October': '10', 'November': '11',
+                       'December': '12'}
         try:
-            cell = months.get(cell)  # Get corresponding value from dictionary
+            if cell in months_short:
+                cell = months_short.get(cell)  # Get corresponding value from dictionary
+            elif cell in months_long:
+                cell = months_long.get(cell)  # Get corresponding value from dictionary
+            else:
+                self.logger.warning("Invalid month abbreviation in Excel file")
+                cell = '01'
         except:
-            self.logger.warning("Invalid month abreviation in Excel file")
-            cell = 1
+            raise
         return cell
 
     def convert_year(self, cell):
