@@ -1,7 +1,7 @@
 import subprocess
 
 def install_packages(requirements_file):
-    with open(requirements_file) as f:
+    with open(requirements_file, encoding='utf-8-sig') as f:
         for line in f:
             package = line.strip()
             try:
