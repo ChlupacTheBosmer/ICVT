@@ -820,7 +820,7 @@ class ICCS(icvt.AppAncestor):
         self.off_image.put(("red",), to=(57, 0, 115, 56))
         self.auto_processing = tk.IntVar(value=0)
         self.auto_processing.set(0)
-        cb1 = tk.Checkbutton(toolbar, image=self.off_image, selectimage=self.on_image, indicatoron=False, onvalue=1, offvalue=0,
+        cb1 = tk.Checkbutton(toolbar, indicatoron=True, onvalue=1, offvalue=0,
                              variable=self.auto_processing)
         cb1.grid(row=0, column=3, padx=0, pady=5, sticky="ew")
 
