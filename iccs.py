@@ -832,7 +832,7 @@ class ICCS(icvt.AppAncestor):
             if len(result.boxes.data) > 0:
                 shutil.move(original_path, visitor_path)
                 with open(f"{label_path}.txt", 'w') as file:
-                    # Write the box_data to the file
+                    # Write the box_data to the fil
                     txt = []
                     lst = result.boxes.xywhn[0].tolist()
                     for item in lst:
