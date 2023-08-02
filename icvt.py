@@ -202,10 +202,10 @@ class AppAncestor:
         img1 = cv2.imdecode(numpyarray, cv2.IMREAD_UNCHANGED)
 
         # Convert the BGR image to RGB (Tkinter uses RGB format)
-        img1_rgb = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+        # img1_rgb = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
 
         # Convert the NumPy array to a PIL image
-        pil_img = Image.fromarray(img1_rgb)
+        pil_img = Image.fromarray(img1)
 
         img = pil_img.resize(size)
 
