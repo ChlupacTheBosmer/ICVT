@@ -34,7 +34,7 @@ class ICCS(icvt.AppAncestor):
         time.sleep(0.2)
         loading_thread = threading.Thread(target=self.loading_bar)
         loading_thread.start()
-        self.loading_progress = 1
+        self.loading_progress = 0
 
         # Init basic instance variables and get config
         self.app_title = "Insect Communities Crop Suite"
