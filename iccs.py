@@ -314,7 +314,8 @@ class ICCS(icvt.AppAncestor):
 
         # Loop through the video and crop y images every n-th frame
         frame_count = 0
-        img_paths = []
+        image_paths = []
+        image_details_dict = {}
 
         while success:
             # Crop images every n-th frame
@@ -322,12 +323,22 @@ class ICCS(icvt.AppAncestor):
                 for i, point in enumerate(self.points_of_interest_entry[index][0]):
                     if self.cropped_frames == 1:
                         crop_img, x1, y1, x2, y2 = await self.capture_crop(frame, point)
-                        img_path = f"./{self.output_folder}/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
-                        cv2.imwrite(img_path, crop_img)
-                        img_paths.append(img_path)
+                        frame_number = frame_number_start + frame_count
+                        roi_number = i + 1
+                        visit_number = crop_counter
+                        image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{roi_number}_{frame_number}_{visit_number}_{x1},{y1}_{x2},{y2}.jpg" #Now the output images will be ordered by the ROI therefore one will be able to delete whole segments of pictures.
+                        image_path = os.path.join(self.output_folder, image_name)
+                        #image_path = f"./{self.output_folder}/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
+                        cv2.imwrite(image_path, crop_img)
+                        image_paths.append(image_path)
+                        image_details_dict[image_name] = (image_path, frame_number, roi_number, visit_number)
                 if self.whole_frame == 1:
-                    img_path = f"./{self.output_folder}/whole frames/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
-                    cv2.imwrite(img_path, frame)
+                    frame_number = frame_number_start + frame_count
+                    visit_number = crop_counter
+                    image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{frame_number}_{visit_number}_whole.jpg"
+                    image_path = os.path.join(self.output_folder, "whole frames", image_name)
+                    #image_path = f"./{self.output_folder}/whole frames/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
+                    cv2.imwrite(image_path, frame)
                 crop_counter += 1
 
             # If the random frame skip interval is activated add a random number to the counter or add the set frame skip interval
@@ -352,7 +363,7 @@ class ICCS(icvt.AppAncestor):
                 break
 
         # Return the resulting list of image paths for future reference
-        return img_paths
+        return image_paths
 
     async def yolo_preprocessing(self, img_paths, valid_annotations_array, index):
 
@@ -552,12 +563,23 @@ class ICCS(icvt.AppAncestor):
                 # If no annotations were extracted end cropping process
                 if annotation_data_array is None:
                     messagebox.showinfo("Warning",
-                                        f"Attempted to fix errors in the selected Excel file. Attempt failed. Please fix the errors manually and try again.")
+                                        f"Attempted to fix errors in the selected Excel file. Attempt failed. Please fix"
+                                        f" the errors manually and try again.")
                     self.reload(True, False)
                     return
 
                 # Filter video filepaths to only those relevant for the annotations that are to be processed
                 sorted_video_filepaths = self.get_relevant_video_paths(self.video_filepaths, annotation_data_array)
+
+                # If no relevant videos are found inform the user and end the cropping process.
+                if sorted_video_filepaths is None:
+                    messagebox.showinfo("Warning",
+                                        f"Attempted to locate relevant video files but none were found. Please check "
+                                        f"whether you are using the right recordings for your selected annotations file "
+                                        f"and vice versa. If the problem persists check the Excel table for mismatch in "
+                                        f"the recorded date and the names of the video files.")
+                    self.reload(True, False)
+                    return
 
                 # Get video data
                 video_data = self.get_video_data(sorted_video_filepaths)
@@ -1342,9 +1364,6 @@ class ICCS(icvt.AppAncestor):
             self.update_button_image(self.frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
 
     def update_button_image(self, frame, i, j, first):
-
-        # Define logger
-        self.logger.debug(f"Running function update_button_image({i}, {j}, {first})")
 
         # Define variables
         index = j + ((i) * 6)
