@@ -195,8 +195,6 @@ class AppAncestor:
         return logger
 
     def load_icon(self, path, size: tuple = (50, 50), master = None):
-        #print(path)
-        #print(master)
 
         stream = open(path, "rb")
         bytes = bytearray(stream.read())
