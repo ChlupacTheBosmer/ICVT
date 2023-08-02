@@ -209,9 +209,11 @@ class AppAncestor:
         # Convert the NumPy array to a PIL image
         pil_img = Image.fromarray(img1_rgb)
 
+        img = pil_img.resize(size)
+
         # Create a Tkinter.PhotoImage from the PIL image
         img = ImageTk.PhotoImage(pil_img)
-        img = img.resize(size)
+
         if not master == None:
             img = ImageTk.PhotoImage(master=master, image=img)
         else:
