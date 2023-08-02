@@ -779,7 +779,7 @@ class ICCS(icvt.AppAncestor):
         toolbar.pack(side=tk.TOP, fill=tk.BOTH)
 
         # LEFT button
-        left_button = tk.Button(toolbar, image=self.load_icon("resources/img/la.png"), compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
+        left_button = tk.Button(toolbar, image=self.load_icon("resources/img/la.png", master = outer_frame), compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
                                 height=48, width=200, state=can_switch_folder("left"), command=lambda j=j: self.switch_folder("left"))
         left_button.grid(row=0, column=0, padx=0, pady=5, sticky="ew")
 
