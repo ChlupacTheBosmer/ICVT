@@ -32,8 +32,6 @@ class ICCS(icvt.AppAncestor):
 
         # Start the loading bar in a separate thread
         time.sleep(0.2)
-        loading_thread = threading.Thread(target=self.loading_bar)
-        loading_thread.start()
         self.loading_progress = 0
 
         # Init basic instance variables and get config
@@ -93,7 +91,6 @@ class ICCS(icvt.AppAncestor):
         self.loading_progress = 100
         time.sleep(0.5)
         self.stop_loading = True
-        loading_thread.join()
         self.open_main_window()
 
 
