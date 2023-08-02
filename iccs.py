@@ -19,6 +19,7 @@ import time
 from ultralytics import YOLO
 import shutil
 import asyncio
+import numpy as np
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):

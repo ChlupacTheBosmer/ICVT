@@ -12,6 +12,8 @@ import sys
 import time
 import random
 from PIL import Image, ImageTk
+import numpy as np
+import cv2
 
 class AppAncestor:
     def __init__(self):
@@ -195,7 +197,20 @@ class AppAncestor:
     def load_icon(self, path, size: tuple = (50, 50), master = None):
         #print(path)
         #print(master)
-        img = Image.open(path)
+
+        stream = open(path, "rb")
+        bytes = bytearray(stream.read())
+        numpyarray = np.asarray(bytes, dtype=np.uint8)
+        img1 = cv2.imdecode(numpyarray, cv2.IMREAD_UNCHANGED)
+
+        # Convert the BGR image to RGB (Tkinter uses RGB format)
+        img1_rgb = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+
+        # Convert the NumPy array to a PIL image
+        pil_img = Image.fromarray(img1_rgb)
+
+        # Create a Tkinter.PhotoImage from the PIL image
+        img = ImageTk.PhotoImage(pil_img)
         img = img.resize(size)
         if not master == None:
             img = ImageTk.PhotoImage(master=master, image=img)
