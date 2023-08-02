@@ -211,13 +211,10 @@ class AppAncestor:
 
         img = pil_img.resize(size)
 
-        # Create a Tkinter.PhotoImage from the PIL image
-        img = ImageTk.PhotoImage(pil_img)
-
         if not master == None:
-            img = ImageTk.PhotoImage(master=master, image=img)
+            img = ImageTk.PhotoImage(master=master, image=pil_img)
         else:
-            img = ImageTk.PhotoImage(img)
+            img = ImageTk.PhotoImage(pil_img)
         self.gui_imgs.append(img)
         return img
 
