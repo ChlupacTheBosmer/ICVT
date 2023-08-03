@@ -6,7 +6,7 @@ import pybboxes as pbx
 import PyQt5 as pyqt
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRubberBand
 from PyQt5.QtGui import QPixmap, QImage, QPen
-from PyQt5.QtWidgets import QGraphicsItem
+from PyQt5.QtWidgets import QGraphicsItem, QDesktopWidget
 from PyQt5.QtCore import Qt, QSize, QRectF, QPointF  # Import QRectF here
 from PyQt5.QtGui import QPainter, QFont, QFontMetrics
 from PyQt5.QtGui import QPalette, QColor, QBrush
@@ -104,7 +104,17 @@ class ImageViewer(QMainWindow):
                               1: "1. Lepidoptera"
                               }
         self.orders = [value for key, value in sorted(self.category_dict.items())]
+        self.device_pixel_ratio = QApplication.instance().devicePixelRatio()  # Get the device pixel ratio (DPR)
 
+        # Get the desktop widget
+        desktop = QDesktopWidget()
+
+        # Get the primary screen's geometry (size and position)
+        primary_screen = desktop.screenGeometry()
+
+        # Get the width and height of the primary screen
+        self.screen_width = primary_screen.width()
+        self.screen_height = primary_screen.height()
 
         # Load the image file path
         self.image_files = self.get_images()
@@ -206,8 +216,14 @@ class ImageViewer(QMainWindow):
 
         # Calculate the number of thumbnails that can fit in the window horizontally
         available_width = self.thumbnails_view.viewport().width()
-        thumbnail_width = 100
-        num_thumbnails = min(len(self.image_files), available_width // (thumbnail_width + self.thumbnail_padding))
+
+        thumbnail_width_dip = 150  # Use DIP value for thumbnail width
+        thumbnail_width = int(thumbnail_width_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
+        thumbnail_padding_dip = 10  # Use DIP value for thumbnail padding
+        self.thumbnail_padding = int(thumbnail_padding_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
+
+        #thumbnail_width = 100
+        num_thumbnails = int(min(len(self.image_files), available_width // (thumbnail_width + self.thumbnail_padding)))
 
         # Calculate the total width for the thumbnails including padding
         total_width = num_thumbnails * thumbnail_width + (num_thumbnails - 1) * self.thumbnail_padding
@@ -253,7 +269,7 @@ class ImageViewer(QMainWindow):
         img = self.open_image_uni(image_path)
 
         # Resize the image to the desired dimensions (e.g., 80x80 pixels)
-        desired_width, desired_height = 80, 80
+        desired_width, desired_height = 100, 100
         resized_img = cv2.resize(img, (desired_width, desired_height))
 
         # Convert the resized image to a QImage
@@ -432,8 +448,9 @@ class ImageViewer(QMainWindow):
         yolo_box = [float(parameter) for parameter in self.label_parameters_list[label_index][1:]]
         coco_box = pbx.convert_bbox(yolo_box, from_type="yolo", to_type="coco", image_size=(640, 640))
         view_width = self.view.viewport().width()
+        view_height = self.view.viewport().width()
         self.start_x = coco_box[0] + (view_width // 2) - (min(view_width, 640) // 2)
-        self.start_y = coco_box[1]
+        self.start_y = coco_box[1] + ((view_height // 2) - (min(view_height, 640) // 2))
         width = coco_box[2]
         height = coco_box[3]
         self.rubber_band.setGeometry(self.start_x, self.start_y, width, height)
@@ -545,7 +562,8 @@ class ImageViewer(QMainWindow):
 
                 # Add the label data
                 view_width = self.view.viewport().width()
-                coco_box = (self.start_x-((view_width // 2) - (min(view_width, 640) // 2)), self.start_y, width, height)
+                view_height = self.view.viewport().height()
+                coco_box = (self.start_x - ((view_width // 2) - (min(view_width, 640) // 2)), self.start_y - ((view_height // 2) - (min(view_height, 640) // 2)), width, height)
                 yolo_box = pbx.convert_bbox(coco_box, from_type="coco", to_type="yolo", image_size=(640, 640))
                 yolo_box = list(yolo_box)
                 yolo_box.insert(0, 0)
@@ -623,11 +641,15 @@ class ImageViewer(QMainWindow):
                 self.add_label_category_comboboxes()
 
             # Convert the image to QPixmap and display it in QGraphicsView
+
+            image_width_dip = self.screen_height // 1.7  # Use DIP value for thumbnail width
+            image_width = int(image_width_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
+
             height, width, _ = img.shape
             bytes_per_line = 3 * width
             q_img = QImage(img.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
             pixmap = QPixmap.fromImage(q_img)
-            pixmap = pixmap.scaledToWidth(640, Qt.SmoothTransformation)
+            pixmap = pixmap.scaledToWidth(image_width, Qt.SmoothTransformation)
             self.scene.clear()
             self.scene.addPixmap(pixmap)
 
