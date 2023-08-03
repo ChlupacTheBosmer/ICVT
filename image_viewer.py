@@ -217,8 +217,8 @@ class ImageViewer(QMainWindow):
         # Calculate the number of thumbnails that can fit in the window horizontally
         available_width = self.thumbnails_view.viewport().width()
 
-        thumbnail_width_dip = 300  # Use DIP value for thumbnail width
-        self.thumbnail_width = int(thumbnail_width_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
+        thumbnail_width_dip = 100  # Use DIP value for thumbnail width
+        self.thumbnail_width = int(thumbnail_width_dip * (self.device_pixel_ratio*2))  # Convert DIP to physical pixels
         thumbnail_padding_dip = 10  # Use DIP value for thumbnail padding
         self.thumbnail_padding = int(thumbnail_padding_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
 
