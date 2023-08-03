@@ -19,6 +19,7 @@ import time
 from ultralytics import YOLO
 import shutil
 import asyncio
+import numpy as np
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):
@@ -31,9 +32,7 @@ class ICCS(icvt.AppAncestor):
 
         # Start the loading bar in a separate thread
         time.sleep(0.2)
-        loading_thread = threading.Thread(target=self.loading_bar)
-        loading_thread.start()
-        self.loading_progress = 1
+        self.loading_progress = 0
 
         # Init basic instance variables and get config
         self.app_title = "Insect Communities Crop Suite"
@@ -92,7 +91,6 @@ class ICCS(icvt.AppAncestor):
         self.loading_progress = 100
         time.sleep(0.5)
         self.stop_loading = True
-        loading_thread.join()
         self.open_main_window()
 
 
@@ -781,12 +779,12 @@ class ICCS(icvt.AppAncestor):
         toolbar.pack(side=tk.TOP, fill=tk.BOTH)
 
         # LEFT button
-        left_button = tk.Button(toolbar, image=self.load_icon("resources/img/la.png"), compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
+        left_button = tk.Button(toolbar, image=self.load_icon("resources/img/la.png", master = outer_frame), compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
                                 height=48, width=200, state=can_switch_folder("left"), command=lambda j=j: self.switch_folder("left"))
         left_button.grid(row=0, column=0, padx=0, pady=5, sticky="ew")
 
         # MENU button
-        menu_button = tk.Button(toolbar, image=self.load_icon("resources/img/mn.png"), compound=tk.LEFT, text="Menu", padx=10, pady=5, height=48,
+        menu_button = tk.Button(toolbar, image=self.load_icon("resources/img/mn.png", master = outer_frame), compound=tk.LEFT, text="Menu", padx=10, pady=5, height=48,
                                 command=lambda j=j: self.open_menu())
         menu_button.grid(row=0, column=1, padx=0, pady=5, sticky="ew")
 
@@ -799,11 +797,11 @@ class ICCS(icvt.AppAncestor):
 
         # CROP_MODE buttons
         # create the radio buttons and group them together
-        rb1 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/1.png"), variable=self.selected_option, value=1, indicatoron=False,
+        rb1 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/1.png", master = outer_frame), variable=self.selected_option, value=1, indicatoron=False,
                              height=56, width=116, font=("Arial", 17), command=lambda j_=j: self.update_crop_mode(1))
-        rb2 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/2.png"), variable=self.selected_option, value=2, indicatoron=False,
+        rb2 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/2.png", master = outer_frame), variable=self.selected_option, value=2, indicatoron=False,
                              height=56, width=116, font=("Arial", 17), command=lambda j=j: self.update_crop_mode(2))
-        rb3 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/3.png"), variable=self.selected_option, value=3,
+        rb3 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/3.png", master = outer_frame), variable=self.selected_option, value=3,
                              indicatoron=False,
                              height=56, width=116, font=("Arial", 17), command=lambda j=j: self.update_crop_mode(3))
 
@@ -827,28 +825,28 @@ class ICCS(icvt.AppAncestor):
         cb1.grid(row=0, column=3, padx=0, pady=5, sticky="ew")
 
         # AUTO button
-        auto_button = tk.Button(toolbar, image=self.load_icon("resources/img/au.png"), compound=tk.LEFT, text="Automatic evaluation", padx=10,
+        auto_button = tk.Button(toolbar, image=self.load_icon("resources/img/au.png", master = outer_frame), compound=tk.LEFT, text="Automatic evaluation", padx=10,
                                 pady=5, height=48,
                                 command=lambda j=j: self.auto_processing.set(1 - self.auto_processing.get()))
         auto_button.grid(row=0, column=4, padx=0, pady=5, sticky="ew")
 
         # VIDEO FOLDER button
-        fl_button = tk.Button(toolbar, image=self.load_icon("resources/img/fl.png"), compound=tk.LEFT, text="Select video folder", padx=10, pady=5,
+        fl_button = tk.Button(toolbar, image=self.load_icon("resources/img/fl.png", master = outer_frame), compound=tk.LEFT, text="Select video folder", padx=10, pady=5,
                               height=48, command=lambda j=j: self.change_video_folder())
         fl_button.grid(row=0, column=5, padx=0, pady=5, sticky="ew")
 
         # EXCEL PATH button
-        et_button = tk.Button(toolbar, image=self.load_icon("resources/img/et.png"), compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
+        et_button = tk.Button(toolbar, image=self.load_icon("resources/img/et.png", master = outer_frame), compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
                               height=48, command=lambda j=j: self.change_excel_path())
         et_button.grid(row=0, column=6, padx=0, pady=5, sticky="ew")
 
         # OCR button
-        ocr_button = tk.Button(toolbar, image=self.load_icon("resources/img/ocr.png"), compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48,
+        ocr_button = tk.Button(toolbar, image=self.load_icon("resources/img/ocr.png", master = outer_frame), compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48,
                                width=100, command=lambda j=j: self.open_ocr_roi_gui(self.video_filepaths[0]))
         ocr_button.grid(row=0, column=7, padx=0, pady=5, sticky="ew")
 
         # RIGHT button
-        right_button = tk.Button(toolbar, image=self.load_icon("resources/img/ra.png"), compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
+        right_button = tk.Button(toolbar, image=self.load_icon("resources/img/ra.png", master = outer_frame), compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
                                  height=48, width=200, state=can_switch_folder("right"), command=lambda j=j: self.switch_folder("right"))
         right_button.grid(row=0, column=8, padx=0, pady=5, sticky="ew")
 
@@ -954,7 +952,7 @@ class ICCS(icvt.AppAncestor):
         bottom_left_panel.pack(side=tk.LEFT)
 
         # Create buttons
-        fl_button = tk.Button(bottom_left_panel, image=self.load_icon("resources/img/fl.png"), compound=tk.LEFT, text="", padx=10, pady=5, width=60,
+        fl_button = tk.Button(bottom_left_panel, image=self.load_icon("resources/img/fl.png", master = parent), compound=tk.LEFT, text="", padx=10, pady=5, width=60,
                               height=58,
                               command=lambda j=j: os.startfile(self.video_folder_path))
         fl_button.pack(side=tk.LEFT)
@@ -972,12 +970,12 @@ class ICCS(icvt.AppAncestor):
         bottom_right_panel.pack(side=tk.RIGHT)
 
         # Create buttons
-        et_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/et.png"), compound=tk.LEFT, text="", padx=10, pady=5, width=60,
+        et_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/et.png", master = parent), compound=tk.LEFT, text="", padx=10, pady=5, width=60,
                               height=58,
                               command=lambda j=j: os.startfile(self.annotation_file_path))
         et_button.pack(side=tk.RIGHT)
 
-        ef_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/ef.png"), compound=tk.LEFT, text="", padx=0, pady=5, width=60,
+        ef_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/ef.png", master = parent), compound=tk.LEFT, text="", padx=0, pady=5, width=60,
                               height=58,
                               command=lambda j=j: os.startfile(os.path.dirname(self.annotation_file_path)))
         ef_button.pack(side=tk.RIGHT)
@@ -995,19 +993,19 @@ class ICCS(icvt.AppAncestor):
         bottom_toolbar.pack(side=tk.TOP, fill=tk.BOTH)
 
         # Create buttons
-        save_button = tk.Button(bottom_toolbar, text="Save", image=self.load_icon("resources/img/sv_1.png"), compound=tk.LEFT, padx=10, pady=5,
+        save_button = tk.Button(bottom_toolbar, text="Save", image=self.load_icon("resources/img/sv_1.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.save_progress())
 
-        crop_button = tk.Button(bottom_toolbar, text="Crop", image=self.load_icon("resources/img/cr_1.png"), compound=tk.LEFT, padx=10, pady=5,
+        crop_button = tk.Button(bottom_toolbar, text="Crop", image=self.load_icon("resources/img/cr_1.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.crop_engine())
 
-        sort_button = tk.Button(bottom_toolbar, text="Sort", image=self.load_icon("resources/img/so.png"), compound=tk.LEFT, padx=10, pady=5,
+        sort_button = tk.Button(bottom_toolbar, text="Sort", image=self.load_icon("resources/img/so.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.sort_engine())
 
-        load_button = tk.Button(bottom_toolbar, text="Load", image=self.load_icon("resources/img/lo.png"), compound=tk.LEFT, padx=10, pady=5,
+        load_button = tk.Button(bottom_toolbar, text="Load", image=self.load_icon("resources/img/lo.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.load_progress())
 
