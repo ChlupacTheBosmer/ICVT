@@ -218,15 +218,15 @@ class ImageViewer(QMainWindow):
         available_width = self.thumbnails_view.viewport().width()
 
         thumbnail_width_dip = 300  # Use DIP value for thumbnail width
-        thumbnail_width = int(thumbnail_width_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
+        self.thumbnail_width = int(thumbnail_width_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
         thumbnail_padding_dip = 10  # Use DIP value for thumbnail padding
         self.thumbnail_padding = int(thumbnail_padding_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
 
         #thumbnail_width = 100
-        num_thumbnails = int(min(len(self.image_files), available_width // (thumbnail_width + self.thumbnail_padding)))
+        num_thumbnails = int(min(len(self.image_files), available_width // (self.thumbnail_width + self.thumbnail_padding)))
 
         # Calculate the total width for the thumbnails including padding
-        total_width = num_thumbnails * thumbnail_width + (num_thumbnails - 1) * self.thumbnail_padding
+        total_width = num_thumbnails * self.thumbnail_width + (num_thumbnails - 1) * self.thumbnail_padding
 
         # Load and display the thumbnails of the previous and next images
         self.start_index = self.current_index - num_thumbnails // 2  # Update the class-level start_index
@@ -239,7 +239,7 @@ class ImageViewer(QMainWindow):
 
                 # Create the QPixmap from the QImage
                 pixmap = QPixmap.fromImage(img)
-                pixmap = pixmap.scaledToWidth(thumbnail_width, Qt.SmoothTransformation)
+                pixmap = pixmap.scaledToWidth(self.thumbnail_width, Qt.SmoothTransformation)
 
                 # Determine if this thumbnail represents the current image
                 is_current = (i == self.current_index)
@@ -251,7 +251,7 @@ class ImageViewer(QMainWindow):
                 status = self.image_statuses.get(i, "None")
 
                 item = ThumbnailItem(pixmap, i, is_current, is_previous, status, self)
-                x_pos = (thumbnail_width + self.thumbnail_padding) * (i - self.start_index)
+                x_pos = (self.thumbnail_width + self.thumbnail_padding) * (i - self.start_index)
                 item.setPos(x_pos, 0)
                 self.thumbnails_scene.addItem(item)
                 self.thumbnails_dictionary[i] = item
@@ -269,7 +269,7 @@ class ImageViewer(QMainWindow):
         img = self.open_image_uni(image_path)
 
         # Resize the image to the desired dimensions (e.g., 80x80 pixels)
-        desired_width, desired_height = 100, 100
+        desired_width, desired_height = self.thumbnail_width, self.thumbnail_width
         resized_img = cv2.resize(img, (desired_width, desired_height))
 
         # Convert the resized image to a QImage
@@ -421,8 +421,8 @@ class ImageViewer(QMainWindow):
                 height = self.rubber_band.height()
                 view_width = self.view.viewport().width()
                 coco_box = (
-                self.rubber_band.x() - ((view_width // 2) - (min(view_width, 640) // 2)), self.rubber_band.y(), width, height)
-                yolo_box = pbx.convert_bbox(coco_box, from_type="coco", to_type="yolo", image_size=(640, 640))
+                self.rubber_band.x() - ((view_width // 2) - (min(view_width, self.image_width) // 2)), self.rubber_band.y(), width, height)
+                yolo_box = pbx.convert_bbox(coco_box, from_type="coco", to_type="yolo", image_size=(self.image_width, self.image_width))
                 yolo_box = list(yolo_box)
                 yolo_box.insert(0, 0)
                 self.label_parameters_list[self.label_edited_index] = yolo_box
@@ -446,11 +446,11 @@ class ImageViewer(QMainWindow):
 
         self.label_edited_index = label_index
         yolo_box = [float(parameter) for parameter in self.label_parameters_list[label_index][1:]]
-        coco_box = pbx.convert_bbox(yolo_box, from_type="yolo", to_type="coco", image_size=(640, 640))
+        coco_box = pbx.convert_bbox(yolo_box, from_type="yolo", to_type="coco", image_size=(self.image_width, self.image_width))
         view_width = self.view.viewport().width()
         view_height = self.view.viewport().width()
-        self.start_x = coco_box[0] + (view_width // 2) - (min(view_width, 640) // 2)
-        self.start_y = coco_box[1] + ((view_height // 2) - (min(view_height, 640) // 2))
+        self.start_x = coco_box[0] + (view_width // 2) - (min(view_width, self.image_width) // 2)
+        self.start_y = coco_box[1] + ((view_height // 2) - (min(view_height, self.image_width) // 2))
         width = coco_box[2]
         height = coco_box[3]
         self.rubber_band.setGeometry(self.start_x, self.start_y, width, height)
@@ -563,8 +563,8 @@ class ImageViewer(QMainWindow):
                 # Add the label data
                 view_width = self.view.viewport().width()
                 view_height = self.view.viewport().height()
-                coco_box = (self.start_x - ((view_width // 2) - (min(view_width, 640) // 2)), self.start_y - ((view_height // 2) - (min(view_height, 640) // 2)), width, height)
-                yolo_box = pbx.convert_bbox(coco_box, from_type="coco", to_type="yolo", image_size=(640, 640))
+                coco_box = (self.start_x - ((view_width // 2) - (min(view_width, self.image_width) // 2)), self.start_y - ((view_height // 2) - (min(view_height, self.image_width) // 2)), width, height)
+                yolo_box = pbx.convert_bbox(coco_box, from_type="coco", to_type="yolo", image_size=(self.image_width, self.image_width))
                 yolo_box = list(yolo_box)
                 yolo_box.insert(0, 0)
                 self.label_parameters_list.append(yolo_box)
@@ -643,13 +643,13 @@ class ImageViewer(QMainWindow):
             # Convert the image to QPixmap and display it in QGraphicsView
 
             image_width_dip = self.screen_height // 1.7  # Use DIP value for thumbnail width
-            image_width = int(image_width_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
+            self.image_width = int(image_width_dip * self.device_pixel_ratio)  # Convert DIP to physical pixels
 
             height, width, _ = img.shape
             bytes_per_line = 3 * width
             q_img = QImage(img.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
             pixmap = QPixmap.fromImage(q_img)
-            pixmap = pixmap.scaledToWidth(image_width, Qt.SmoothTransformation)
+            pixmap = pixmap.scaledToWidth(self.image_width, Qt.SmoothTransformation)
             self.scene.clear()
             self.scene.addPixmap(pixmap)
 
