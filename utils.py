@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import filedialog
 import logging
+import numpy as np
 
 def ask_yes_no(text):
     global logger
@@ -13,8 +14,6 @@ def ask_yes_no(text):
     return result
 
 def create_dir(path):
-    global logger
-    logger.debug(f'Running function create_dir({path})')
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -190,6 +189,12 @@ def get_excel_path(annotation_file_path, check, ini_dir, excel_type):
         #display message box that the crop mode does not require an annotation file
         messagebox.showinfo("Info", "The current mode does not require an annotation file.")
 
+def yolobbox2bbox(coords):
+    x, y, w, h = coords[:, 0], coords[:, 1], coords[:, 2], coords[:, 3]
+    x1, y1 = ((x - (w / 2)) * 640).astype(int), ((y - (h / 2)) * 640).astype(int)
+    x2, y2 = ((x + (w / 2)) * 640).astype(int), ((y + (h / 2)) * 640).astype(int)
+    box_width, box_height = x2 - x1, y2 - y1
+    return np.column_stack((x1, y1, x2, y2, box_width, box_height))
 
 def log_define():
     # Create a logger instance
