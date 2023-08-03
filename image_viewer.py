@@ -448,7 +448,7 @@ class ImageViewer(QMainWindow):
         yolo_box = [float(parameter) for parameter in self.label_parameters_list[label_index][1:]]
         coco_box = pbx.convert_bbox(yolo_box, from_type="yolo", to_type="coco", image_size=(self.image_width, self.image_width))
         view_width = self.view.viewport().width()
-        view_height = self.view.viewport().width()
+        view_height = self.view.viewport().height()
         self.start_x = coco_box[0] + (view_width // 2) - (min(view_width, self.image_width) // 2)
         self.start_y = coco_box[1] + ((view_height // 2) - (min(view_height, self.image_width) // 2))
         width = coco_box[2]
@@ -731,6 +731,12 @@ class ImageViewer(QMainWindow):
         self.selected_thumbnail_index = index
 
     def closeEvent(self, event):
+
+        # Write the label file
+        file_path = self.image_files[self.current_index]
+        txt_path = os.path.join(self.folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
+        self.write_label_file(txt_path)
+
         # When the program is about to be closed, move the images and txt files based on their status
 
         # Create 'ok' and 'wrong' directories if they don't exist
