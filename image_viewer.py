@@ -412,7 +412,7 @@ class ImageViewer(QMainWindow):
             selected_thumbnail.setStatus("None")
             self.image_statuses[self.current_index] = "None"
             self.next_image()
-        elif event.key() == Qt.Key_Enter:
+        elif event.key() == Qt.Key_Return:
             if self.resize_in_progress:
 
                 # Add the label data
