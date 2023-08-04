@@ -214,7 +214,7 @@ class Annotation_watcher_file(Ancestor_annotation_file):
                 cols += module_cols
                 converters.update(module_converters)
 
-        # Open the excel, resolve any issues and load datarame
+        # Open the excel, resolve any issues and load dataframe
         dataframe = self.load_excel_file(cols, converters)
 
         # Mapping dictionary for column renaming

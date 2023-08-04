@@ -67,6 +67,7 @@ class ICID(icvt.AppAncestor):
         self.player = None
         self.dir_hierarchy = False
         self.loading_progress = 25
+        self.gui_imgs = []
 
         # Initiation functions - get directories and files
         self.scan_default_folders()
@@ -140,6 +141,31 @@ class ICID(icvt.AppAncestor):
         except ValueError:
             self.logger.warning('Invalid folder/file path found in settings_ICID.ini')
 
+    def open_menu(self):
+        self.logger.debug(f'Running function open_menu()')
+        pass
+
+    def change_video_folder(self):
+        self.logger.debug(f'Running function change_video_folder()')
+
+        # # Set loaded to false as when video folder is changed, the GUI must be reloaded.
+        # self.loaded = False
+        #
+        # # Get new video folder and reload the GUI
+        # self.video_folder_path, self.scanned_folders, self.dir_hierarchy = utils.get_video_folder(self.video_folder_path, 0)
+        # self.reload(False, True)
+
+    def change_excel_path(self):
+
+        # Define logger
+        self.logger.debug(f'Running function change_video_folder()')
+
+        # # Get new Excel path
+        # self.annotation_file_path = utils.get_excel_path(self.annotation_file_path, 0, self.video_folder_path, self.crop_mode)
+        #
+        # # Reload the window with the new input
+        # self.reload(False, True)
+
     def open_main_window(self, time_of_visit, video_filepath):
 
         def set_window_geometry(window, width, height, x, y):
@@ -185,6 +211,90 @@ class ICID(icvt.AppAncestor):
         set_window_geometry(control_panel, root.winfo_screenwidth() // 4, root.winfo_screenheight(),
                             root.winfo_screenwidth() * 2 // 3 - 100, 0)
         control_panel.title("Control Panel")
+
+        top_toolbar = self.build_top_toolbar(control_panel)
+
+        # Label above the frame with black border
+        visit_info_label = tk.Label(control_panel, text="Visit info", font=("Helvetica", 12, "bold"))
+        visit_info_label.pack(pady=5)
+
+        # Create the frame for the visit info
+        visit_info_frame = tk.Frame(control_panel, borderwidth=2, relief="solid", bg="white")
+        visit_info_frame.pack(side=tk.TOP, padx=10, pady=10, fill="x")
+
+        # Labels for each input field
+        label_names = ["Start time", "Duration", "End time"]
+        entries = []
+
+        for i, label_name in enumerate(label_names):
+            label = tk.Label(visit_info_frame, text=label_name)
+            label.grid(row=0, column=i, padx=10, pady=5)
+
+            entry = tk.Entry(visit_info_frame)
+            entry.grid(row=1, column=i, padx=10, pady=5, sticky="ew")
+            entries.append(entry)
+
+            # Get the height of the green and red rectangles
+        rect_height = 20
+
+        def on_after():
+            width = visit_info_frame.winfo_width() - 30
+            print("Frame width:", width)
+
+            # Create the canvas for the time axis representation
+            canvas = tk.Canvas(visit_info_frame, width=width, height=20, bg="white")
+            canvas.grid(row=2, column=0, columnspan=3, padx=10, pady=20)
+
+            # Example of drawing the time axis representation
+            relevant_part_start = 100  # The starting point of the relevant part of the video
+            relevant_part_width = 50  # The width of the relevant part of the video
+
+            # Draw the green rectangle (time axis)
+            canvas.create_rectangle(0, 0, width, rect_height, fill="gray")
+
+            # Calculate the starting point and ending point of the red rectangle
+            relevant_part_end = relevant_part_start + relevant_part_width
+
+            # Draw the red rectangle (relevant part of the video)
+            canvas.create_rectangle(relevant_part_start, 0, relevant_part_end, rect_height, fill="red")
+
+        # Schedule the retrieval of the frame width after a short delay (100ms in this case)
+        visit_info_frame.after(100, on_after)
+
+        # Label above the frame with black border
+        visitor_info_label = tk.Label(control_panel, text="Visitor info", font=("Helvetica", 12, "bold"))
+        visitor_info_label.pack(pady=5)
+
+        # Create the frame for the visit info
+        visitor_info_frame = tk.Frame(control_panel, borderwidth=2, relief="solid", bg="white")
+        visitor_info_frame.pack(side=tk.TOP, padx=10, pady=10, fill="x")
+
+        # Load the icon image
+        icon_image = self.load_icon("resources/img/flower_icon.png", size=(100,100), master=control_panel)
+
+        # Create a label to display the icon
+        icon_label = tk.Label(visitor_info_frame, image=icon_image, width=100, height=100)
+        icon_label.image = icon_image  # Keep a reference to the image to prevent garbage collection
+        icon_label.pack(side=tk.LEFT)
+
+        # Create a label overlay for the number "3" in the middle of the icon
+        number_label = tk.Label(icon_label, text="3", font=("Helvetica", 24, "bold"))
+        number_label.place(relx=0.5, rely=0.53, anchor=tk.CENTER)
+
+        # Create the labels and input fields
+        label1 = tk.Label(visitor_info_frame, text="Label 1:")
+        label1.pack(anchor=tk.W)
+
+        entry1 = tk.Entry(visitor_info_frame)
+        entry1.pack(fill=tk.X, padx=5, pady=2)
+
+        label2 = tk.Label(visitor_info_frame, text="Label 2:")
+        label2.pack(anchor=tk.W)
+
+        entry2 = tk.Entry(visitor_info_frame)
+        entry2.pack(fill=tk.X, padx=5, pady=2)
+
+
 
         # Create the input fields and labels in control_panel
         label_texts = ["Label 1", "Label 2", "Label 3", "Label 4", "Label 5", "Label 6", "Label 7",
@@ -282,6 +392,45 @@ class ICID(icvt.AppAncestor):
         print('calling player.terminate.')
         self.player.terminate()
         print('terminate player.returned.')
+
+    def build_top_toolbar(self, parent):
+
+        control_panel = parent
+
+        # Create the frame for the toolbar
+        toolbar = tk.Frame(control_panel)
+        toolbar.pack(side=tk.TOP, fill=tk.BOTH)
+
+        j = 0
+
+        # Get the directory where the script is located
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+
+        # MENU button
+        menu_button = tk.Button(toolbar, image=self.load_icon("resources/img/mn.png", master=control_panel),
+                                compound=tk.LEFT, text="Menu",
+                                padx=10, pady=5, height=48, command=lambda j=j: self.open_menu())
+        menu_button.grid(row=0, column=0, padx=0, pady=5, sticky="ew")
+
+        # VIDEO FOLDER button
+        fl_button = tk.Button(toolbar, image=self.load_icon("resources/img/fl.png", master=control_panel),
+                              compound=tk.LEFT,
+                              text="Select video folder", padx=10, pady=5,
+                              height=48, command=lambda j=j: self.change_video_folder())
+        fl_button.grid(row=0, column=1, padx=0, pady=5, sticky="ew")
+
+        # EXCEL PATH button
+        et_button = tk.Button(toolbar, image=self.load_icon("resources/img/et.png", master=control_panel),
+                              compound=tk.LEFT,
+                              text="Select Excel table", padx=10, pady=5,
+                              height=48, command=lambda j=j: self.change_excel_path())
+        et_button.grid(row=0, column=2, padx=0, pady=5, sticky="ew")
+
+        # configure columns of toolbox
+        toolbar.grid_columnconfigure(0, weight=2, minsize=50)
+        toolbar.grid_columnconfigure(1, weight=3, minsize=50)
+        toolbar.grid_columnconfigure(2, weight=4, minsize=50)
+        return toolbar
 
     def pause_vid(self, player):
         if player.pause == True:

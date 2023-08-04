@@ -56,7 +56,7 @@ class ICCS(icvt.AppAncestor):
         self.buttons = []
         self.gui_imgs = []
         self.cap = None
-        self.loading_progress = 25
+        self.image_details_dict = {}
 
         # Initiation functions - get directories and files
         self.scan_default_folders()
@@ -313,7 +313,6 @@ class ICCS(icvt.AppAncestor):
         # Loop through the video and crop y images every n-th frame
         frame_count = 0
         image_paths = []
-        image_details_dict = {}
 
         while success:
             # Crop images every n-th frame
@@ -329,7 +328,7 @@ class ICCS(icvt.AppAncestor):
                         #image_path = f"./{self.output_folder}/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
                         cv2.imwrite(image_path, crop_img)
                         image_paths.append(image_path)
-                        image_details_dict[image_name] = (image_path, frame_number, roi_number, visit_number)
+                        self.image_details_dict[image_name] = [image_path, frame_number, roi_number, visit_number, 0]
                 if self.whole_frame == 1:
                     frame_number = frame_number_start + frame_count
                     visit_number = crop_counter
