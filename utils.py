@@ -196,6 +196,35 @@ def yolobbox2bbox(coords):
     box_width, box_height = x2 - x1, y2 - y1
     return np.column_stack((x1, y1, x2, y2, box_width, box_height))
 
+def delete_image_and_related_txt(image_path, delete_txt: bool = True):
+    global logger
+    # Check if the image file exists
+    if not os.path.exists(image_path):
+        logger.info("Image file does not exist.")
+        return
+
+    # Get the base filename without extension
+    base_filename = os.path.splitext(os.path.basename(image_path))[0]
+
+    # Delete the image file
+    try:
+        os.remove(image_path)
+        logger.info(f"Deleted image file: {image_path}")
+    except Exception as e:
+        logger.info(f"Error deleting image file: {e}")
+
+    # Delete related .txt files
+    if delete_txt:
+        for root, _, files in os.walk(os.path.dirname(image_path)):
+            for file in files:
+                if file.startswith(base_filename) and file.lower().endswith('.txt'):
+                    txt_path = os.path.join(root, file)
+                    try:
+                        os.remove(txt_path)
+                        logger.info(f"Deleted related .txt file: {txt_path}")
+                    except Exception as e:
+                        logger.info(f"Error deleting .txt file: {e}")
+
 def log_define():
     # Create a logger instance
     logger = logging.getLogger(__name__)

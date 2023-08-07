@@ -1,4 +1,5 @@
 # This file contains the ICCS app class that inherits from ICVT AppAncestor class
+import sorting_gui
 import utils
 import anno_data
 import icvt
@@ -20,6 +21,7 @@ from ultralytics import YOLO
 import shutil
 import asyncio
 import numpy as np
+from sorting_gui import ImageGridWindow
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):
@@ -198,8 +200,7 @@ class ICCS(icvt.AppAncestor):
             config.write(configfile)
 
     def reload_points_of_interest(self):
-        logger = self.logger
-        logger.debug('Running function reload_points_of_interest()')
+        self.logger.debug('Running function reload_points_of_interest()')
 
         # Clear the array of POIs and reconstruct it with empty lists.
         self.points_of_interest_entry.clear()
@@ -207,8 +208,7 @@ class ICCS(icvt.AppAncestor):
 
     def load_video_frames(self):
         # Define logger
-        logger = self.logger
-        logger.debug(f"Running function load_video_frames()")
+        self.logger.debug(f"Running function load_video_frames()")
 
         # Loop through each file in folder
         self.frames = []
@@ -229,11 +229,11 @@ class ICCS(icvt.AppAncestor):
                             default_image = cv2.imread('resources/img/nf.png')
                             self.frames.append(default_image)
                     except (cv2.error, OSError) as e:
-                        logger.error(f"Error: Failed to process video '{filename}': {e}")
+                        self.logger.error(f"Error: Failed to process video '{filename}': {e}")
                         default_image = cv2.imread('resources/img/nf.png')
                         self.frames.append(default_image)
         else:
-            logger.error("Error: Invalid video folder path")
+            self.logger.error("Error: Invalid video folder path")
             messagebox.showerror("Error", "Invalid video folder path")
 
 ######################################### SECTION DEALS WITH THE BACKEND ###############################################
@@ -322,7 +322,7 @@ class ICCS(icvt.AppAncestor):
                         crop_img, x1, y1, x2, y2 = await self.capture_crop(frame, point)
                         frame_number = frame_number_start + frame_count
                         roi_number = i + 1
-                        visit_number = crop_counter
+                        visit_number = self.visit_index
                         image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{roi_number}_{frame_number}_{visit_number}_{x1},{y1}_{x2},{y2}.jpg" #Now the output images will be ordered by the ROI therefore one will be able to delete whole segments of pictures.
                         image_path = os.path.join(self.output_folder, image_name)
                         #image_path = f"./{self.output_folder}/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
@@ -331,7 +331,7 @@ class ICCS(icvt.AppAncestor):
                         self.image_details_dict[image_name] = [image_path, frame_number, roi_number, visit_number, 0]
                 if self.whole_frame == 1:
                     frame_number = frame_number_start + frame_count
-                    visit_number = crop_counter
+                    visit_number = self.visit_index
                     image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{frame_number}_{visit_number}_whole.jpg"
                     image_path = os.path.join(self.output_folder, "whole frames", image_name)
                     #image_path = f"./{self.output_folder}/whole frames/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
@@ -369,18 +369,22 @@ class ICCS(icvt.AppAncestor):
 
         # Define and run the model
         model = YOLO('resources/yolo/best.pt')
-        results = model(img_paths, save=False, imgsz=self.crop_size, conf=self.yolo_conf, save_txt=False, max_det=1, stream=True)
+        results = model(img_paths, save=False, imgsz=self.crop_size, conf=self.yolo_conf, save_txt=False, max_det=2, stream=True)
         for i, result in enumerate(results):
             boxes = result.boxes.data
+            image_name = os.path.basename(img_paths[i])
             original_path = os.path.join(img_paths[i])
             utils.create_dir(f"{self.output_folder}/empty")
             utils.create_dir(f"{self.output_folder}/visitor")
             utils.create_dir(f"{self.output_folder}/visitor/labels")
-            empty_path = os.path.join(f"{self.output_folder}/empty", os.path.basename(img_paths[i]))
-            visitor_path = os.path.join(f"{self.output_folder}/visitor", os.path.basename(img_paths[i]))
-            label_path = os.path.join(f"{self.output_folder}/visitor/labels", os.path.basename(img_paths[i])[:-4])
+            empty_path = os.path.join(f"{self.output_folder}/empty", image_name)
+            visitor_path = os.path.join(f"{self.output_folder}/visitor", image_name)
+            label_path = os.path.join(f"{self.output_folder}/visitor/labels", image_name[:-4])
+
             if len(result.boxes.data) > 0:
                 shutil.move(original_path, visitor_path)
+                self.image_details_dict[image_name][0] = visitor_path
+                self.image_details_dict[image_name][4] = 1
                 with open(f"{label_path}.txt", 'w') as file:
                     # Write the box_data to the file
                     txt = []
@@ -396,6 +400,8 @@ class ICCS(icvt.AppAncestor):
                     file.write(f"{visitor_category} {txt.replace('[', '').replace(']', '').replace(',', '')}")
             else:
                 shutil.move(original_path, empty_path)
+                self.image_details_dict[image_name][0] = empty_path
+                self.image_details_dict[image_name][4] = 0
 
     def filter_array_by_visitors(self, valid_annotations_array):
 
@@ -510,6 +516,7 @@ class ICCS(icvt.AppAncestor):
 
         # Define variables
         root = self.main_window
+        self.image_details_dict = {}
 
         # Ask to confirm whether the process should begin
         result = utils.ask_yes_no("Do you want to start the cropping process?")
@@ -655,7 +662,7 @@ class ICCS(icvt.AppAncestor):
                     #print(img_paths)
 
                     # If relevant preprocess the images using yolo
-                    if self.yolo_processing == 1:
+                    if self.yolo_processing == 1 and len(img_paths) > 0:
                         asyncio.run(self.yolo_preprocessing(img_paths, valid_annotations_array, index))
 
             # This is for when the crop_mode is 3 and no annotation file is supplied
@@ -696,12 +703,15 @@ class ICCS(icvt.AppAncestor):
         run_sorting = utils.ask_yes_no("Do you want to Running function the sorting script on the generated images?")
         if run_sorting:
             self.logger.info("Initializing the sorting engine...")
-            sort_script_path = "sort.py"
-            if os.path.exists(sort_script_path):
-                # subprocess.run(['python', f'{sort_script_path}'])
-                subprocess.call([sys.executable, f'{sort_script_path}', "--subprocess"])
-            else:
-                self.logger.warning("Sorting script not found.")
+            # sort_script_path = "sort.py"
+            # if os.path.exists(sort_script_path):
+            #     # subprocess.run(['python', f'{sort_script_path}'])
+            #     subprocess.call([sys.executable, f'{sort_script_path}', "--subprocess"])
+            # else:
+            #     self.logger.warning("Sorting script not found.")
+
+            sorting_gui.survey_visits_for_sorting(self.image_details_dict)
+
 
 ######################################### SECTION DEALS WITH THE GUI ###################################################
 ########################################################################################################################

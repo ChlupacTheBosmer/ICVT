@@ -78,6 +78,13 @@ class ImageViewer(QMainWindow):
     def __init__(self, folder_path, use_label_files: bool = False, positive_status_label = "Visitor", negative_status_label = "Empty", title = "ICVT"):
         super().__init__()
         self.folder_path = folder_path
+
+        if use_label_files:
+            self.label_folder_path = self.find_labels_directory(self.folder_path)
+            if self.label_folder_path is None:
+                print("Error: No label files found.")
+                self.label_folder_path = self.folder_path
+
         self.current_index = 0
         self.previous_index = None  # Initialize the previous_index attribute
         self.thumbnail_padding = 10  # Adjust the padding value as needed
@@ -127,6 +134,24 @@ class ImageViewer(QMainWindow):
 
         # initialize the GUI
         self.init_ui()
+
+    def find_labels_directory(self, folder_path):
+
+        # Check if there are .txt files in the original folder
+        txt_files_in_folder = [file for file in os.listdir(folder_path) if file.lower().endswith('.txt')]
+
+        if txt_files_in_folder:
+            print("There are .txt files in the original folder.")
+            return folder_path
+        else:
+            labels_dir = os.path.join(folder_path, "labels")
+            if os.path.exists(labels_dir) and os.path.isdir(labels_dir):
+                txt_files = [file for file in os.listdir(labels_dir) if file.lower().endswith('.txt')]
+                if txt_files:
+                    print(f"Labels directory found: {labels_dir}")
+                    return labels_dir
+            return None
+
 
     def get_images(self):
         # Use os.listdir() to get all image files
@@ -280,107 +305,111 @@ class ImageViewer(QMainWindow):
 
     def add_label_category_comboboxes(self):
 
-        # Define variables
-        widget_height = 40
-        widget_width_large = 200
-        self.edit_buttons.clear()
-        self.delete_buttons.clear()
-        self.comboboxes = []
+        if self.use_label_files:
 
-        # Create the QLabel with the same dimensions as the QComboBox
-        label_text = "Select Insect Order:"
-        label = QLabel(label_text)
-        label.setMinimumWidth(widget_width_large)  # Set the minimum width of the label to match the QComboBox
-        label.setMinimumHeight(widget_height)  # Set the minimum height of the label to match the QComboBox
-        self.labels_box.addWidget(label)
+            # Define variables
+            widget_height = 40
+            widget_width_large = 200
+            self.edit_buttons.clear()
+            self.delete_buttons.clear()
+            self.comboboxes = []
 
-        # Read each line in the txt file
-        for i, label in enumerate(self.label_parameters_list):
-            category = int(label[0])
+            # Create the QLabel with the same dimensions as the QComboBox
+            label_text = "Select Insect Order:"
+            label = QLabel(label_text)
+            label.setMinimumWidth(widget_width_large)  # Set the minimum width of the label to match the QComboBox
+            label.setMinimumHeight(widget_height)  # Set the minimum height of the label to match the QComboBox
+            self.labels_box.addWidget(label)
 
-            # Create box per label
-            label_layout_item = QHBoxLayout()
+            # Read each line in the txt file
+            for i, label in enumerate(self.label_parameters_list):
+                category = int(label[0])
 
-            # Create the QComboBox
-            order_combobox = QComboBox()
+                # Create box per label
+                label_layout_item = QHBoxLayout()
 
-            # Adjust the size of the QComboBox
-            order_combobox.setMinimumWidth(widget_width_large)  # Set the minimum width of the QComboBox
-            order_combobox.setMinimumHeight(widget_height)  # Set the minimum height of the QComboBox
+                # Create the QComboBox
+                order_combobox = QComboBox()
 
-            # Add some padding to the QComboBox using style sheet
-            border_color = self.color_names[min(len(self.color_names)-1,i)]
-            order_combobox.setStyleSheet("padding: 10px;")  # Adjust the padding value as needed
-            order_combobox.setStyleSheet(f"QComboBox {{ border: 3px solid {border_color}; }}")
+                # Adjust the size of the QComboBox
+                order_combobox.setMinimumWidth(widget_width_large)  # Set the minimum width of the QComboBox
+                order_combobox.setMinimumHeight(widget_height)  # Set the minimum height of the QComboBox
 
-            # Add the options to the QComboBox
-            order_combobox.addItems(self.orders)
+                # Add some padding to the QComboBox using style sheet
+                border_color = self.color_names[min(len(self.color_names)-1,i)]
+                order_combobox.setStyleSheet("padding: 10px;")  # Adjust the padding value as needed
+                order_combobox.setStyleSheet(f"QComboBox {{ border: 3px solid {border_color}; }}")
 
-            # Record the combo
-            self.comboboxes.append(order_combobox)
+                # Add the options to the QComboBox
+                order_combobox.addItems(self.orders)
 
-            # Set the default selected option based on text (e.g., "Coleoptera")
-            default_order = self.category_dict.get(category, self.category_dict[0])
-            order_combobox.setCurrentText(default_order)
-            # Connect the currentIndexChanged signal to your function
-            order_combobox.currentIndexChanged.connect(self.record_comboboxes_values)
+                # Record the combo
+                self.comboboxes.append(order_combobox)
+
+                # Set the default selected option based on text (e.g., "Coleoptera")
+                default_order = self.category_dict.get(category, self.category_dict[0])
+                order_combobox.setCurrentText(default_order)
+                # Connect the currentIndexChanged signal to your function
+                order_combobox.currentIndexChanged.connect(self.record_comboboxes_values)
+
+                # Add the QPushButton with the same dimensions as the QLabel and QComboBox
+                button_text = "Edit"
+                edit_button = QPushButton(button_text)
+                edit_button.setMinimumWidth(widget_width_large // 4)  # Set the minimum width of the button to match the QLabel and QComboBox
+                edit_button.setMinimumHeight(widget_height)  # Set the minimum height of the button to match the QLabel and QComboBox
+
+                # Connect the function to the button
+                edit_button.clicked.connect(partial(self.on_edit_button_clicked, i))
+
+                # Add the QPushButton with the same dimensions as the QLabel and QComboBox
+                button_text = "Delete"
+                delete_button = QPushButton(button_text)
+                delete_button.setMinimumWidth(widget_width_large // 4)  # Set the minimum width of the button to match the QLabel and QComboBox
+                delete_button.setMinimumHeight(widget_height)  # Set the minimum height of the button to match the QLabel and QComboBox
+
+                # Connect the function to the button
+                delete_button.clicked.connect(partial(self.on_delete_button_clicked, i))
+
+                # Add the QComboBox to the QVBoxLayout
+                label_layout_item.addWidget(order_combobox)
+
+                # Add the button
+                label_layout_item.addWidget(edit_button)
+
+                # Add the button
+                label_layout_item.addWidget(delete_button)
+
+                self.labels_box.addLayout(label_layout_item)
 
             # Add the QPushButton with the same dimensions as the QLabel and QComboBox
-            button_text = "Edit"
-            edit_button = QPushButton(button_text)
-            edit_button.setMinimumWidth(widget_width_large // 4)  # Set the minimum width of the button to match the QLabel and QComboBox
-            edit_button.setMinimumHeight(widget_height)  # Set the minimum height of the button to match the QLabel and QComboBox
-
-            # Connect the function to the button
-            edit_button.clicked.connect(partial(self.on_edit_button_clicked, i))
-
-            # Add the QPushButton with the same dimensions as the QLabel and QComboBox
-            button_text = "Delete"
-            delete_button = QPushButton(button_text)
-            delete_button.setMinimumWidth(widget_width_large // 4)  # Set the minimum width of the button to match the QLabel and QComboBox
-            delete_button.setMinimumHeight(widget_height)  # Set the minimum height of the button to match the QLabel and QComboBox
-
-            # Connect the function to the button
-            delete_button.clicked.connect(partial(self.on_delete_button_clicked, i))
-
-            # Add the QComboBox to the QVBoxLayout
-            label_layout_item.addWidget(order_combobox)
+            button_text = "Add label..."
+            add_button = QPushButton(button_text)
+            add_button.setMinimumWidth(widget_width_large + 66 + (widget_width_large // 2))  # Set the minimum width of the button to match the QLabel and QComboBox
+            add_button.setMinimumHeight(widget_height)  # Set the minimum height of the button to match the QLabel and QComboBox
 
             # Add the button
-            label_layout_item.addWidget(edit_button)
+            self.labels_box.addWidget(add_button)
 
-            # Add the button
-            label_layout_item.addWidget(delete_button)
+            # Connect the function to the button
+            add_button.clicked.connect(self.on_add_button_clicked)
 
-            self.labels_box.addLayout(label_layout_item)
-
-        # Add the QPushButton with the same dimensions as the QLabel and QComboBox
-        button_text = "Add label..."
-        add_button = QPushButton(button_text)
-        add_button.setMinimumWidth(widget_width_large + 66 + (widget_width_large // 2))  # Set the minimum width of the button to match the QLabel and QComboBox
-        add_button.setMinimumHeight(widget_height)  # Set the minimum height of the button to match the QLabel and QComboBox
-
-        # Add the button
-        self.labels_box.addWidget(add_button)
-
-        # Connect the function to the button
-        add_button.clicked.connect(self.on_add_button_clicked)
-
-        # Add stretch
-        self.labels_box.addStretch()
+            # Add stretch
+            self.labels_box.addStretch()
 
     def record_comboboxes_values(self):
-        # Reverse the dictionary to create a new dictionary with the values as keys and keys as values
-        reversed_dict = {value: key for key, value in self.category_dict.items()}
 
-        for i, label in enumerate(self.label_parameters_list):
-            if len(self.comboboxes) >= (i + 1):
-                selected_text = self.comboboxes[i].currentText()
+        if self.use_label_files and hasattr(self, 'label_parameters_list'):
+            # Reverse the dictionary to create a new dictionary with the values as keys and keys as values
+            reversed_dict = {value: key for key, value in self.category_dict.items()}
 
-                # Retrieve the key from the reversed dictionary using the selected_text
-                selected_key = reversed_dict.get(selected_text)
+            for i, label in enumerate(self.label_parameters_list):
+                if len(self.comboboxes) >= (i + 1):
+                    selected_text = self.comboboxes[i].currentText()
 
-                self.label_parameters_list[i][0] = selected_key
+                    # Retrieve the key from the reversed dictionary using the selected_text
+                    selected_key = reversed_dict.get(selected_text)
+
+                    self.label_parameters_list[i][0] = selected_key
 
 
     def clear_layout(self, layout):
@@ -542,24 +571,6 @@ class ImageViewer(QMainWindow):
                 self.rubber_band.show()
                 self.is_selecting_roi = False
 
-                # # Assuming you have already detected the ROI position (x, y), width (roi_width), and height (roi_height)
-                # roi_position = QPointF(self.start_x, self.start_y)
-                # roi_width = width  # Replace this with the actual width of the ROI
-                # roi_height = height  # Replace this with the actual height of the ROI
-                #
-                # # Create a QRectF representing the ROI
-                # roi_rect = QRectF(roi_position.x(), roi_position.y(), roi_width, roi_height)
-                #
-                # # Map the top-left corner of the ROI from scene to view coordinates
-                # view_top_left = self.view.mapFromScene(roi_rect.topLeft())
-                #
-                # # Map the bottom-right corner of the ROI from scene to view coordinates
-                # view_bottom_right = self.view.mapFromScene(roi_rect.bottomRight())
-                #
-                # # Calculate the width and height of the ROI in the view
-                # roi_view_width = view_bottom_right.x() - view_top_left.x()
-                # roi_view_height = view_bottom_right.y() - view_top_left.y()
-
                 # Add the label data
                 view_width = self.view.viewport().width()
                 view_height = self.view.viewport().height()
@@ -575,8 +586,6 @@ class ImageViewer(QMainWindow):
                 # Reload image
                 self.load_image(self.current_index, False)
 
-
-
     def resize_roi(self, mode):
         # Enable the resize mode for the given corner
         self.resize_mode = mode
@@ -586,35 +595,39 @@ class ImageViewer(QMainWindow):
         # Define the list for storage
         self.label_parameters_list = []
 
-        # Open the txt file and read the coords
-        with open(label_file_path, "r", encoding="utf-8") as f:  # Specify the encoding
-            # Read each line in the txt file
-            for line in f:
-                parameters = line.strip().split()
-                self.label_parameters_list.append(parameters)
+        if os.path.exists(label_file_path):
+            # Open the txt file and read the coords
+            with open(label_file_path, "r", encoding="utf-8") as f:  # Specify the encoding
+                # Read each line in the txt file
+                for line in f:
+                    parameters = line.strip().split()
+                    self.label_parameters_list.append(parameters)
 
     def write_label_file(self, label_file_path):
-
-        # Open the file in write mode
-        with open(label_file_path, "w", encoding="utf-8") as file:
-            # Iterate through the nested lists
-            for sublist in self.label_parameters_list:
-                # Join the elements of the sublist with spaces and write it as a line in the file
-                line = " ".join(map(str, sublist))
-                file.write(line + "\n")
+        if self.use_label_files and hasattr(self, 'label_parameters_list') and not self.label_parameters_list == []:
+            # Open the file in write mode
+            with open(label_file_path, "w", encoding="utf-8") as file:
+                # Iterate through the nested lists
+                for sublist in self.label_parameters_list:
+                    # Join the elements of the sublist with spaces and write it as a line in the file
+                    line = " ".join([str(int(sublist[0]))] + ["{:.6f}".format(float(x)) for x in sublist[1:]])
+                    file.write(line + "\n")
 
     def draw_the_bbox(self, image):
 
-        for i, label in enumerate(self.label_parameters_list):
-            coords = np.array([float(coord) for coord in label[1:]]).reshape(-1, 4)
-            bbox_coords = yolobbox2bbox(coords)
+        if self.use_label_files and hasattr(self, 'label_parameters_list') and not self.label_parameters_list == []:
+            for i, label in enumerate(self.label_parameters_list):
+                coords = np.array([float(coord) for coord in label[1:]]).reshape(-1, 4)
+                bbox_coords = yolobbox2bbox(coords)
 
-            # Draw rectangles on the image using the bounding box coordinates
-            for box in bbox_coords:
-                box_left, box_top, box_right, box_bottom, _, _ = box
-                cv2.rectangle(image, (int(box_left), int(box_top)), (int(box_right), int(box_bottom)), self.colors[min(len(self.colors)-1, i)],
-                              2)
-        return image
+                # Draw rectangles on the image using the bounding box coordinates
+                for box in bbox_coords:
+                    box_left, box_top, box_right, box_bottom, _, _ = box
+                    cv2.rectangle(image, (int(box_left), int(box_top)), (int(box_right), int(box_bottom)), self.colors[min(len(self.colors)-1, i)],
+                                  2)
+            return image
+        else:
+            return image
 
     def load_image(self, index, read_txt_file: bool = True):
 
@@ -626,9 +639,7 @@ class ImageViewer(QMainWindow):
 
             if self.use_label_files:
                 # Construct the full path to the corresponding txt file
-                txt_path = os.path.join(self.folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
-                if not os.path.exists(txt_path):
-                    return
+                txt_path = os.path.join(self.label_folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
 
                 if read_txt_file:
                     # Load the data of labels from the txt file
@@ -664,8 +675,9 @@ class ImageViewer(QMainWindow):
 
         # Write the label file
         file_path = self.image_files[self.current_index]
-        txt_path = os.path.join(self.folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
-        self.write_label_file(txt_path)
+        if self.use_label_files:
+            txt_path = os.path.join(self.label_folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
+            self.write_label_file(txt_path)
 
         self.previous_index = self.current_index  # Record the index of the previously displayed image
         self.current_index += 1
@@ -680,8 +692,6 @@ class ImageViewer(QMainWindow):
         # Load and display the thumbnails for the next image
         self.load_thumbnails()
 
-
-
     def prev_image(self):
 
         # Record combo values
@@ -689,8 +699,9 @@ class ImageViewer(QMainWindow):
 
         # Write the label file
         file_path = self.image_files[self.current_index]
-        txt_path = os.path.join(self.folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
-        self.write_label_file(txt_path)
+        if self.use_label_files:
+            txt_path = os.path.join(self.label_folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
+            self.write_label_file(txt_path)
 
         self.previous_index = self.current_index  # Record the index of the previously displayed image
         self.current_index -= 1
@@ -712,8 +723,9 @@ class ImageViewer(QMainWindow):
 
         # Write the label file
         file_path = self.image_files[self.current_index]
-        txt_path = os.path.join(self.folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
-        self.write_label_file(txt_path)
+        if self.use_label_files:
+            txt_path = os.path.join(self.label_folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
+            self.write_label_file(txt_path)
 
         # Load and display the clicked thumbnail's corresponding image
         self.previous_index = self.current_index
@@ -734,8 +746,9 @@ class ImageViewer(QMainWindow):
 
         # Write the label file
         file_path = self.image_files[self.current_index]
-        txt_path = os.path.join(self.folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
-        self.write_label_file(txt_path)
+        if self.use_label_files:
+            txt_path = os.path.join(self.label_folder_path, os.path.splitext(os.path.basename(file_path))[0] + ".txt")
+            self.write_label_file(txt_path)
 
         # When the program is about to be closed, move the images and txt files based on their status
 
@@ -748,7 +761,7 @@ class ImageViewer(QMainWindow):
         for i, status in self.image_statuses.items():
             image_file = self.image_files[i]
             if self.use_label_files:
-                txt_file = os.path.splitext(image_file)[0] + ".txt"
+                txt_file = os.path.join(self.label_folder_path, os.path.splitext(os.path.basename(image_file))[0] + ".txt")
 
             # Move images and txt files based on their status
             if status == self.positive_status_label:
