@@ -424,12 +424,12 @@ class ICCS(icvt.AppAncestor):
                 dropdown_value = selected_items[i].get()
                 #print(dropdown_value)
                 if not dropdown_value[0].isdigit():
-                    dropdown_value = "6. empty"
+                    dropdown_value = "0. Default"
                 results.append([int(checkbox_value), checkbox_text, int(dropdown_value[0])])
             results = [row for row in results if row[0] != 0]
             if self.yolo_processing == 1:
                 for row in results:
-                    if row[2] == 6:
+                    if row[2] > 1 or row[2] < 0:
                         filter_window.quit()
                         filter_window.destroy()
                         messagebox.showinfo("Warning",
@@ -459,7 +459,7 @@ class ICCS(icvt.AppAncestor):
         # Get unique values from column index 5
         column_5_values = [row[5] for row in valid_annotations_array]
         unique_values = set(column_5_values)
-        allowed_items = ["0. Hymenoptera", "1. Diptera", "2. Lepidoptera", "3. Coleoptera", "4. Other"]
+        allowed_items = ["0. Default", "1. Lepidoptera"]
         if len(unique_values) > 0:
             checkbox_vars = []
             checkboxes = []
@@ -474,7 +474,7 @@ class ICCS(icvt.AppAncestor):
                 checkboxes.append(checkbox)
 
                 selected_item = tk.StringVar(filter_window)
-                selected_item.set("------------")
+                selected_item.set("0. Default")
                 selected_items.append(selected_item)
 
                 option_menu = tk.OptionMenu(filter_window, selected_item, *allowed_items,
