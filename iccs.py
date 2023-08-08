@@ -710,6 +710,8 @@ class ICCS(icvt.AppAncestor):
             # else:
             #     self.logger.warning("Sorting script not found.")
 
+            if self.image_details_dict == {}:
+                self.image_details_dict = sorting_gui.gather_image_details(self.output_folder)
             sorting_gui.survey_visits_for_sorting(self.image_details_dict)
 
 
