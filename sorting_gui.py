@@ -239,6 +239,9 @@ def survey_visits_for_sorting(image_details_dict):
         # When the window closes get the checkbox values
         checkbox_values, filtered_details = image_grid_window.save_checkbox_values()
 
+        # Delete the instance
+        del image_grid_window
+
         for i, var in enumerate(checkbox_values):
             if var == 0:
                 filtered_by_roi = [details for details in filtered_details if
