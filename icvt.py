@@ -56,6 +56,10 @@ class AppAncestor:
 
         # Check if the video folder path is valid
         if utils.check_path(self.video_folder_path, 0):
+
+            # Look for corrupted videos
+            utils.delete_corrupted_videos(self.video_folder_path)
+
             # Load videos
             try:
                 self.video_filepaths = [

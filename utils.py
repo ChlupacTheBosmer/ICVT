@@ -1,6 +1,7 @@
 # This file contains all shared functions and classes
 
 import os
+import cv2
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import filedialog
@@ -224,6 +225,28 @@ def delete_image_and_related_txt(image_path, delete_txt: bool = True):
                         logger.info(f"Deleted related .txt file: {txt_path}")
                     except Exception as e:
                         logger.info(f"Error deleting .txt file: {e}")
+
+def delete_corrupted_videos(folder_path):
+
+    for root, _, files in os.walk(folder_path):
+        for file in files:
+            if file.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+                video_path = os.path.join(root, file)
+
+                # Attempt to open the video file using OpenCV
+                try:
+                    cap = cv2.VideoCapture(video_path)
+                    if not cap.isOpened():
+                        result = ask_yes_no(f"Detected a corrupted video file: {video_path}. Do you want to delete it? This action cannot be reversed.")
+                        if result:
+                            print(f"Deleting corrupted video: {video_path}")
+                            os.remove(video_path)
+                except Exception as e:
+                    print(f"Error opening video: {video_path} - {e}")
+
+                # Release the video capture object
+                if cap.isOpened():
+                    cap.release()
 
 def log_define():
     # Create a logger instance
