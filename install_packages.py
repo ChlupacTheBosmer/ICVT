@@ -11,6 +11,12 @@ def install_packages(requirements_file):
                 print(package_name)
             except subprocess.CalledProcessError as e:
                 print(f"Error installing {package}: {e}")
+                try:
+                    print("Attempting bare installation of the package")
+                    subprocess.check_call(["pip", "install", package_name])
+                except subprocess.CalledProcessError as e:
+                    print(f"Error installing {package}: {e}")
+
 
 if __name__ == "__main__":
     requirements_file = "requirements_linux.txt"
