@@ -9,7 +9,7 @@ from PyQt5.QtGui import QPixmap, QImage, QPen
 from PyQt5.QtWidgets import QGraphicsItem, QDesktopWidget
 from PyQt5.QtCore import Qt, QSize, QRectF, QPointF  # Import QRectF here
 from PyQt5.QtGui import QPainter, QFont, QFontMetrics
-from PyQt5.QtGui import QPalette, QColor, QBrush
+from PyQt5.QtGui import QPalette, QColor, QBrush, QCursor
 import shutil
 from utils import yolobbox2bbox
 from functools import partial
@@ -164,10 +164,17 @@ class ImageViewer(QMainWindow):
         # Set the title of the window
         self.setWindowTitle(self.title)
 
+        # Set cursor appearance
+        self.cursor_cross = QCursor(Qt.CrossCursor)
+        self.cursor_default = QCursor(Qt.ArrowCursor)
+
         # Create a QGraphicsView to display the image
         self.scene = QGraphicsScene()
         view_layout = QHBoxLayout()
         self.view = QGraphicsView(self.scene)
+
+        self.view.setMouseTracking(True)
+        self.view.viewport().setCursor(self.cursor_default)
 
         # Create layout for listing labels
         self.labels_box = QVBoxLayout()
@@ -441,6 +448,8 @@ class ImageViewer(QMainWindow):
             selected_thumbnail.setStatus("None")
             self.image_statuses[self.current_index] = "None"
             self.next_image()
+        elif event.key() == Qt.Key_Q:
+            self.on_add_button_clicked()
         elif event.key() == Qt.Key_Return:
             if self.resize_in_progress:
 
@@ -469,6 +478,9 @@ class ImageViewer(QMainWindow):
 
     def on_add_button_clicked(self):
         # Set the flag variable to True when the button is clicked
+        self.view.viewport().setCursor(self.cursor_cross)
+        self.start_x = 0
+        self.start_y = 0
         self.is_selecting_roi = True
 
     def on_edit_button_clicked(self, label_index: int):
@@ -555,6 +567,10 @@ class ImageViewer(QMainWindow):
     def on_mouse_release(self, event):
         if self.is_selecting_roi:
             if self.resize_mode is None:
+
+                # Reset the cursor appearance
+                self.view.viewport().setCursor(self.cursor_default)
+
                 # Get the position of the mouse release
                 end_x = event.pos().x()
                 end_y = event.pos().y()
