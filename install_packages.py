@@ -1,7 +1,8 @@
 import subprocess
 import re
+import os
 
-def install_packages(requirements_file):
+def install_packages(requirements_file, bare_installation):
     with open(requirements_file) as f:
         for line in f:
             package = line.strip()
@@ -11,13 +12,42 @@ def install_packages(requirements_file):
                 print(package_name)
             except subprocess.CalledProcessError as e:
                 print(f"Error installing {package}: {e}")
-                try:
-                    print("Attempting bare installation of the package")
-                    subprocess.check_call(["pip", "install", package_name])
-                except subprocess.CalledProcessError as e:
-                    print(f"Error installing {package}: {e}")
+                if bare_installation:
+                    try:
+                        print("Attempting bare installation of the package")
+                        subprocess.check_call(["pip", "install", package_name])
+                    except subprocess.CalledProcessError as e:
+                        print(f"Error installing {package}: {e}")
 
 
 if __name__ == "__main__":
-    requirements_file = "requirements_linux.txt"
-    install_packages(requirements_file)
+
+    # Get a list of .txt files in the current directory
+    txt_files = [file for file in os.listdir() if file.endswith(".txt")]
+
+    # Print the list of .txt files
+    print("Available .txt files:")
+    for i, txt_file in enumerate(txt_files, start=1):
+        print(f"{i}. {txt_file}")
+
+    # Ask the user for input to choose a .txt file
+    while True:
+        try:
+            user_choice = int(input("Enter the number of the .txt file you want to use: "))
+            if 1 <= user_choice <= len(txt_files):
+                requirements_file = txt_files[user_choice - 1]
+                break
+            else:
+                print("Invalid input. Please enter a valid number.")
+        except ValueError:
+            print("Invalid input. Please enter a valid number.")
+
+    # Ask whether run bare installation in case of failure
+    bare_install = input(f"Do you want to perform a bare installation of the packages if pip fails to locate the specified version? (y/n): ")
+    if bare_install.lower() == 'y':
+        install_bare = True
+    else:
+        install_bare = False
+
+    # Run the installation
+    install_packages(requirements_file, install_bare)
