@@ -579,28 +579,29 @@ class ImageViewer(QMainWindow):
                 width = end_x - self.start_x
                 height = end_y - self.start_y
 
-                # Hide the initial QRubberBand
-                self.rubber_band.hide()
+                if width > 0 and height > 0:
+                    # Hide the initial QRubberBand
+                    self.rubber_band.hide()
 
-                # Show the QRubberBand for interactive resizing
-                self.rubber_band.setGeometry(self.start_x, self.start_y, width, height)
-                self.rubber_band.show()
-                self.is_selecting_roi = False
+                    # Show the QRubberBand for interactive resizing
+                    self.rubber_band.setGeometry(self.start_x, self.start_y, width, height)
+                    self.rubber_band.show()
+                    self.is_selecting_roi = False
 
-                # Add the label data
-                view_width = self.view.viewport().width()
-                view_height = self.view.viewport().height()
-                coco_box = (self.start_x - ((view_width // 2) - (min(view_width, self.image_width) // 2)), self.start_y - ((view_height // 2) - (min(view_height, self.image_width) // 2)), width, height)
-                yolo_box = pbx.convert_bbox(coco_box, from_type="coco", to_type="yolo", image_size=(self.image_width, self.image_width))
-                yolo_box = list(yolo_box)
-                yolo_box.insert(0, 0)
-                self.label_parameters_list.append(yolo_box)
+                    # Add the label data
+                    view_width = self.view.viewport().width()
+                    view_height = self.view.viewport().height()
+                    coco_box = (self.start_x - ((view_width // 2) - (min(view_width, self.image_width) // 2)), self.start_y - ((view_height // 2) - (min(view_height, self.image_width) // 2)), width, height)
+                    yolo_box = pbx.convert_bbox(coco_box, from_type="coco", to_type="yolo", image_size=(self.image_width, self.image_width))
+                    yolo_box = list(yolo_box)
+                    yolo_box.insert(0, 0)
+                    self.label_parameters_list.append(yolo_box)
 
-                # Clear the label category layout
-                self.clear_layout(self.labels_box)
+                    # Clear the label category layout
+                    self.clear_layout(self.labels_box)
 
-                # Reload image
-                self.load_image(self.current_index, False)
+                    # Reload image
+                    self.load_image(self.current_index, False)
 
     def resize_roi(self, mode):
         # Enable the resize mode for the given corner
