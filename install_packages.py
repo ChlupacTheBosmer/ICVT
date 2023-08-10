@@ -2,7 +2,7 @@ import subprocess
 import re
 import os
 
-def install_packages(requirements_file, bare_installation):
+def install_packages(requirements_file, bare_installation, installer):
     with open(requirements_file) as f:
         for line in f:
             package = line.strip()
@@ -15,7 +15,7 @@ def install_packages(requirements_file, bare_installation):
                 if bare_installation:
                     try:
                         print("Attempting bare installation of the package")
-                        subprocess.check_call(["pip", "install", package_name])
+                        subprocess.check_call([installer, "install", package_name])
                     except subprocess.CalledProcessError as e:
                         print(f"Error installing {package}: {e}")
 
@@ -49,5 +49,16 @@ if __name__ == "__main__":
     else:
         install_bare = False
 
+    # Ask whether to use conda or pip
+    print(f"Available installers:")
+    print(f"1. pip")
+    print(f"2. conda")
+    conda_or_pip = input(
+        f"Enter the number of the installer you want to use: ")
+    if conda_or_pip.lower() == "1":
+        installer = "pip"
+    elif conda_or_pip.lower() == "2":
+        installer = "conda"
+
     # Run the installation
-    install_packages(requirements_file, install_bare)
+    install_packages(requirements_file, install_bare, installer)
