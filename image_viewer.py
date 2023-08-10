@@ -95,6 +95,7 @@ class ImageViewer(QMainWindow):
         self.use_label_files = use_label_files
         self.title = title
         self.is_selecting_roi = False
+        self.resize_in_progress = False
         self.resize_mode = None
         self.colors = [(0, 255, 0),  # Green
                        (0, 0, 255),  # Red
@@ -412,17 +413,19 @@ class ImageViewer(QMainWindow):
             self.labels_box.addStretch()
 
             # Higlight
-            self.current_highlight = len(self.layout_frames)-1
+            #print(f"len is:{len(self.layout_frames)}")
+            self.current_highlight = max(len(self.layout_frames)-1, 0)
             self.highlight_box(self.current_highlight)
 
     def highlight_box(self, index):
-        if self.current_highlight is not None:
-            frame = self.layout_frames[self.current_highlight]
-            frame.setStyleSheet("border: 1px solid LightGrey;")
+        if not index > len(self.layout_frames) - 1:
+            if self.current_highlight is not None:
+                frame = self.layout_frames[self.current_highlight]
+                frame.setStyleSheet("border: 1px solid LightGrey;")
 
-        frame = self.layout_frames[index]
-        frame.setStyleSheet("border: 1px solid red;")
-        self.current_highlight = index
+            frame = self.layout_frames[index]
+            frame.setStyleSheet("border: 1px solid red;")
+            self.current_highlight = index
 
     def record_comboboxes_values(self):
 
@@ -476,7 +479,7 @@ class ImageViewer(QMainWindow):
         elif event.key() == Qt.Key_W or event.key() == Qt.Key_S:
             if self.current_highlight is None:
                 self.highlight_box(0)
-            else:
+            elif len(self.layout_frames) > 0:
                 if event.key() == Qt.Key_W:
                     self.highlight_box((self.current_highlight - 1) % len(self.layout_frames))
                 elif event.key() == Qt.Key_S:
@@ -488,7 +491,7 @@ class ImageViewer(QMainWindow):
         elif event.key() == Qt.Key_C:
             self.next_image()
         elif event.key() == Qt.Key_Return or event.key() == Qt.Key_F:
-            if self.resize_in_progress:
+            if self.resize_in_progress and len(self.label_parameters_list) > 0:
 
                 # Add the label data
                 # Calculate the width and height of the initial ROI
@@ -522,30 +525,33 @@ class ImageViewer(QMainWindow):
 
     def on_edit_button_clicked(self, label_index: int):
 
-        self.label_edited_index = label_index
-        yolo_box = [float(parameter) for parameter in self.label_parameters_list[label_index][1:]]
-        coco_box = pbx.convert_bbox(yolo_box, from_type="yolo", to_type="coco", image_size=(self.image_width, self.image_width))
-        view_width = self.view.viewport().width()
-        view_height = self.view.viewport().height()
-        self.start_x = coco_box[0] + (view_width // 2) - (min(view_width, self.image_width) // 2)
-        self.start_y = coco_box[1] + ((view_height // 2) - (min(view_height, self.image_width) // 2))
-        width = coco_box[2]
-        height = coco_box[3]
-        self.rubber_band.setGeometry(self.start_x, self.start_y, width, height)
-        self.set_rubberband_color(label_index)
-        self.rubber_band.show()
-        self.resize_mode = None
-        self.resize_in_progress = True
+        if not label_index >= len(self.label_parameters_list):
+            self.label_edited_index = label_index
+            yolo_box = [float(parameter) for parameter in self.label_parameters_list[label_index][1:]]
+            coco_box = pbx.convert_bbox(yolo_box, from_type="yolo", to_type="coco", image_size=(self.image_width, self.image_width))
+            view_width = self.view.viewport().width()
+            view_height = self.view.viewport().height()
+            self.start_x = coco_box[0] + (view_width // 2) - (min(view_width, self.image_width) // 2)
+            self.start_y = coco_box[1] + ((view_height // 2) - (min(view_height, self.image_width) // 2))
+            width = coco_box[2]
+            height = coco_box[3]
+            self.rubber_band.setGeometry(self.start_x, self.start_y, width, height)
+            self.set_rubberband_color(label_index)
+            self.rubber_band.show()
+            self.resize_mode = None
+            self.resize_in_progress = True
 
     def on_delete_button_clicked(self, label_index: int):
-        del self.label_parameters_list[label_index]
 
-        # Here you want to update the txt file
+        if not label_index >= len(self.label_parameters_list):
+            del self.label_parameters_list[label_index]
 
-        # Clear the label category layout
-        self.clear_layout(self.labels_box)
+            # Here you want to update the txt file
 
-        self.load_image(self.current_index, False)
+            # Clear the label category layout
+            self.clear_layout(self.labels_box)
+
+            self.load_image(self.current_index, False)
 
     def set_rubberband_color(self, label_index):
 
@@ -666,7 +672,12 @@ class ImageViewer(QMainWindow):
                     self.label_parameters_list.append(parameters)
 
     def write_label_file(self, label_file_path):
+
+        if os.path.exists(label_file_path):
+            os.remove(label_file_path)
+
         if self.use_label_files and hasattr(self, 'label_parameters_list') and not self.label_parameters_list == []:
+
             # Open the file in write mode
             with open(label_file_path, "w", encoding="utf-8") as file:
                 # Iterate through the nested lists
@@ -826,13 +837,13 @@ class ImageViewer(QMainWindow):
                 txt_file = os.path.join(self.label_folder_path, os.path.splitext(os.path.basename(image_file))[0] + ".txt")
 
             # Move images and txt files based on their status
-            if status == self.positive_status_label:
+            if status == self.positive_status_label and os.path.exists(image_file):
                 shutil.move(image_file, os.path.join(ok_dir, os.path.basename(image_file)))
-                if self.use_label_files:
+                if self.use_label_files and os.path.exists(txt_file):
                     shutil.move(txt_file, os.path.join(ok_dir, os.path.basename(txt_file)))
-            elif status == self.negative_status_label:
+            elif status == self.negative_status_label and os.path.exists(image_file):
                 shutil.move(image_file, os.path.join(wrong_dir, os.path.basename(image_file)))
-                if self.use_label_files:
+                if self.use_label_files and os.path.exists(txt_file):
                     shutil.move(txt_file, os.path.join(wrong_dir, os.path.basename(txt_file)))
 
         event.accept()
