@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pybboxes as pbx
 import PyQt5 as pyqt
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRubberBand
+from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRubberBand, QFrame
 from PyQt5.QtGui import QPixmap, QImage, QPen
 from PyQt5.QtWidgets import QGraphicsItem, QDesktopWidget
 from PyQt5.QtCore import Qt, QSize, QRectF, QPointF  # Import QRectF here
@@ -320,6 +320,8 @@ class ImageViewer(QMainWindow):
             self.edit_buttons.clear()
             self.delete_buttons.clear()
             self.comboboxes = []
+            self.layout_frames = []
+            self.current_highlight = None
 
             # Create the QLabel with the same dimensions as the QComboBox
             label_text = "Select Insect Order:"
@@ -335,6 +337,12 @@ class ImageViewer(QMainWindow):
                 # Create box per label
                 label_layout_item = QHBoxLayout()
 
+                # Create frame for the Layout
+                frame = QFrame()  # Create a QFrame
+                frame.setStyleSheet("border: 1px solid LightGray;")
+                frame.setLayout(label_layout_item)  # Set the QHBoxLayout as the layout of the QFrame
+                self.layout_frames.append(frame)
+
                 # Create the QComboBox
                 order_combobox = QComboBox()
 
@@ -343,7 +351,7 @@ class ImageViewer(QMainWindow):
                 order_combobox.setMinimumHeight(widget_height)  # Set the minimum height of the QComboBox
 
                 # Add some padding to the QComboBox using style sheet
-                border_color = self.color_names[min(len(self.color_names)-1,i)]
+                border_color = self.color_names[min(len(self.color_names)-1, i)]
                 order_combobox.setStyleSheet("padding: 10px;")  # Adjust the padding value as needed
                 order_combobox.setStyleSheet(f"QComboBox {{ border: 3px solid {border_color}; }}")
 
@@ -386,7 +394,7 @@ class ImageViewer(QMainWindow):
                 # Add the button
                 label_layout_item.addWidget(delete_button)
 
-                self.labels_box.addLayout(label_layout_item)
+                self.labels_box.addWidget(frame)
 
             # Add the QPushButton with the same dimensions as the QLabel and QComboBox
             button_text = "Add label..."
@@ -402,6 +410,19 @@ class ImageViewer(QMainWindow):
 
             # Add stretch
             self.labels_box.addStretch()
+
+            # Higlight
+            self.current_highlight = len(self.layout_frames)-1
+            self.highlight_box(self.current_highlight)
+
+    def highlight_box(self, index):
+        if self.current_highlight is not None:
+            frame = self.layout_frames[self.current_highlight]
+            frame.setStyleSheet("border: 1px solid LightGrey;")
+
+        frame = self.layout_frames[index]
+        frame.setStyleSheet("border: 1px solid red;")
+        self.current_highlight = index
 
     def record_comboboxes_values(self):
 
@@ -450,7 +471,23 @@ class ImageViewer(QMainWindow):
             self.next_image()
         elif event.key() == Qt.Key_Q:
             self.on_add_button_clicked()
-        elif event.key() == Qt.Key_Return:
+        elif event.key() == Qt.Key_E:
+            self.on_edit_button_clicked(self.current_highlight)
+        elif event.key() == Qt.Key_W or event.key() == Qt.Key_S:
+            if self.current_highlight is None:
+                self.highlight_box(0)
+            else:
+                if event.key() == Qt.Key_W:
+                    self.highlight_box((self.current_highlight - 1) % len(self.layout_frames))
+                elif event.key() == Qt.Key_S:
+                    self.highlight_box((self.current_highlight + 1) % len(self.layout_frames))
+        elif event.key() == Qt.Key_Backspace or event.key() == Qt.Key_R:
+            self.on_delete_button_clicked(self.current_highlight)
+        elif event.key() == Qt.Key_X:
+            self.prev_image()
+        elif event.key() == Qt.Key_C:
+            self.next_image()
+        elif event.key() == Qt.Key_Return or event.key() == Qt.Key_F:
             if self.resize_in_progress:
 
                 # Add the label data
@@ -565,20 +602,23 @@ class ImageViewer(QMainWindow):
             self.rubber_band.setGeometry(self.rubber_band.x(), self.rubber_band.y(), event.pos().x() - self.rubber_band.x(), event.pos().y() - self.rubber_band.y())
 
     def on_mouse_release(self, event):
+
+        # Reset the cursor appearance
+        self.view.viewport().setCursor(self.cursor_default)
+
+        # Get the position of the mouse release
+        end_x = event.pos().x()
+        end_y = event.pos().y()
+
+        # If you were selecting a roi
         if self.is_selecting_roi:
             if self.resize_mode is None:
-
-                # Reset the cursor appearance
-                self.view.viewport().setCursor(self.cursor_default)
-
-                # Get the position of the mouse release
-                end_x = event.pos().x()
-                end_y = event.pos().y()
 
                 # Calculate the width and height of the initial ROI
                 width = end_x - self.start_x
                 height = end_y - self.start_y
 
+                # If you only clicked then this will not get triggered
                 if width > 0 and height > 0:
                     # Hide the initial QRubberBand
                     self.rubber_band.hide()
@@ -602,6 +642,11 @@ class ImageViewer(QMainWindow):
 
                     # Reload image
                     self.load_image(self.current_index, False)
+        # If you were resizing
+        else:
+            if self.resize_mode is not None:
+
+                self.resize_mode = None
 
     def resize_roi(self, mode):
         # Enable the resize mode for the given corner
