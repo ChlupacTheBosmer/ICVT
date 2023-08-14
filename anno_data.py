@@ -33,7 +33,6 @@ class Ancestor_annotation_file():
         self.filepath = filepath
 
     def evaluate_string_formula(self, cell):
-
         # If the cell contains a number, return the value as is
         if isinstance(cell, (int, float)):
             return cell
@@ -50,9 +49,7 @@ class Ancestor_annotation_file():
             return cell
 
     def convert_months(self, cell):
-        print(cell)
         cell = self.evaluate_string_formula(cell)
-        print(cell)
         months_short = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
                         'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
         months_long = {'January': '01', 'February': '02', 'March': '03', 'April': '04', 'May': '05', 'June': '06',
@@ -73,15 +70,26 @@ class Ancestor_annotation_file():
                 cell = '01'
         except:
             raise
-        print(cell)
         return cell
 
     def convert_year(self, cell):
-        cell = int(self.evaluate_string_formula(cell))
+        try:
+            rec = cell
+            cell = int(self.evaluate_string_formula(cell))
+        except ValueError as e:
+            if not rec == "":
+                self.logger.warning(f"Unexpected value in Excel file. Error: {e}, value: '{rec}'")
+                cell = 2000
         return cell
 
     def convert_time_data(self, cell):
-        cell = int(self.evaluate_string_formula(cell))
+        try:
+            rec = cell
+            cell = int(self.evaluate_string_formula(cell))
+        except ValueError as e:
+            if not rec == "":
+                self.logger.warning(f"Unexpected value in Excel file. Error: {e}, value: '{rec}'")
+                cell = 0
         cell = "{:02d}".format(cell)  # Format the number with leading zeros
         return cell
 
