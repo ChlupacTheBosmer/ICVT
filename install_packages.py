@@ -3,21 +3,36 @@ import re
 import os
 
 def install_packages(requirements_file, bare_installation, installer):
+    error_list = ["Error installing the following packages, bare install executed:"]
+    fail_list = ["Error installing the following packages, package installation failed:"]
+    success_list = ["Successfully installed:"]
     with open(requirements_file) as f:
         for line in f:
             package = line.strip()
             package_name = re.match(r'^[a-zA-Z0-9_-]+', package).group()
             try:
                 subprocess.check_call(["pip", "install", package])
-                print(package_name)
+                #print(package_name)
+                success_list.append(f"{package_name}")
             except subprocess.CalledProcessError as e:
                 print(f"Error installing {package}: {e}")
                 if bare_installation:
                     try:
                         print("Attempting bare installation of the package")
                         subprocess.check_call([installer, "install", package_name])
+                        error_list.append(f"{package_name}")
                     except subprocess.CalledProcessError as e:
                         print(f"Error installing {package}: {e}")
+                        fail_list.append(f"{package_name}")
+    if len(success_list) > 1:
+        for line in success_list:
+            print(line)
+    if len(error_list) > 1:
+        for line in error_list:
+            print(line)
+    if len(fail_list) > 1:
+        for line in fail_list:
+            print(line)
 
 
 if __name__ == "__main__":
