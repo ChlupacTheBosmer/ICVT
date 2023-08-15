@@ -2,6 +2,7 @@
 import sorting_gui
 import utils
 import anno_data
+import vid_data
 import icvt
 import pandas as pd
 import os
@@ -20,6 +21,7 @@ import time
 from ultralytics import YOLO
 import shutil
 import asyncio
+import imageio
 import numpy as np
 from sorting_gui import ImageGridWindow
 
@@ -32,17 +34,12 @@ class ICCS(icvt.AppAncestor):
         # First log
         self.logger.info("Initializing ICCS - Insect Communities Crop Suite application class...")
 
-        # Start the loading bar in a separate thread
-        time.sleep(0.2)
-        self.loading_progress = 0
-
         # Init basic instance variables and get config
         self.app_title = "Insect Communities Crop Suite"
 
         # Create config and read file
         self.config = self.config_create()
         self.config_read()
-        self.loading_progress = 20
 
         # Define variables
         self.scanned_folders = []
@@ -62,37 +59,28 @@ class ICCS(icvt.AppAncestor):
 
         # Initiation functions - get directories and files
         self.scan_default_folders()
-        self.loading_progress = 35
 
         # If video folder path not supplied ask user to specify it
         while not self.check_path():
             self.get_video_folder(1)
-        self.loading_progress = 40
 
         # Ask the user to specify the Excel path
         self.get_excel_path(1, self.crop_mode)
-        self.loading_progress = 45
 
         # Load the videos
         self.load_videos()
-        self.loading_progress = 55
 
         # Construct ROI data
         self.reload_points_of_interest()
-        self.loading_progress = 65
 
         # Load video frames for buttons
         self.load_video_frames()
-        self.loading_progress = 85
 
         # Create output folders
         utils.create_dir(self.output_folder)
         utils.create_dir(os.path.join(".", self.output_folder, "whole frames"))
 
         # Open window
-        self.loading_progress = 100
-        time.sleep(0.5)
-        self.stop_loading = True
         self.open_main_window()
 
 
@@ -168,6 +156,14 @@ class ICCS(icvt.AppAncestor):
             self.offset_range = int(self.config['Crop settings'].get('random_offset_range', '600').strip())
             self.prefix = self.config['Crop settings'].get('filename_prefix', '').strip()
 
+            self.x_coordinate = int(self.config['OCR settings'].get('x_coordinate', '0').strip())
+            self.y_coordinate = int(self.config['OCR settings'].get('y_coordinate', '0').strip())
+            self.width = int(self.config['OCR settings'].get('width', '500').strip())
+            self.height = int(self.config['OCR settings'].get('height', '40').strip())
+
+            # Create compound tuple
+            self.ocr_roi = (self.x_coordinate, self.y_coordinate, self.width, self.height)
+
         except ValueError:
             self.logger.warning('Invalid folder/file path or crop settings found in settings_crop.ini')
 
@@ -194,6 +190,11 @@ class ICCS(icvt.AppAncestor):
         config.set('Crop settings', 'crop_size', str(self.crop_size))
         config.set('Crop settings', 'random_offset_range', str(self.offset_range))
         config.set('Crop settings', 'filename_prefix', str(self.prefix))
+
+        config.set('OCR settings', 'x_coordinate', str(self.x_coordinate))
+        config.set('OCR settings', 'y_coordinate', str(self.y_coordinate))
+        config.set('OCR settings', 'width', str(self.width))
+        config.set('OCR settings', 'height', str(self.height))
 
         # Save changes to the config file
         with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
@@ -232,6 +233,23 @@ class ICCS(icvt.AppAncestor):
                         self.logger.error(f"Error: Failed to process video '{filename}': {e}")
                         default_image = cv2.imread('resources/img/nf.png')
                         self.frames.append(default_image)
+                elif filename.endswith(".avi"):
+                    video_path = os.path.join(self.video_folder_path, filename)
+                    try:
+                        # Open the video file using imageio
+                        video = imageio.get_reader(video_path)
+
+                        # Read the first frame
+                        frame = video.get_data(0)
+
+                        # Convert the frame to BGR color space
+                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+                        self.frames.append(frame)
+                    except Exception as e:
+                        self.logger.error(f"Error: Failed to process video '{filename}' : {e}")
+                        default_image = cv2.imread('resources/img/nf.png')
+                        self.frames.append(default_image)
         else:
             self.logger.error("Error: Invalid video folder path")
             messagebox.showerror("Error", "Invalid video folder path")
@@ -253,8 +271,9 @@ class ICCS(icvt.AppAncestor):
         x, y = point
 
         # Add a random offset to the coordinates, but ensure they remain within the image bounds
-        frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # DONE: Implement Milesight functionality
+        frame_width, frame_height = self.video_file_object.get_frame_shape()
+        print(frame_width)
 
         # Check if any of the dimensions is smaller than crop_size and if so upscale the image to prevent crops smaller than desired crop_size
         if frame_height < self.crop_size or frame_width < self.crop_size:
@@ -348,14 +367,16 @@ class ICCS(icvt.AppAncestor):
                 frame_count += frame_skip_loc
 
             # Read the next frame
+            # DONE: Implement Milesight functionality
             frame_to_read = frame_number_start + frame_count
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_to_read)
-            success, frame = self.cap.read()
+            success, frame = self.video_file_object.read_video_frame(frame_to_read)
 
             # If the frame count is equal or larger than the amount of frames that comprises the duration of the visit end the loop
             if not (frame_count <= (self.visit_duration * self.fps)):
                 # Release the video capture object and close all windows
-                self.cap.release()
+                # DONE: Implement Milesight functionality
+                if not self.video_file_object.video_origin == "MS":
+                    self.video_file_object.cap.release()
                 cv2.destroyAllWindows()
                 break
 
@@ -586,7 +607,7 @@ class ICCS(icvt.AppAncestor):
                     return
 
                 # Get video data
-                video_data = self.get_video_data(sorted_video_filepaths)
+                video_data, video_files = self.get_video_data(sorted_video_filepaths, True)
 
                 # Log the information that are fed into the rest of the engine
                 self.logger.debug(f"Start cropping according to the following annotations: {annotation_data_array}")
@@ -594,6 +615,8 @@ class ICCS(icvt.AppAncestor):
 
                 # Construct the valid annotation data array which contains visit data coupled with the path to the
                 # video containing the visit
+                # valid annotation entries in array have the following format:
+                # [duration, time_of_visit, video_filepath, video_start_time, video_end_time]
                 valid_annotations_array = self.construct_valid_annotation_array(annotation_data_array, video_data)
 
                 # If following Watchers file append also visitor id
@@ -621,27 +644,46 @@ class ICCS(icvt.AppAncestor):
                     # Define the variables
                     visit_duration, visit_timestamp, video_filepath, video_start_time, *_ = valid_annotations_array[index]
 
+                    # Pick the correct video file object from the list - Filter the list to find the object with matching filepath
+                    self.video_file_object = next((video for video in video_files if video.filepath == video_filepath), None)
+
+                    print(self.video_file_object.filepath)
+                    print(video_filepath)
+
                     # Turn timestamp into datetime and calculate how many seconds from the start_time of the video recording does the visit take place
                     visit_time = pd.to_datetime(visit_timestamp, format='%Y%m%d_%H_%M_%S')
                     visit_time_from_start = (visit_time - video_start_time).total_seconds()
 
                     # Define shared cap to open the video filepath
-                    self.cap = cv2.VideoCapture(video_filepath)
+                    # DONE: Implement Milesight functionality
+                    if not self.video_file_object.video_origin == "MS":
+                        self.cap = self.video_file_object.cap
 
                     # Calculat the total number of video frames, fps ... and figure out where t oset the cap and read a frame
-                    total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                    self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+                    # DONE: Implement Milesight functionality
+                    total_frames = self.video_file_object.total_frames
+                    self.fps = self.video_file_object.fps
+                    print(total_frames)
+                    print(self.fps)
 
                     # The actual duration is taken as limited by the end of the video, therefore cropping wont carry on for longer than one entire video file.
                     self.visit_duration = (min(((visit_time_from_start * self.fps) + (int(visit_duration) * self.fps)),
                                           total_frames) - (visit_time_from_start * self.fps)) // self.fps
 
+                    print(self.visit_duration)
+
                     # First frame to capture - start of the visit
                     frame_number_start = int(visit_time_from_start * self.fps)
 
+                    print(frame_number_start)
+
                     # Read the frame
+                    # DONE: Implement Milesight functionality
+                    #success, frame = self.video_file_object.read_video_frame(frame_number_start)
                     self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
                     success, frame = self.cap.read()
+
+                    print(success)
 
                     # Iterate over the list of lists to find which points of interest entry index to summon for each visit-video combo
                     roi_index = 0
@@ -659,7 +701,7 @@ class ICCS(icvt.AppAncestor):
                         self.generate_frames(frame, success, os.path.basename(video_filepath),
                                         roi_index, frame_number_start))
 
-                    #print(img_paths)
+                    print(img_paths)
 
                     # If relevant preprocess the images using yolo
                     if self.yolo_processing == 1 and len(img_paths) > 0:
@@ -668,7 +710,7 @@ class ICCS(icvt.AppAncestor):
             # This is for when the crop_mode is 3 and no annotation file is supplied
             else:
 
-                # Check validy of paths
+                # Check validity of paths
                 video_ok = utils.check_path(self.video_folder_path, 0)
                 if not video_ok:
                     messagebox.showinfo("Warning",
@@ -676,18 +718,19 @@ class ICCS(icvt.AppAncestor):
                     self.reload(True, False)
                     return
 
-                # The whole frame setings is artificially altered to allow for whole frame generation - messy
+                # The whole frame settings is artificially altered to allow for whole frame generation - messy
                 orig_wf = self.whole_frame
                 self.whole_frame = 1
 
                 # Starting from the second frame of every video frames are generated.
                 for i, filepath in enumerate(self.video_filepaths):
-                    self.cap = cv2.VideoCapture(self.video_filepaths[i])
-                    self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-                    self.visit_duration = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) // self.fps
+                    # DONE: Implement Milesight functionality
+                    self.video_file_object = vid_data.Video_file(filepath, self.main_window, self.ocr_roi, False)
+                    self.fps = self.video_file_object.fps
+                    total_frames = self.video_file_object.total_frames
+                    self.visit_duration = total_frames // self.fps
                     frame_number_start = 2
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
-                    success, frame = self.cap.read()
+                    success, frame = self.video_file_object.read_video_frame(frame_number_start)
                     img_paths = self.generate_frames(frame, success, os.path.basename(self.video_filepaths[i]), i, frame_number_start)
                 self.whole_frame = orig_wf
 
@@ -1187,13 +1230,15 @@ class ICCS(icvt.AppAncestor):
         window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
         window.mainloop()
 
-    def open_ocr_roi_gui(self, video_filepath):
+    def \
+            open_ocr_roi_gui(self, video_filepath):
 
         # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the
         # top left and bottom right coordinates will be saved in the settings_crop.ini file
         self.logger.debug(f'Running function open_ocr_roi_gui({video_filepath})')
         def draw_rectangle(event, x, y, flags, param):
-            frame = self.cap.read()[1]
+            # DONE: Implement Milesight functionality
+            frame = self.video_file_object.read_video_frame()[1]
             if event == cv2.EVENT_LBUTTONDOWN:
                 self.x_coordinate = x
                 self.y_coordinate = y
@@ -1207,6 +1252,8 @@ class ICCS(icvt.AppAncestor):
 
         # Read settings from settings_crop.ini
         self.config.read('settings_crop.ini', encoding='utf-8')
+        # Create video object
+        self.video_file_object = vid_data.Video_file(video_filepath, self.main_window, self.ocr_roi, False)
         try:
             self.x_coordinate = int(self.config['OCR settings'].get('x_coordinate', '0').strip())
             self.y_coordinate = int(self.config['OCR settings'].get('y_coordinate', '0').strip())
@@ -1216,12 +1263,13 @@ class ICCS(icvt.AppAncestor):
             # Handle cases where conversion to integer fails
             self.logger.warning('Invalid integer value found in settings_crop.ini')
         # check if video_filepath is valid path to a video file
-        if not os.path.isfile(video_filepath) or not video_filepath.endswith(".mp4"):
+        if not os.path.isfile(video_filepath) or not (video_filepath.endswith(".mp4") or video_filepath.endswith(".avi")):
             self.logger.warning('Invalid video file path')
             return
 
         # Set up video cap
-        self.cap = cv2.VideoCapture(video_filepath)
+        # DONE: MS
+        #self.cap = cv2.VideoCapture(video_filepath)
 
         # Create a window and pass it to the mouse callback function
         cv2.namedWindow('image')
@@ -1229,8 +1277,10 @@ class ICCS(icvt.AppAncestor):
 
         # display rectangle on image from the text_roi coordinates
         cv2.setMouseCallback('image', draw_rectangle)
-        while (self.cap.isOpened()):
-            ret, frame = self.cap.read()
+        # DONE: MS
+        while True:
+            #ret, frame = self.cap.read()
+            ret, frame = self.video_file_object.read_video_frame()
             if ret:
                 cv2.rectangle(frame, (self.x_coordinate, self.y_coordinate), (self.x_coordinate + self.width, self.y_coordinate + self.height),
                               (0, 255, 0),
@@ -1242,8 +1292,13 @@ class ICCS(icvt.AppAncestor):
                     break
             else:
                 break
-        self.cap.release()
+        # DONE: MS
+        if not self.video_file_object.video_origin == "MS":
+            self.video_file_object.cap.release()
         cv2.destroyAllWindows()
+        del self.video_file_object
+
+        self.ocr_roi = (self.x_coordinate, self.y_coordinate, self.width, self.height)
 
         # Save settings to settings_crop.ini
         self.config['OCR settings']['x_coordinate'] = str(self.x_coordinate)

@@ -7,6 +7,7 @@ from tkinter import messagebox
 from tkinter import filedialog
 import logging
 import numpy as np
+import imageio
 
 def ask_yes_no(text):
     global logger
@@ -230,7 +231,7 @@ def delete_corrupted_videos(folder_path):
 
     for root, _, files in os.walk(folder_path):
         for file in files:
-            if file.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+            if file.lower().endswith(('.mp4')):
                 video_path = os.path.join(root, file)
 
                 # Attempt to open the video file using OpenCV
@@ -247,6 +248,26 @@ def delete_corrupted_videos(folder_path):
                 # Release the video capture object
                 if cap.isOpened():
                     cap.release()
+            elif file.lower().endswith(('.avi')):
+                video_path = os.path.join(root, file)
+
+                try:
+                    # Open the video file using imageio
+                    video = imageio.get_reader(video_path)
+
+                    # Iterate through a limited number of frames to check
+                    for _ in range(10):
+                        video.get_data(_)
+
+                    # If no exceptions were raised, the video is not corrupted
+
+                except Exception as e:
+                    result = ask_yes_no(
+                        f"Detected a corrupted video file: {video_path}. Do you want to delete it? This action cannot be reversed.")
+                    if result:
+                        print(f"Deleting corrupted video: {video_path}")
+                        os.remove(video_path)
+
 
 def log_define():
     # Create a logger instance

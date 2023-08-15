@@ -28,6 +28,7 @@ class AppAncestor:
         self.scanned_folders = []
         self.dir_hierarchy = False
         self.gui_imgs = []
+        self.ocr_roi = ()
 
         # Load up functions to get the video and excel folders
         # self.scan_default_folders()
@@ -65,7 +66,7 @@ class AppAncestor:
                 self.video_filepaths = [
                     os.path.join(self.video_folder_path, f)
                     for f in os.listdir(self.video_folder_path)
-                    if f.endswith('.mp4')
+                    if (f.endswith('.mp4') or f.endswith('.avi'))
                 ]
             except OSError as e:
                 self.logger.error(f"Failed to load videos: {e}")
@@ -74,7 +75,7 @@ class AppAncestor:
             messagebox.showerror("Error", "Invalid video folder path")
             self.video_filepaths = []
 
-    def get_video_data(self, video_filepaths):
+    def get_video_data(self, video_filepaths, return_video_file_objects: bool = False):
 
         # Define logger
         self.logger.debug(f"Running function get_video_data({video_filepaths})")
@@ -82,13 +83,18 @@ class AppAncestor:
         # loop through time annotations and open corresponding video file
         # extract video data beforehand to save processing time
         video_data = []
+        video_files = []
         i: int
         for i, filepath in enumerate(video_filepaths):
-            if filepath.endswith('.mp4'):
-                video = vid_data.Video_file(video_filepaths[i], self.main_window)
+            if filepath.endswith('.mp4') or filepath.endswith('.avi'):
+                video = vid_data.Video_file(video_filepaths[i], self.main_window, self.ocr_roi)
+                video_files.append(video)
                 video_data_entry = [video.filepath, video.start_time, video.end_time]
                 video_data.append(video_data_entry)
-        return video_data
+        if return_video_file_objects:
+            return video_data, video_files
+        else:
+            return video_data
 
     def get_relevant_video_paths(self, video_filepaths, annotation_data_array):
         new_video_filepaths = set()
@@ -126,6 +132,7 @@ class AppAncestor:
 
             # Clear the list if no longer needed
             valid_annotation_data_entry = []
+        # valid annotation entry: [duration, time_of_visit, video_filepath, video_start_time, video_end_time]
         return valid_annotations_array
 
     def open_main_window(self):

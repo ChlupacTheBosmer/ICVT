@@ -13,10 +13,12 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 from datetime import datetime
 from datetime import timedelta
+import imageio
+from tkinter import simpledialog
 
 class Video_file():
 
-    def __init__(self, filepath, root):
+    def __init__(self, filepath, root, ocr_roi: tuple = (0, 0, 500, 60), initiate_start_and_end_times: bool = True):
 
         # Define logger
         self.logger = utils.log_define()
@@ -24,12 +26,28 @@ class Video_file():
         # Define variables
         self.filepath = filepath
         self.main_window = root
+        self.ocr_roi = ocr_roi
 
         # Check requirements
-        if filepath.endswith('.mp4'):
-            self.start_time, self.end_time = self.get_video_start_end_times()
+        if filepath.endswith(".mp4") or filepath.endswith(".avi"):
+            if initiate_start_and_end_times:
+                self.start_time, self.end_time = self.get_video_start_end_times()
         else:
             self.logger.error("Invalid file type. Provide path to a valid video file.")
+
+        # Determine video origin
+        if filepath.endswith(".mp4"):
+            self.video_origin = "VT"
+        elif filepath.endswith(".avi"):
+            self.video_origin = "MS"
+
+        # Chose a different method based on whether the video is a vivotek .mp4 or a milesight .avi
+        if self.video_origin == "VT":
+            self.cap = cv2.VideoCapture(self.filepath)
+
+        # Get basic video properties
+        self.fps = self.get_video_fps()
+        self.total_frames = self.get_video_total_frames()
 
     def get_video_start_end_times(self):
 
@@ -40,6 +58,8 @@ class Video_file():
 
         # Get start time from metadata but because the metadata often contain wrong hour number, we will only use the seconds
         start_time_meta, success = self.get_metadata_from_video(self.filepath, "start")
+
+        print(success)
 
         # If failed to get time from metadata obtain it manually
         if not success:
@@ -59,12 +79,13 @@ class Video_file():
 
         # Construct the string
         start_time_str = '_'.join([start_time_minutes, start_time_seconds])
-        print(start_time_str)
         start_time = pd.to_datetime(start_time_str, format='%Y%m%d_%H_%M_%S')
-        print(start_time)
+        self.start_time = start_time
 
         # Get end time
         end_time_meta, success = self.get_metadata_from_video(self.filepath, "end")
+
+        print(success)
 
         # If failed to get time from metadata obtain it manually
         if not success:
@@ -83,7 +104,10 @@ class Video_file():
         else:
             end_time_str = '_'.join(
                 [filename_parts[len(filename_parts) - 3], filename_parts[len(filename_parts) - 2], end_time_meta[-5:]])
+            print(end_time_meta)
             end_time = pd.to_datetime(end_time_str, format='%Y%m%d_%H_%M_%S')
+        print(f"start: {start_time}. end: {end_time}")
+        self.end_time = end_time
         return start_time, end_time
 
     def get_metadata_from_video(self, video_filepath, start_or_end):
@@ -104,21 +128,9 @@ class Video_file():
                 success = False
         elif start_or_end == "end":
             try:
-                # Get the creation date and duration from metadata
-                parser = createParser(video_filepath)
-                metadata = extractMetadata(parser)
-                modify_date = str(metadata.get("creation_date"))
-                duration = str(metadata.get("duration")) # 0:15:02.966667
-
-                # Split duration string into hours, minutes, and seconds
-                duration_parts = duration.split(':')
-                hours, minutes, seconds = map(float, duration_parts)
-
-                # Calculate the timedelta for the duration
-                duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
-
-                # Convert modify_date to a datetime object
-                modify_date = datetime.strptime(modify_date, "%Y-%m-%d %H:%M:%S")
+                # Get the creation date and duration
+                modify_date = self.start_time
+                duration = self.get_video_duration()
 
                 # Calculate the end time by adding the duration to the creation time
                 end_time = modify_date + duration
@@ -133,24 +145,55 @@ class Video_file():
 
     def get_video_frame(self, start_or_end):
 
-        # Get the video capture and ROI defined
-        cap = cv2.VideoCapture(self.filepath)
+        if self.filepath.endswith(".mp4"):
+            # Get the video capture and ROI defined
+            cap = cv2.VideoCapture(self.filepath)
 
-        # Define which frame to scan - start of end?
-        if start_or_end == "end":
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            second_to_last_frame_idx = total_frames - 5
-            cap.set(cv2.CAP_PROP_POS_FRAMES, second_to_last_frame_idx)
-        else:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 24)
+            # Define which frame to scan - start of end?
+            if start_or_end == "end":
+                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                second_to_last_frame_idx = total_frames - 5
+                cap.set(cv2.CAP_PROP_POS_FRAMES, second_to_last_frame_idx)
+            else:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 24)
 
-        # Get the video frame and process the image
-        ret, frame = cap.read()
-        if ret:
-            return frame
-        else:
-            self.logger.error('Unable to extract a frame from the video file and determine the start or end time.')
-            pass
+            # Get the video frame and process the image
+            ret, frame = cap.read()
+            if ret:
+                return frame
+            else:
+                self.logger.error('Unable to extract a frame from the video file and determine the start or end time.')
+                pass
+        elif self.filepath.endswith(".avi"):
+            # Get the video reader and ROI defined
+            video = imageio.get_reader(self.filepath)
+
+            # Define which frame to scan - start or end?
+            if start_or_end == "end":
+
+                # Get the creation date from metadata
+                parser = createParser(self.filepath)
+                metadata = extractMetadata(parser)
+                fps = float(metadata.get("frame_rate"))
+                duration = str(metadata.get("duration"))
+
+                # Split duration string into hours, minutes, and seconds
+                duration_parts = duration.split(':')
+                hours, minutes, seconds = map(float, duration_parts)
+
+                # Calculate the total duration in seconds
+                total_duration_seconds = hours * 3600 + minutes * 60 + seconds
+                total_frames = total_duration_seconds * fps
+
+                second_to_last_frame_idx = total_frames - 10  # Adjusted for 0-based indexing
+                frame = video.get_data(second_to_last_frame_idx)
+            else:
+                frame = video.get_data(24)
+
+            if frame is not None:
+                return frame
+            else:
+                self.logger.error("Unable to extract a frame from the video file and determine the start or end time.")
 
     def get_text_manually(self, frame):
 
@@ -205,7 +248,7 @@ class Video_file():
         dialog.title("Time Input")
 
         # convert frame to tkinter image
-        text_roi = (0, 0, 500, 60)
+        text_roi = self.ocr_roi
         x, y, w, h = text_roi
         img_frame_width = min(screen_width // 2, w * 2)
         img_frame_height = min(screen_height // 2, h * 2)
@@ -226,10 +269,19 @@ class Video_file():
         img_label = tk.Label(img_frame, image=img)
         img_label.pack(side=tk.TOP, pady=(0, 0))
 
+        # Get the name of the video time to display it in the label. THe user then can decide whether ti is ok and eventually try to change it.
+        filename_parts = os.path.basename(self.filepath)[:-4].split("_")
+        start_time_minutes = ":".join(
+            [filename_parts[len(filename_parts) - 2],
+             filename_parts[len(filename_parts) - 1]])
+
         # Add label
-        text_field = tk.Text(dialog, height=2, width=120, font=("Arial", 10))
+        text_field = tk.Text(dialog, height=4, width=120, font=("Arial", 10))
         text_field.insert(tk.END,
-                          "The OCR detection apparently failed.\nEnter the last two digits of the security camera watermark (number of seconds).\nThis will ensure cropping will happen at the right times")
+                          "The OCR detection apparently failed."
+                          "\nEnter the last two digits of the security camera watermark (number of seconds)."
+                          "\nThis will ensure cropping will happen at the right times."
+                         f"\nStart of the video from filename: {start_time_minutes}")
         text_field.configure(state="disabled", highlightthickness=1, relief="flat", background=dialog.cget('bg'))
         text_field.tag_configure("center", justify="center")
         text_field.tag_add("center", "1.0", "end")
@@ -266,3 +318,122 @@ class Video_file():
         else:
             success = False
         return return_time, success
+
+    def read_video_frame(self, frame_number: int = 0):
+
+        if self.video_origin == "MS":
+            try:
+                # Open the video file using imageio
+                video = imageio.get_reader(self.filepath)
+
+                # Read the first frame
+                frame = video.get_data(frame_number)
+
+                # Convert the frame to BGR color space
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+                # Reading successful
+                success = True
+
+            except Exception as e:
+                self.logger.warning(f'Unable to read video frame. Video: {self.filepath}, Exception: {e}')
+                success = False
+        else:
+            try:
+                # Read the frame
+                print(frame_number)
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                success, frame = self.cap.read()
+                print(success)
+            except Exception as e:
+                self.logger.warning(f'Unable to read video frame. Video: {self.filepath}, Exception: {e}')
+                success = False
+
+        return success, frame
+
+    def get_frame_shape(self):
+
+        # Will retrieve the dimensions of the video
+        if self.video_origin == "MS":
+            video_reader = imageio.get_reader(self.filepath)
+
+            try:
+                metadata = video_reader.get_meta_data()
+                frame_width = metadata["size"][0]
+                frame_height = metadata["size"][1]
+            except:
+                # Read the first frame to get its shape properties
+                first_frame = video_reader.get_data(0)
+                frame_height, frame_width, _ = first_frame.shape
+        else:
+            try:
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 2)
+                frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            except:
+                raise
+
+        return frame_width, frame_height
+
+
+
+    def get_video_fps(self):
+
+        try:
+            if self.video_origin == "MS":
+                # Get the creation date from metadata
+                parser = createParser(self.filepath)
+                metadata = extractMetadata(parser)
+                fps = float(metadata.get("frame_rate"))
+            else:
+                cap = cv2.VideoCapture(self.filepath)
+                fps = cap.get(cv2.CAP_PROP_FPS)
+        except Exception as e:
+            self.logger.warning(f'Unable to read video fps: {self.filepath}. Exception: {e}')
+            fps = 25
+        return fps
+
+    def get_video_total_frames(self):
+
+        if self.video_origin == "MS":
+
+            # Will return timedelta object
+            duration = self.get_video_duration()
+
+            # Get total number of seconds
+            duration = duration.total_seconds()
+
+            # Get fps
+            if self.fps is not None:
+                fps = self.fps
+            else:
+                fps = self.get_video_fps()
+
+            # Calculate total_frames
+            total_frames = int(duration * fps)
+
+        else:
+            cap = cv2.VideoCapture(self.filepath)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+        return total_frames
+
+    def get_video_duration(self):
+
+        try:
+            # Get the creation date from metadata
+            parser = createParser(self.filepath)
+            metadata = extractMetadata(parser)
+            duration = str(metadata.get("duration"))
+        except Exception as e:
+            self.logger.warning(f'Unable to read video duration from video: {self.filepath}. Exception: {e}')
+            duration = simpledialog.askstring(f"Unable to read video duration from video: {self.filepath}", "Enter duration time (hh:mm:ss):")
+
+        # Split duration string into hours, minutes, and seconds
+        duration_parts = duration.split(':')
+        hours, minutes, seconds = map(float, duration_parts)
+
+        # Calculate the timedelta for the duration
+        duration = timedelta(hours=hours, minutes=minutes, seconds=seconds)
+
+        return duration
