@@ -233,6 +233,7 @@ class ICCS(icvt.AppAncestor):
                         self.logger.error(f"Error: Failed to process video '{filename}': {e}")
                         default_image = cv2.imread('resources/img/nf.png')
                         self.frames.append(default_image)
+                    cap.release()
                 elif filename.endswith(".avi"):
                     video_path = os.path.join(self.video_folder_path, filename)
                     try:
@@ -273,7 +274,6 @@ class ICCS(icvt.AppAncestor):
         # Add a random offset to the coordinates, but ensure they remain within the image bounds
         # DONE: Implement Milesight functionality
         frame_width, frame_height = self.video_file_object.get_frame_shape()
-        print(frame_width)
 
         # Check if any of the dimensions is smaller than crop_size and if so upscale the image to prevent crops smaller than desired crop_size
         if frame_height < self.crop_size or frame_width < self.crop_size:
@@ -372,7 +372,7 @@ class ICCS(icvt.AppAncestor):
             success, frame = self.video_file_object.read_video_frame(frame_to_read)
 
             # If the frame count is equal or larger than the amount of frames that comprises the duration of the visit end the loop
-            if not (frame_count <= (self.visit_duration * self.fps)):
+            if not (frame_count < (self.visit_duration * self.fps)-1):
                 # Release the video capture object and close all windows
                 # DONE: Implement Milesight functionality
                 if not self.video_file_object.video_origin == "MS":
@@ -647,9 +647,6 @@ class ICCS(icvt.AppAncestor):
                     # Pick the correct video file object from the list - Filter the list to find the object with matching filepath
                     self.video_file_object = next((video for video in video_files if video.filepath == video_filepath), None)
 
-                    print(self.video_file_object.filepath)
-                    print(video_filepath)
-
                     # Turn timestamp into datetime and calculate how many seconds from the start_time of the video recording does the visit take place
                     visit_time = pd.to_datetime(visit_timestamp, format='%Y%m%d_%H_%M_%S')
                     visit_time_from_start = (visit_time - video_start_time).total_seconds()
@@ -663,27 +660,17 @@ class ICCS(icvt.AppAncestor):
                     # DONE: Implement Milesight functionality
                     total_frames = self.video_file_object.total_frames
                     self.fps = self.video_file_object.fps
-                    print(total_frames)
-                    print(self.fps)
 
                     # The actual duration is taken as limited by the end of the video, therefore cropping wont carry on for longer than one entire video file.
                     self.visit_duration = (min(((visit_time_from_start * self.fps) + (int(visit_duration) * self.fps)),
                                           total_frames) - (visit_time_from_start * self.fps)) // self.fps
 
-                    print(self.visit_duration)
-
                     # First frame to capture - start of the visit
                     frame_number_start = int(visit_time_from_start * self.fps)
 
-                    print(frame_number_start)
-
                     # Read the frame
                     # DONE: Implement Milesight functionality
-                    #success, frame = self.video_file_object.read_video_frame(frame_number_start)
-                    self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number_start)
-                    success, frame = self.cap.read()
-
-                    print(success)
+                    success, frame = self.video_file_object.read_video_frame(frame_number_start)
 
                     # Iterate over the list of lists to find which points of interest entry index to summon for each visit-video combo
                     roi_index = 0
@@ -700,8 +687,6 @@ class ICCS(icvt.AppAncestor):
                     img_paths = asyncio.run(
                         self.generate_frames(frame, success, os.path.basename(video_filepath),
                                         roi_index, frame_number_start))
-
-                    print(img_paths)
 
                     # If relevant preprocess the images using yolo
                     if self.yolo_processing == 1 and len(img_paths) > 0:

@@ -59,8 +59,6 @@ class Video_file():
         # Get start time from metadata but because the metadata often contain wrong hour number, we will only use the seconds
         start_time_meta, success = self.get_metadata_from_video(self.filepath, "start")
 
-        print(success)
-
         # If failed to get time from metadata obtain it manually
         if not success:
 
@@ -85,8 +83,6 @@ class Video_file():
         # Get end time
         end_time_meta, success = self.get_metadata_from_video(self.filepath, "end")
 
-        print(success)
-
         # If failed to get time from metadata obtain it manually
         if not success:
             # Get the time in seconds manually
@@ -104,9 +100,8 @@ class Video_file():
         else:
             end_time_str = '_'.join(
                 [filename_parts[len(filename_parts) - 3], filename_parts[len(filename_parts) - 2], end_time_meta[-5:]])
-            print(end_time_meta)
             end_time = pd.to_datetime(end_time_str, format='%Y%m%d_%H_%M_%S')
-        print(f"start: {start_time}. end: {end_time}")
+        #print(f"start: {start_time}. end: {end_time}")
         self.end_time = end_time
         return start_time, end_time
 
@@ -164,6 +159,7 @@ class Video_file():
             else:
                 self.logger.error('Unable to extract a frame from the video file and determine the start or end time.')
                 pass
+            cap.release()
         elif self.filepath.endswith(".avi"):
             # Get the video reader and ROI defined
             video = imageio.get_reader(self.filepath)
@@ -341,10 +337,10 @@ class Video_file():
         else:
             try:
                 # Read the frame
-                print(frame_number)
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-                success, frame = self.cap.read()
-                print(success)
+                cap = cv2.VideoCapture(self.filepath)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+                success, frame = cap.read()
+                cap.release()
             except Exception as e:
                 self.logger.warning(f'Unable to read video frame. Video: {self.filepath}, Exception: {e}')
                 success = False
@@ -367,9 +363,11 @@ class Video_file():
                 frame_height, frame_width, _ = first_frame.shape
         else:
             try:
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, 2)
-                frame_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap = cv2.VideoCapture(self.filepath)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 2)
+                frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
             except:
                 raise
 
@@ -388,10 +386,11 @@ class Video_file():
             else:
                 cap = cv2.VideoCapture(self.filepath)
                 fps = cap.get(cv2.CAP_PROP_FPS)
+                cap.release()
         except Exception as e:
             self.logger.warning(f'Unable to read video fps: {self.filepath}. Exception: {e}')
             fps = 25
-        return fps
+        return int(fps)
 
     def get_video_total_frames(self):
 
@@ -415,6 +414,7 @@ class Video_file():
         else:
             cap = cv2.VideoCapture(self.filepath)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
 
         return total_frames
 
