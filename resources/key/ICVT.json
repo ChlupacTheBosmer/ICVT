@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "insect-communities-video-tools",
+  "private_key_id": "4dce343137fc14d850964f352d6a94f2159e9c84",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDJcZqhj8ONDtso\n5Z5R4wWu+F/DGxTsoZ+TjMeIRli+xgMOzQHTq4PkQln28xMYWH1YYZN11FyvSgXc\nMN5kwkUIT1odiM20ttD5w8Ps/flJN0I9cCWwSp+5X878C7AGToCT+c6q36X6zsqE\nCaOtUadZO8y9CE23+mUlEaYsoM9RyKLaNHy0l8Sv4THTzZ22a2CQVygoxuw1i1qX\nvdtLtWZaF3AJOTejnkbeuK27UBUDGdt9WibhXfXJqLVtTQ1nLHmhZjrxnpSls23D\n+6YUfj6sgiNv/ZVB3Oiqsq2VzhZHXEVm0AtIhw8tHg+BoG54l9K3vzKzqB3x6DG0\nHGVnPAipAgMBAAECggEAR5QFZPkHfDzWJP8KNYCciWKZ7GLYGYkIgc5ZLBQK/qav\neXfg+UyNjfMBsp0GoPT4fQoW8pxl3qdH08jNjTH2g5Bmre3pYhg/wzALk09fX+Ox\nttD9o1mwzZa8npSslGEakPoHtHHJsYf/L9GZBkHoW+3CvzyPGRtxCy3tRRhS8nTd\n/qnx9goR+C6FCHQXq5z5wM3DFdjxIbm4Qwd9n6Wd+MDjYPuRM5/8CkuJpwPQd7pb\ncGFL7JpRfhlVeoVPNSgHkVBQVR0t51A5SY1T0RyU4KG4Ddsc3gxuvVEzFmNioNcM\niUZiiGo/K4vOsAeHL5TFpQqYSxeGwoWl4rzuuXVSjQKBgQDjKCVReFYpgu4sAdcV\np2FIjX6VbkyFY2N4IK2T8vsehJORMKHMzzotAhIHINIO9MBQGSdqiqbS4/eGlYei\n+fM66yN/eh3M60IpENl60QxfuQyFQL4dMulxt5JB/6VsOI63MrF8MRliOR2VJyAQ\nes8VJpTFB3e7U4r4kYBAFAMnzwKBgQDjBaRDecYyHDkip+EjIgSG9R7oxBYAHVRO\n+3gXg28O1HYYMDVVW5K0gxJRwF6y1MTereC+oF4XAkmZIJTzDoZrsU3UEKT95cxo\nJ8xUX5gbBt3yh44QFRfMuMwNtWshHMHHDqIbPFtxPXK00UUtVX/zn3nwX/mHzuq5\nUsX99wVuBwKBgQDbs4Z0h6j+OU5WbekzXlIvM/sMWEPWd0xLcX+wqr/KwntfX+P+\nDSe9RFVfY5UHNh2S2uFOoI+9RROwrYskTA++GpKYxulvutKgmVVe/jWzl2zOrNGz\nt/wlKmFhR/sc8o7GDVewQGTGpWtBSTgv+De1wzz8W76oBaNRyph6YWCz7QKBgQCH\nV9KxQ4UMVNUfOxS2nE40oyf1PwmaseGUYMkcw4fPQIzTKNJy++//W/Ds+hG67awc\n0W6eVv8hGoUEHG+QZAVxaLfsiKvEjl6JbcicOI1292YUdAoWvmx86WMFfTXL/Nft\ns2Sjdh1R6n9bGzPxrfplJJtO2fjqpUo8iANvv/fluwKBgQCe+nJ/hpe2qoqLLZ+0\nkTucxjNIMZFl5ekxNgF9S5Usm0WJNpOOlecoQ2lLPjl9pwereX4vG/ukOPSkBce3\nWQZRHxYYN03+I1PsKiVrJ4SxMthqHCMn3CsI6lrVkCeVCK4vxT4tTt8pVlJSxLEZ\nY5m12D/FRA00Rgpd12B+HK42aQ==\n-----END PRIVATE KEY-----\n",
+  "client_email": "icvt-786@insect-communities-video-tools.iam.gserviceaccount.com",
+  "client_id": "100363557840617263327",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/icvt-786%40insect-communities-video-tools.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

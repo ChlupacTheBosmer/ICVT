@@ -1516,8 +1516,6 @@ class ICCS(icvt.AppAncestor):
                 top_right_corner = (bottom_right_corner[0], top_left_corner[1])
                 bottom_left_corner = (top_left_corner[0], bottom_right_corner[1])
                 center_of_roi = (point[0], point[1])
-                # x1, y1 = max(0, point[0] - (self.crop_size // 2)), max(0, point[1] - (self.crop_size // 2))
-                # x2, y2 = min(width, point[0] + (self.crop_size // 2)), min(height, point[1] + (self.crop_size // 2))
                 cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
                 cv2.rectangle(frame, top_left_corner, bottom_right_corner, (0, 0, 255), 3)
                 cv2.line(frame, center_of_roi, top_left_corner, (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
@@ -1527,18 +1525,6 @@ class ICCS(icvt.AppAncestor):
 
             # Draw the offset extremes rectangles
             if draw_extremes or draw_overlap:
-                # for i, (label, (offset_x, offset_y), condition) in enumerate(zip(labels, offsets, conditions)):
-                #     o_x1 = max(pos_off, min(((point[0] - self.crop_size // 2) + offset_x * self.offset_range) - pos_off,
-                #                             width - self.crop_size - pos_off))
-                #     o_y1 = max(pos_off, min(((point[1] - self.crop_size // 2) + offset_y * self.offset_range) - pos_off,
-                #                             height - self.crop_size - pos_off))
-                #     o_x2 = max(self.crop_size - pos_off,
-                #                min(((point[0] + self.crop_size // 2) + offset_x * self.offset_range) - pos_off,
-                #                    width - pos_off))
-                #     o_y2 = max(self.crop_size - pos_off,
-                #                min(((point[1] + self.crop_size // 2) + offset_y * self.offset_range) - pos_off,
-                #                    height - pos_off))
-                #     rectangles.append([(o_x1, o_y1), (o_x2, o_y2)])
                 rectangles = self.get_roi_extreme_offset_dimensions(point, (width, height), 0, self.crop_size, self.offset_range)
                 for rectangle, condition in zip(rectangles, conditions):
                     if condition:
@@ -1546,12 +1532,6 @@ class ICCS(icvt.AppAncestor):
 
                 # Draw overlap area
                 if draw_overlap:
-                    # Find the overlapping area
-                    # x_min = max(rect[0][0] for rect in rectangles)
-                    # y_min = max(rect[0][1] for rect in rectangles)
-                    # x_max = min(rect[1][0] for rect in rectangles)
-                    # y_max = min(rect[1][1] for rect in rectangles)
-
                     top_left_corner, bottom_right_corner = self.get_roi_offset_overlap(rectangles)
 
                     # Draw the rectangle of the overlap
