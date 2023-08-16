@@ -198,47 +198,6 @@ class ICCS(icvt.AppAncestor):
         with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
             config.write(configfile)
 
-    def generate_roi_entries(self):
-
-        original_points = self.points_of_interest_entry[0][0].copy()
-
-        self.reload_roi_entries()
-
-        result = utils.ask_yes_no("Would you like to perform single ROI detection? Only the first frame will be used for the detection. "
-                                  "If you click 'No' all frames will be querried. Please use the advanced option only in the case of often changing flower location. "
-                                  "\n\nThe number of frames querried will be reflected in the quota usage and you might be billed. ")
-        if result:
-            limit = 1
-        else:
-            limit = len(self.frames) + 1
-
-        for i, (frame, filepath) in enumerate(zip(self.frames, self.video_filepaths)):
-            if result and i >= limit:
-                break
-            height, width, _ = frame.shape
-            unique_rois = vision_AI.get_unique_rois_from_frame(frame)
-            overlaps = []
-            for roi in unique_rois:
-                rectangles = self.get_roi_extreme_offset_dimensions(roi, (width, height), 0, self.crop_size, self.offset_range)
-                top_left_corner, bottom_right_corner = self.get_roi_offset_overlap(rectangles)
-
-                # Calculate width and height
-                width = bottom_right_corner[1] - top_left_corner[0]
-                height = bottom_right_corner[1] - top_left_corner[1]
-
-                overlaps.append((width, height))
-
-            grouped_rois = vision_AI.get_grouped_rois_from_frame(self.frames, unique_rois, overlaps)
-            self.points_of_interest_entry[i] = [grouped_rois, filepath]
-            if not result:
-                for each, _ in enumerate(self.points_of_interest_entry):
-                    self.update_button_image(frame.copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)),
-                                         0)
-
-        if result:
-            self.update_roi_entries(0, original_points)
-
-
     def reload_roi_entries(self):
         self.logger.debug('Running function reload_points_of_interest()')
 
@@ -1243,8 +1202,7 @@ class ICCS(icvt.AppAncestor):
         window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
         window.mainloop()
 
-    def \
-            open_ocr_roi_gui(self, video_filepath):
+    def open_ocr_roi_gui(self, video_filepath):
 
         # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the
         # top left and bottom right coordinates will be saved in the settings_crop.ini file
@@ -1320,6 +1278,45 @@ class ICCS(icvt.AppAncestor):
         self.config['OCR settings']['height'] = str(self.height)
         with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
             self.config.write(configfile)
+
+    def generate_roi_entries(self):
+
+        original_points = self.points_of_interest_entry[0][0].copy()
+
+        self.reload_roi_entries()
+
+        result = utils.ask_yes_no("Would you like to perform single ROI detection? Only the first frame will be used for the detection. "
+                                  "If you click 'No' all frames will be querried. Please use the advanced option only in the case of often changing flower location. "
+                                  "\n\nThe number of frames querried will be reflected in the quota usage and you might be billed. ")
+        if result:
+            limit = 1
+        else:
+            limit = len(self.frames) + 1
+
+        for i, (frame, filepath) in enumerate(zip(self.frames, self.video_filepaths)):
+            if result and i >= limit:
+                break
+            height, width, _ = frame.shape
+            unique_rois = vision_AI.get_unique_rois_from_frame(frame)
+            overlaps = []
+            for roi in unique_rois:
+                rectangles = self.get_roi_extreme_offset_dimensions(roi, (width, height), 0, self.crop_size, self.offset_range)
+                top_left_corner, bottom_right_corner = self.get_roi_offset_overlap(rectangles)
+
+                # Calculate width and height
+                width = bottom_right_corner[1] - top_left_corner[0]
+                height = bottom_right_corner[1] - top_left_corner[1]
+
+                overlaps.append((width, height))
+
+            grouped_rois = vision_AI.get_grouped_rois_from_frame(self.frames, unique_rois, overlaps)
+            self.points_of_interest_entry[i] = [grouped_rois, filepath]
+            if not result:
+                for each, _ in enumerate(self.points_of_interest_entry):
+                    self.update_button_image(frame.copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), 0)
+
+        if result:
+            self.update_roi_entries(0, original_points)
 
     def open_roi_gui(self, i, j, button_images):
 
