@@ -15,10 +15,11 @@ from datetime import datetime
 from datetime import timedelta
 import imageio
 from tkinter import simpledialog
+import vision_AI
 
 class Video_file():
 
-    def __init__(self, filepath, root, ocr_roi: tuple = (0, 0, 500, 60), initiate_start_and_end_times: bool = True):
+    def __init__(self, filepath, root = None, ocr_roi: tuple = (0, 0, 500, 60), initiate_start_and_end_times: bool = True):
 
         # Define logger
         self.logger = utils.log_define()
@@ -64,7 +65,12 @@ class Video_file():
 
             # Get the time in seconds manually
             frame = self.get_video_frame("start")
-            start_time_seconds, success = self.get_text_manually(frame)
+
+            success, time = vision_AI.get_text_with_OCR(frame)
+            if not success:
+                start_time_seconds, success = self.get_text_manually(frame)
+            else:
+                start_time_seconds = str(time.second)
 
         else:
             start_time_seconds = start_time_meta[-2:]
@@ -87,9 +93,14 @@ class Video_file():
         if not success:
             # Get the time in seconds manually
             frame = self.get_video_frame("end")
-            end_time_seconds, success = self.get_text_manually(frame)
 
-            # 15 minu duration of the video is assumed and the manually extracted seconds are added
+            success, time = vision_AI.get_text_with_OCR(frame)
+            if not success:
+                end_time_seconds, success = self.get_text_manually(frame)
+            else:
+                end_time_seconds = str(time.second)
+
+            # 15 minut duration of the video is assumed and the manually extracted seconds are added
             delta = 15 + (int(end_time_seconds) // 60)
             end_time_seconds = str(int(end_time_seconds) % 60)
 

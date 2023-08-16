@@ -1,29 +1,27 @@
 # This file contains the ICCS app class that inherits from ICVT AppAncestor class
+
+# Import ICVT components
 import sorting_gui
 import utils
 import anno_data
 import vid_data
+import vision_AI
 import icvt
+
+# Import other modules
 import pandas as pd
 import os
-import subprocess
-import threading
 import cv2
 import configparser
 import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
 import pickle
-import sys
 import random
 import math
-import time
 from ultralytics import YOLO
 import shutil
 import asyncio
-import imageio
-import numpy as np
-from sorting_gui import ImageGridWindow
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):
@@ -71,7 +69,7 @@ class ICCS(icvt.AppAncestor):
         self.load_videos()
 
         # Construct ROI data
-        self.reload_points_of_interest()
+        self.reload_roi_entries()
 
         # Load video frames for buttons
         self.load_video_frames()
@@ -200,7 +198,48 @@ class ICCS(icvt.AppAncestor):
         with open('settings_crop.ini', 'w', encoding='utf-8') as configfile:
             config.write(configfile)
 
-    def reload_points_of_interest(self):
+    def generate_roi_entries(self):
+
+        original_points = self.points_of_interest_entry[0][0].copy()
+
+        self.reload_roi_entries()
+
+        result = utils.ask_yes_no("Would you like to perform single ROI detection? Only the first frame will be used for the detection. "
+                                  "If you click 'No' all frames will be querried. Please use the advanced option only in the case of often changing flower location. "
+                                  "\n\nThe number of frames querried will be reflected in the quota usage and you might be billed. ")
+        if result:
+            limit = 1
+        else:
+            limit = len(self.frames) + 1
+
+        for i, (frame, filepath) in enumerate(zip(self.frames, self.video_filepaths)):
+            if result and i >= limit:
+                break
+            height, width, _ = frame.shape
+            unique_rois = vision_AI.get_unique_rois_from_frame(frame)
+            overlaps = []
+            for roi in unique_rois:
+                rectangles = self.get_roi_extreme_offset_dimensions(roi, (width, height), 0, self.crop_size, self.offset_range)
+                top_left_corner, bottom_right_corner = self.get_roi_offset_overlap(rectangles)
+
+                # Calculate width and height
+                width = bottom_right_corner[1] - top_left_corner[0]
+                height = bottom_right_corner[1] - top_left_corner[1]
+
+                overlaps.append((width, height))
+
+            grouped_rois = vision_AI.get_grouped_rois_from_frame(self.frames, unique_rois, overlaps)
+            self.points_of_interest_entry[i] = [grouped_rois, filepath]
+            if not result:
+                for each, _ in enumerate(self.points_of_interest_entry):
+                    self.update_button_image(frame.copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)),
+                                         0)
+
+        if result:
+            self.update_roi_entries(0, original_points)
+
+
+    def reload_roi_entries(self):
         self.logger.debug('Running function reload_points_of_interest()')
 
         # Clear the array of POIs and reconstruct it with empty lists.
@@ -211,19 +250,19 @@ class ICCS(icvt.AppAncestor):
         # Define logger
         self.logger.debug(f"Running function load_video_frames()")
 
+        # Define video formats
+        video_formats = ['.mp4', '.avi', '.mkv']
+
         # Loop through each file in folder
         self.frames = []
         if utils.check_path(self.video_folder_path, 0):
             for filename in os.listdir(self.video_folder_path):
-                if filename.endswith(".mp4"):  # Modify file extension as needed
+                if any(filename.endswith(format) for format in video_formats):
                     video_path = os.path.join(self.video_folder_path, filename)
                     try:
-                        # Use OpenCV or other library to extract first frame of video
-                        # and add it to the frames list
-                        cap = cv2.VideoCapture(video_path)
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, 25)
-                        ret, frame = cap.read()
-                        if ret:
+                        video_file_object = vid_data.Video_file(filepath=video_path, initiate_start_and_end_times=False)
+                        success, frame = video_file_object.read_video_frame(25)
+                        if success:
                             self.frames.append(frame)
                         else:
                             # If the read operation fails, add a default image
@@ -231,24 +270,6 @@ class ICCS(icvt.AppAncestor):
                             self.frames.append(default_image)
                     except (cv2.error, OSError) as e:
                         self.logger.error(f"Error: Failed to process video '{filename}': {e}")
-                        default_image = cv2.imread('resources/img/nf.png')
-                        self.frames.append(default_image)
-                    cap.release()
-                elif filename.endswith(".avi"):
-                    video_path = os.path.join(self.video_folder_path, filename)
-                    try:
-                        # Open the video file using imageio
-                        video = imageio.get_reader(video_path)
-
-                        # Read the first frame
-                        frame = video.get_data(0)
-
-                        # Convert the frame to BGR color space
-                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
-                        self.frames.append(frame)
-                    except Exception as e:
-                        self.logger.error(f"Error: Failed to process video '{filename}' : {e}")
                         default_image = cv2.imread('resources/img/nf.png')
                         self.frames.append(default_image)
         else:
@@ -884,10 +905,16 @@ class ICCS(icvt.AppAncestor):
                                width=100, command=lambda j=j: self.open_ocr_roi_gui(self.video_filepaths[0]))
         ocr_button.grid(row=0, column=7, padx=0, pady=5, sticky="ew")
 
+        # Generate ROIs button
+        genrois_button = tk.Button(toolbar, image=self.load_icon("resources/img/od.png", master=outer_frame),
+                               compound=tk.LEFT, text="ROIs", padx=10, pady=5, height=48,
+                               width=100, command=lambda j=j: self.generate_roi_entries())
+        genrois_button.grid(row=0, column=8, padx=0, pady=5, sticky="ew")
+
         # RIGHT button
         right_button = tk.Button(toolbar, image=self.load_icon("resources/img/ra.png", master = outer_frame), compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
                                  height=48, width=200, state=can_switch_folder("right"), command=lambda j=j: self.switch_folder("right"))
-        right_button.grid(row=0, column=8, padx=0, pady=5, sticky="ew")
+        right_button.grid(row=0, column=9, padx=0, pady=5, sticky="ew")
 
         # configure columns of toolbox
         toolbar.grid_columnconfigure(0, weight=2, minsize=50)
@@ -899,6 +926,7 @@ class ICCS(icvt.AppAncestor):
         toolbar.grid_columnconfigure(6, weight=4, minsize=50)
         toolbar.grid_columnconfigure(7, weight=4, minsize=50)
         toolbar.grid_columnconfigure(8, weight=2, minsize=50)
+        toolbar.grid_columnconfigure(9, weight=2, minsize=50)
 
         return toolbar
 
@@ -1076,7 +1104,7 @@ class ICCS(icvt.AppAncestor):
         # Reload videos, clear POIs, reload video frames
         self.load_videos()
         if reload_POIs:
-            self.reload_points_of_interest()
+            self.reload_roi_entries()
         self.load_video_frames()
         self.close_main_window()
         self.loaded = is_window_already_loaded
@@ -1294,6 +1322,7 @@ class ICCS(icvt.AppAncestor):
             self.config.write(configfile)
 
     def open_roi_gui(self, i, j, button_images):
+
         def get_mouse_position(event, x, y, flags, mode, i, j):
 
             # Function that is triggered when user clicks the image in the interface. Coordinates of the click are recorded,
@@ -1384,6 +1413,7 @@ class ICCS(icvt.AppAncestor):
 
                 if action in dict_of_extremes_to_draw:
                     dict_of_extremes_to_draw[action] *= value
+
             # Update other ROI entries to inherit the changes
             self.update_roi_entries(index, original_points)
 
@@ -1471,8 +1501,8 @@ class ICCS(icvt.AppAncestor):
         labels = ['BR', 'UL', 'UR', 'BL']
         offsets = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
         conditions = [dict_of_extremes_to_draw["b_r"] > 0, dict_of_extremes_to_draw["u_l"] > 0, dict_of_extremes_to_draw["u_r"] > 0, dict_of_extremes_to_draw["b_l"] > 0]
-        pos_off = 0
-        height, width, channels = frame.shape
+        pos_off = 0 # Offset if you want the lines to artificially draw next to each other in case you do not want an overlap of the lines.
+        height, width, _ = frame.shape
 
         # For each point draw desired shapes
         for point in list_of_ROIs:
@@ -1482,43 +1512,94 @@ class ICCS(icvt.AppAncestor):
 
             # Draw basic roi area
             if draw_roi:
-                x1, y1 = max(0, point[0] - (self.crop_size // 2)), max(0, point[1] - (self.crop_size // 2))
-                x2, y2 = min(width, point[0] + (self.crop_size // 2)), min(height, point[1] + (self.crop_size // 2))
+                top_left_corner, bottom_right_corner = self.get_roi_dimensions_from_center(point, (width, height), self.crop_size)
+                top_right_corner = (bottom_right_corner[0], top_left_corner[1])
+                bottom_left_corner = (top_left_corner[0], bottom_right_corner[1])
+                center_of_roi = (point[0], point[1])
+                # x1, y1 = max(0, point[0] - (self.crop_size // 2)), max(0, point[1] - (self.crop_size // 2))
+                # x2, y2 = min(width, point[0] + (self.crop_size // 2)), min(height, point[1] + (self.crop_size // 2))
                 cv2.rectangle(frame, (point[0] - 30, point[1] - 30), (point[0] + 30, point[1] + 30), (0, 255, 0), 2)
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 3)
-                cv2.line(frame, (point[0], point[1]), (x1, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-                cv2.line(frame, (point[0], point[1]), (x1, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-                cv2.line(frame, (point[0], point[1]), (x2, y1), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
-                cv2.line(frame, (point[0], point[1]), (x2, y2), (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                cv2.rectangle(frame, top_left_corner, bottom_right_corner, (0, 0, 255), 3)
+                cv2.line(frame, center_of_roi, top_left_corner, (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                cv2.line(frame, center_of_roi, bottom_left_corner, (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                cv2.line(frame, center_of_roi, top_right_corner, (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
+                cv2.line(frame, center_of_roi, bottom_right_corner, (0, 255, 255), thickness=2, lineType=cv2.LINE_AA)
 
             # Draw the offset extremes rectangles
             if draw_extremes or draw_overlap:
-                for i, (label, (offset_x, offset_y), condition) in enumerate(zip(labels, offsets, conditions)):
-                    o_x1 = max(pos_off, min(((point[0] - self.crop_size // 2) + offset_x * self.offset_range) - pos_off,
-                                            width - self.crop_size - pos_off))
-                    o_y1 = max(pos_off, min(((point[1] - self.crop_size // 2) + offset_y * self.offset_range) - pos_off,
-                                            height - self.crop_size - pos_off))
-                    o_x2 = max(self.crop_size - pos_off,
-                               min(((point[0] + self.crop_size // 2) + offset_x * self.offset_range) - pos_off,
-                                   width - pos_off))
-                    o_y2 = max(self.crop_size - pos_off,
-                               min(((point[1] + self.crop_size // 2) + offset_y * self.offset_range) - pos_off,
-                                   height - pos_off))
-                    rectangles.append([(o_x1, o_y1), (o_x2, o_y2)])
+                # for i, (label, (offset_x, offset_y), condition) in enumerate(zip(labels, offsets, conditions)):
+                #     o_x1 = max(pos_off, min(((point[0] - self.crop_size // 2) + offset_x * self.offset_range) - pos_off,
+                #                             width - self.crop_size - pos_off))
+                #     o_y1 = max(pos_off, min(((point[1] - self.crop_size // 2) + offset_y * self.offset_range) - pos_off,
+                #                             height - self.crop_size - pos_off))
+                #     o_x2 = max(self.crop_size - pos_off,
+                #                min(((point[0] + self.crop_size // 2) + offset_x * self.offset_range) - pos_off,
+                #                    width - pos_off))
+                #     o_y2 = max(self.crop_size - pos_off,
+                #                min(((point[1] + self.crop_size // 2) + offset_y * self.offset_range) - pos_off,
+                #                    height - pos_off))
+                #     rectangles.append([(o_x1, o_y1), (o_x2, o_y2)])
+                rectangles = self.get_roi_extreme_offset_dimensions(point, (width, height), 0, self.crop_size, self.offset_range)
+                for rectangle, condition in zip(rectangles, conditions):
                     if condition:
-                        cv2.rectangle(frame, (o_x1, o_y1), (o_x2, o_y2), (255, 229, 0), 2)
+                        cv2.rectangle(frame, rectangle[0], rectangle[1], (255, 229, 0), 2)
 
                 # Draw overlap area
                 if draw_overlap:
                     # Find the overlapping area
-                    x_min = max(rect[0][0] for rect in rectangles)
-                    y_min = max(rect[0][1] for rect in rectangles)
-                    x_max = min(rect[1][0] for rect in rectangles)
-                    y_max = min(rect[1][1] for rect in rectangles)
+                    # x_min = max(rect[0][0] for rect in rectangles)
+                    # y_min = max(rect[0][1] for rect in rectangles)
+                    # x_max = min(rect[1][0] for rect in rectangles)
+                    # y_max = min(rect[1][1] for rect in rectangles)
+
+                    top_left_corner, bottom_right_corner = self.get_roi_offset_overlap(rectangles)
 
                     # Draw the rectangle of the overlap
-                    cv2.rectangle(frame, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+                    cv2.rectangle(frame, top_left_corner, bottom_right_corner, (0, 255, 0), 2)
         return frame
+
+    def get_roi_dimensions_from_center(self, center_point, frame_dimensions: tuple, square_crop_size: int = 640):
+
+        # Define variables
+        width, height = frame_dimensions
+
+        # Calculater top-left and bottom-right corner coords
+        x1, y1 = max(0, center_point[0] - (square_crop_size // 2)), max(0, center_point[1] - (square_crop_size // 2))
+        x2, y2 = min(width, center_point[0] + (square_crop_size // 2)), min(height, center_point[1] + (square_crop_size // 2))
+
+        return (x1, y1), (x2, y2)
+
+    def get_roi_extreme_offset_dimensions(self, center_point, frame_dimensions: tuple, pos_off: int = 0, square_crop_size: int = 640, offset_range: int = 100):
+
+        # Define variables
+        width, height = frame_dimensions
+        labels = ['BR', 'UL', 'UR', 'BL'] # This will be the mapping of the output
+        offsets = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
+        rectangles = []
+
+        for i, (label, (offset_x, offset_y)) in enumerate(zip(labels, offsets)):
+            o_x1 = max(pos_off, min(((center_point[0] - square_crop_size // 2) + offset_x * offset_range) - pos_off,
+                                    width - square_crop_size - pos_off))
+            o_y1 = max(pos_off, min(((center_point[1] - square_crop_size // 2) + offset_y * offset_range) - pos_off,
+                                    height - square_crop_size - pos_off))
+            o_x2 = max(square_crop_size - pos_off,
+                       min(((center_point[0] + square_crop_size // 2) + offset_x * offset_range) - pos_off,
+                           width - pos_off))
+            o_y2 = max(square_crop_size - pos_off,
+                       min(((center_point[1] + square_crop_size // 2) + offset_y * offset_range) - pos_off,
+                           height - pos_off))
+            rectangles.append([(o_x1, o_y1), (o_x2, o_y2)])
+
+        return rectangles
+
+    def get_roi_offset_overlap(self, rectangles):
+
+        x_min = max(rect[0][0] for rect in rectangles)
+        y_min = max(rect[0][1] for rect in rectangles)
+        x_max = min(rect[1][0] for rect in rectangles)
+        y_max = min(rect[1][1] for rect in rectangles)
+
+        return (x_min, y_min), (x_max, y_max)
 
     def update_crop_mode(self, var):
 
@@ -1576,7 +1657,7 @@ class ICCS(icvt.AppAncestor):
                     if not set1 == set2:
                         messagebox.showinfo("Discrepancy detected",
                                             "The contents of the video folder have changed since the save has been made. Cannot load the progress. Please start over.")
-                        self.reload_points_of_interest()
+                        self.reload_roi_entries()
                     else:
                         self.video_filepaths = []
                         self.video_filepaths = video_filepaths_new.copy()
