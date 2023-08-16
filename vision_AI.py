@@ -5,6 +5,10 @@ import os
 import utils
 import re
 from datetime import datetime, timedelta
+import os
+import tkinter as tk
+from tkinter import filedialog
+import shutil
 
 def get_grouped_rois_from_frame(frames, unique_rois, grouping_radius_dimensions):
 
@@ -29,8 +33,13 @@ def get_grouped_rois_from_frame(frames, unique_rois, grouping_radius_dimensions)
 
 def get_unique_rois_from_frame(frame, min_confidence: float = 0.2):
 
+    key_path = r"resources\key\ICVT.json"
+
+    if not os.path.exists(key_path):
+        install_google_api_key()
+
     # Set up the client using your API key or service account credentials
-    client = vision.ImageAnnotatorClient.from_service_account_json(r"resources\key\ICVT.json")
+    client = vision.ImageAnnotatorClient.from_service_account_json(key_path)
 
     # Get frame shape
     image_height, image_width, _ = frame.shape
@@ -67,8 +76,13 @@ def get_unique_rois_from_frame(frame, min_confidence: float = 0.2):
 
 def get_text_with_OCR(frame):
 
+    key_path = r"resources\key\ICVT.json"
+
+    if not os.path.exists(key_path):
+        install_google_api_key()
+
     # Set up the client using your API key or service account credentials
-    client = vision.ImageAnnotatorClient.from_service_account_json(r"resources\key\ICVT.json")
+    client = vision.ImageAnnotatorClient.from_service_account_json(key_path)
 
     # Encode the frame as an image in memory
     _, encoded_frame = cv2.imencode(".jpg", frame)
@@ -118,3 +132,21 @@ def extract_time_from_text(text):
         return None  # No valid time found
     else:
         return valid_times
+
+def install_google_api_key():
+
+    # Open a file dialog to get the new file path
+    new_file_path = filedialog.askopenfilename()
+
+    # Get the directory of the script
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+
+    # Create the target directory if it doesn't exist
+    target_directory = os.path.join(script_directory, "resources", "key")
+    os.makedirs(target_directory, exist_ok=True)
+
+    # Move the file to the target directory
+    target_file_path = os.path.join(target_directory, os.path.basename(new_file_path))
+    shutil.move(new_file_path, target_file_path)
+
+    print(f"File moved to: {target_file_path}")
