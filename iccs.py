@@ -22,6 +22,7 @@ import math
 from ultralytics import YOLO
 import shutil
 import asyncio
+import json
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):
@@ -1587,7 +1588,6 @@ class ICCS(icvt.AppAncestor):
         self.crop_mode = var
 
     def save_progress(self):
-
         # Define logger
         self.logger.debug(f"Running function save_progress()")
 
@@ -1596,10 +1596,17 @@ class ICCS(icvt.AppAncestor):
         if result:
             if utils.check_path(self.video_folder_path, 0):
                 # Create an in-memory file object
-                filepath = os.path.join(self.video_folder_path, 'crop_information.pkl')
-                with open(filepath, 'wb') as f:
-                    # Use the pickle module to write the data to the file
-                    pickle.dump([self.auto_processing.get(), self.points_of_interest_entry, self.video_filepaths], f)
+                filepath = os.path.join(self.video_folder_path, 'crop_information.json')
+                data_matched = {i: self.points_of_interest_entry[i] for i in
+                                range(len(self.points_of_interest_entry))}
+
+                data_combined = {
+                    "auto_processing": self.auto_processing.get(),
+                    "video_data": data_matched
+                }
+
+                with open(filepath, "w") as json_file:
+                    json.dump(data_combined, json_file)
             else:
                 # display message box with error message
                 messagebox.showerror("Error", "Invalid video folder path")
@@ -1616,7 +1623,7 @@ class ICCS(icvt.AppAncestor):
             if utils.check_path(self.video_folder_path, 0):
 
                 # Create an in-memory file object
-                filepath = os.path.join(self.video_folder_path, 'crop_information.pkl')
+                filepath = os.path.join(self.video_folder_path, 'crop_information.json')
                 if os.path.isfile(filepath):
                     try:
                         if self.main_window.winfo_exists():
@@ -1624,11 +1631,16 @@ class ICCS(icvt.AppAncestor):
                     except:
                         self.logger.debug("Error: Unexpected, window destroyed before reference.")
                     self.points_of_interest_entry = []
-                    with open(filepath, 'rb') as f:
-                        data = pickle.load(f)
-                    self.auto = data[0]
-                    self.points_of_interest_entry = data[1].copy()
-                    video_filepaths_new = data[2].copy()
+                    with open(filepath, "r") as json_file:
+                        data_combined = json.load(json_file)
+
+                        # Restore data from dictionary
+                        self.auto = (data_combined["auto_processing"])
+                        data_matched = data_combined["video_data"]
+                        self.points_of_interest_entry = [item for item in data_matched.values()]
+                        video_filepaths_new = [item[1] for item in data_matched.values()]
+
+                   # Compare the loaded and the currently found video filepaths.
                     set1 = set({os.path.basename(filepath) for filepath in video_filepaths_new})
                     set2 = set({os.path.basename(filepath) for filepath in self.video_filepaths})
                     if not set1 == set2:

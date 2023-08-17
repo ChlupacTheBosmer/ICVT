@@ -72,7 +72,7 @@ class AppAncestor:
                 self.logger.error(f"Failed to load videos: {e}")
                 self.video_filepaths = []
         else:
-            messagebox.showerror("Error", "Invalid video folder path")
+            self.logger.error("Error", "Invalid video folder path")
             self.video_filepaths = []
 
     def get_video_data(self, video_filepaths, return_video_file_objects: bool = False):
