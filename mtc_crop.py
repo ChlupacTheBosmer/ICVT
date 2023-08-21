@@ -51,12 +51,14 @@ class mtcCrop(ICCS):
         self.gui_imgs = []
         self.cap = None
         self.image_details_dict = {}
+        self.main_window = None
+        self.visit_index = 0
 
         # Call the function to get a valid output folder
-        self.output_folder = self.get_valid_output_folder()
+        self.output_folder = self.get_valid_output_folder("output")
 
-        # Load the videos
-        self.load_videos()
+        # Call the function to get a valid output folder
+        self.video_folder_path = self.get_valid_output_folder("video")
 
         # Construct ROI data
         self.reload_roi_entries()
@@ -65,13 +67,19 @@ class mtcCrop(ICCS):
         utils.create_dir(self.output_folder)
         utils.create_dir(os.path.join(self.output_folder, "whole frames"))
 
-    def get_valid_output_folder(self):
+        self.load_videos()
+
+        self.load_progress()
+
+        self.crop_engine()
+
+    def get_valid_output_folder(self, folder_name):
         while True:
-            output_folder = input('Enter the path to your output folder. Make sure it is correct. Do not use quotes: ')
+            folder_path = input(f'Enter the path to your {folder_name} folder. Make sure it is correct. Do not use quotes: ')
 
             # Check if the path exists and is a directory
-            if os.path.exists(output_folder) and os.path.isdir(output_folder):
-                return output_folder
+            if os.path.exists(folder_path) and os.path.isdir(folder_path):
+                return folder_path
             else:
                 print("Invalid path. Please provide a valid directory path.")
 
@@ -160,10 +168,14 @@ class mtcCrop(ICCS):
         result = str(input("Do you want to load settings? This will overwrite any unsaved progress. (y/n):"))
 
         if result == "y":
-            if utils.check_path(self.video_folder_path, 0):
+
+            # Call the function to get a valid output folder
+            save_file_folder = self.get_valid_output_folder("save")
+
+            if utils.check_path(save_file_folder, 0):
 
                 # Create an in-memory file object
-                filepath = os.path.join(self.video_folder_path, 'crop_information.json')
+                filepath = os.path.join(save_file_folder, 'crop_information.json')
                 if os.path.isfile(filepath):
                     try:
                         if self.main_window.winfo_exists():
@@ -182,14 +194,15 @@ class mtcCrop(ICCS):
 
                     # Compare the loaded and the currently found video filepaths.
                     set1 = set({os.path.basename(filepath) for filepath in video_filepaths_new})
+                    print(set1)
                     set2 = set({os.path.basename(filepath) for filepath in self.video_filepaths})
+                    print(set2)
                     if not set1 == set2:
                         print("The contents of the video folder have changed since the save has been made. Cannot load the progress. Please start over.")
                         self.reload_roi_entries()
                     else:
                         self.video_filepaths = []
                         self.video_filepaths = video_filepaths_new.copy()
-                    self.reload(True, False)
                 else:
                     print("There are no save files in the current directory.")
             else:
@@ -202,7 +215,6 @@ class mtcCrop(ICCS):
         self.logger.debug("Running function crop_engine()")
 
         # Define variables
-        root = self.main_window
         self.image_details_dict = {}
 
         # Ask to confirm whether the process should begin
@@ -232,15 +244,18 @@ class mtcCrop(ICCS):
 
             # The whole frame settings is artificially altered to allow for whole frame generation - messy
             orig_wf = self.whole_frame
-            self.whole_frame = 1
+            self.whole_frame = 0
 
             # Starting from the second frame of every video frames are generated.
             for i, filepath in enumerate(self.video_filepaths):
-                self.video_file_object = vid_data.Video_file(filepath, self.main_window, self.ocr_roi, False)
+                self.video_file_object = vid_data.Video_file(filepath, self.main_window, initiate_start_and_end_times=False)
                 self.fps = self.video_file_object.fps
                 total_frames = self.video_file_object.total_frames
                 self.visit_duration = total_frames // self.fps
                 frame_number_start = 2
                 success, frame = self.video_file_object.read_video_frame(frame_number_start)
-                img_paths = self.generate_frames(frame, success, os.path.basename(self.video_filepaths[i]), i, frame_number_start)
+                img_paths = asyncio.run(self.generate_frames(frame, success, os.path.basename(self.video_filepaths[i]), i, frame_number_start))
             self.whole_frame = orig_wf
+
+if __name__ == '__main__':
+    mtc_crop = mtcCrop()
