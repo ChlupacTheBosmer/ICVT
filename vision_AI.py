@@ -101,8 +101,8 @@ def get_text_with_OCR(frame):
     for text in texts:
         times = extract_time_from_text(text.description)
 
-        if times:
-            print(f"Valid time detected with OCR: {times[0].time()}")
+    if times:
+        print(f"Valid time detected with OCR: {times[0].time()}")
 
 
     if times:

@@ -1657,4 +1657,5 @@ class ICCS(icvt.AppAncestor):
             else:
                 messagebox.showerror("Error", "Invalid video folder path")
 
-iccs = ICCS()
+if __name__ == '__main__':
+    iccs = ICCS()

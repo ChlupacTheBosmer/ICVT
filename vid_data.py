@@ -16,6 +16,7 @@ from datetime import timedelta
 import imageio
 from tkinter import simpledialog
 import vision_AI
+import sys
 
 class Video_file():
 
@@ -28,13 +29,6 @@ class Video_file():
         self.filepath = filepath
         self.main_window = root
         self.ocr_roi = ocr_roi
-
-        # Check requirements
-        if filepath.endswith(".mp4") or filepath.endswith(".avi"):
-            if initiate_start_and_end_times:
-                self.start_time, self.end_time = self.get_video_start_end_times()
-        else:
-            self.logger.error("Invalid file type. Provide path to a valid video file.")
 
         # Determine video origin
         if filepath.endswith(".mp4"):
@@ -50,6 +44,13 @@ class Video_file():
         self.fps = self.get_video_fps()
         self.total_frames = self.get_video_total_frames()
 
+        # Check requirements
+        if filepath.endswith(".mp4") or filepath.endswith(".avi"):
+            if initiate_start_and_end_times:
+                self.start_time, self.end_time = self.get_video_start_end_times()
+        else:
+            self.logger.error("Invalid file type. Provide path to a valid video file.")
+
     def get_video_start_end_times(self):
 
         # Define logger
@@ -64,7 +65,8 @@ class Video_file():
         if not success:
 
             # Get the time in seconds manually
-            frame = self.get_video_frame("start")
+            # frame = self.get_video_frame("start")
+            _ , frame = self.read_video_frame(24)
 
             success, time = vision_AI.get_text_with_OCR(frame)
             if not success:
@@ -92,7 +94,8 @@ class Video_file():
         # If failed to get time from metadata obtain it manually
         if not success:
             # Get the time in seconds manually
-            frame = self.get_video_frame("end")
+            # frame = self.get_video_frame("end")
+            _, frame = self.read_video_frame(self.total_frames - 10)
 
             success, time = vision_AI.get_text_with_OCR(frame)
             if not success:
@@ -118,6 +121,7 @@ class Video_file():
 
     def get_metadata_from_video(self, video_filepath, start_or_end):
         return_time = None
+        success = False
         if start_or_end == "start":
             try:
                 # Get the creation date from metadata
@@ -148,59 +152,6 @@ class Video_file():
             except:
                 success = False
         return return_time, success
-
-    def get_video_frame(self, start_or_end):
-
-        if self.filepath.endswith(".mp4"):
-            # Get the video capture and ROI defined
-            cap = cv2.VideoCapture(self.filepath)
-
-            # Define which frame to scan - start of end?
-            if start_or_end == "end":
-                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                second_to_last_frame_idx = total_frames - 5
-                cap.set(cv2.CAP_PROP_POS_FRAMES, second_to_last_frame_idx)
-            else:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 24)
-
-            # Get the video frame and process the image
-            ret, frame = cap.read()
-            if ret:
-                return frame
-            else:
-                self.logger.error('Unable to extract a frame from the video file and determine the start or end time.')
-                pass
-            cap.release()
-        elif self.filepath.endswith(".avi"):
-            # Get the video reader and ROI defined
-            video = imageio.get_reader(self.filepath)
-
-            # Define which frame to scan - start or end?
-            if start_or_end == "end":
-
-                # Get the creation date from metadata
-                parser = createParser(self.filepath)
-                metadata = extractMetadata(parser)
-                fps = float(metadata.get("frame_rate"))
-                duration = str(metadata.get("duration"))
-
-                # Split duration string into hours, minutes, and seconds
-                duration_parts = duration.split(':')
-                hours, minutes, seconds = map(float, duration_parts)
-
-                # Calculate the total duration in seconds
-                total_duration_seconds = hours * 3600 + minutes * 60 + seconds
-                total_frames = total_duration_seconds * fps
-
-                second_to_last_frame_idx = total_frames - 10  # Adjusted for 0-based indexing
-                frame = video.get_data(second_to_last_frame_idx)
-            else:
-                frame = video.get_data(24)
-
-            if frame is not None:
-                return frame
-            else:
-                self.logger.error("Unable to extract a frame from the video file and determine the start or end time.")
 
     def get_text_manually(self, frame):
 
@@ -328,33 +279,71 @@ class Video_file():
 
     def read_video_frame(self, frame_number: int = 0):
 
+        frame = None
         if self.video_origin == "MS":
-            try:
-                # Open the video file using imageio
-                video = imageio.get_reader(self.filepath)
-
-                # Read the first frame
-                frame = video.get_data(frame_number)
-
-                # Convert the frame to BGR color space
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
-                # Reading successful
-                success = True
-
-            except Exception as e:
-                self.logger.warning(f'Unable to read video frame. Video: {self.filepath}, Exception: {e}')
-                success = False
+            success, frame = self.imageio_reader(self.filepath, frame_number)
         else:
+            success, frame = self.opencv_reader(self.filepath, frame_number)
+        if frame is not None:
+            return success, frame
+        else:
+            return False, None
+
+    def opencv_reader(self, filepath, frame_number):
+        frame = None
+        try:
+            # Read the frame
+            cap = cv2.VideoCapture(filepath)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+            success, frame = cap.read()
+            cap.release()
+        except Exception as e:
+            self.logger.warning(f'Unable to read video frame. Video: {self.filepath}, Exception: {e}')
+            success = False
+        return success, frame
+
+    def imageio_reader(self, filepath, frame_number):
+        frame = None
+        try:
+            # Open the video file using imageio
+            video = imageio.get_reader(filepath)
+
+            # Read the first frame
+            frame = video.get_data(frame_number)
+
+        except IndexError:
+            original_frame_number = frame_number
+            success = False
+            self.logger.warning(f'IndexError when reading a frame number: {original_frame_number} from file: {filepath}')
             try:
-                # Read the frame
-                cap = cv2.VideoCapture(self.filepath)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-                success, frame = cap.read()
-                cap.release()
+
+                # Read the frame using open-cv
+                success, frame = self.opencv_reader(filepath, original_frame_number)
+
             except Exception as e:
-                self.logger.warning(f'Unable to read video frame. Video: {self.filepath}, Exception: {e}')
-                success = False
+                self.logger.warning(f'Error occurred when reading the frame using open-cv: {e}')
+                pass
+            self.logger.warning(f'Attempted reading the frame with open-cv, status: {success}')
+            if not success:
+                self.logger.warning(f'Scanning for existing frames...')
+                while not success:
+                    try:
+                        if frame_number >= 0:
+                            frame_number -= 1
+                            frame = video.get_data(max(1, frame_number))
+                        else:
+                            break
+                    except:
+                        success = False
+                    else:
+                        self.logger.warning(f'Frame found at index: {frame_number}')
+                        success = True
+        else:
+            # Convert the frame to BGR color space
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+            # Reading successful
+            success = True
 
         return success, frame
 

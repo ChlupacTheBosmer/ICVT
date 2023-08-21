@@ -270,24 +270,45 @@ def delete_corrupted_videos(folder_path):
 
 
 def log_define():
-    # Create a logger instance
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
+    global logger
+    if 'logger' in locals() or 'logger' in globals():
+        return logger
+    else:
+        # Create a logger instance
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.DEBUG)
 
-    # Create a file handler that logs all messages, and set its formatter
-    file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
-    file_handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(filename)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+        # Create a file handler that logs all messages, and set its formatter
+        file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s - %(filename)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
-    # Create a console handler that logs only messages with level INFO or higher, and set its formatter
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
+        # Create a console handler that logs only messages with level INFO or higher, and set its formatter
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+        console_handler.setFormatter(console_formatter)
+        logger.addHandler(console_handler)
+        return logger
+
+def log_clean(logger):
+
+    # Remove all handlers from the logger
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Close and flush any open handlers
+    for handler in logger.handlers:
+        handler.close()
+        logger.removeHandler(handler)
+
     return logger
 
-global logger
-logger = log_define()
+
+if 'logger' in locals() or 'logger' in globals():
+    pass
+else:
+    global logger
+    logger = log_define()
