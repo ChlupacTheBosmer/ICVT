@@ -1,15 +1,7 @@
 from ultralytics import YOLO
-from ultralytics.yolo.engine.predictor import BasePredictor
-from ultralytics.yolo.v8.detect.predict import DetectionPredictor
-import torch
 import os
-import numpy as np
-import pandas
-from PIL import Image
 import cv2
 import shutil
-import ultralytics
-from tkinter import filedialog
 
 # Load the saved YOLO model from the .pt file
 model = YOLO('D:/Program files/anaconda3/envs/YOLO/runs\detect/640_def/weights/best.pt')

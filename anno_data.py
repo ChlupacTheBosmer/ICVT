@@ -15,12 +15,17 @@
 # filtered_data = csv.dataframe.loc[:, ['duration', 'ts']].values.tolist()
 # annotation_data_array = filtered_data
 
+# ICVT modules
 import utils
+
+# Extra modules
 import pandas as pd
-import os
 import openpyxl
 import xlwings as xw
 from typing import Dict, Callable
+
+# Python defaults
+import os
 
 class Ancestor_annotation_file():
 

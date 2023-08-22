@@ -3,9 +3,16 @@ import re
 import os
 
 def install_packages(requirements_file, bare_installation, installer):
+
+    # Add channels to conda installer
+    subprocess.check_call(["conda config --add channels conda-forge"])
+
+    # Create reporting lists
     error_list = ["Error installing the following packages, bare install executed:"]
     fail_list = ["Error installing the following packages, package installation failed:"]
     success_list = ["Successfully installed:"]
+
+    # Read file and start installing
     with open(requirements_file) as f:
         for line in f:
             package = line.strip()

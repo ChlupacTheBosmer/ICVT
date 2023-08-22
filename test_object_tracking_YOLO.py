@@ -1,7 +1,5 @@
 import cv2
 from ultralytics import YOLO
-import numpy as np
-import torch
 
 # Global variables
 selected_roi = None

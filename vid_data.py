@@ -1,22 +1,25 @@
 # This file contains the video data classes
 #
-
+# Modules of ICVT
 import utils
+import vision_AI
+
+# Other modules
 import pandas as pd
-import os
 import cv2
 import tkinter as tk
+from tkinter import simpledialog
 from PIL import Image, ImageTk
-import datetime
-import time
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
+import imageio
+
+# Default python modules
+import datetime
 from datetime import datetime
 from datetime import timedelta
-import imageio
-from tkinter import simpledialog
-import vision_AI
-import sys
+import time
+import os
 
 class Video_file():
 

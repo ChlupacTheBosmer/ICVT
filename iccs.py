@@ -10,19 +10,20 @@ import icvt
 
 # Import other modules
 import pandas as pd
-import os
 import cv2
-import configparser
 import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
-import pickle
-import random
-import math
 from ultralytics import YOLO
-import shutil
+
+# Part of python
 import asyncio
 import json
+import random
+import math
+import shutil
+import configparser
+import os
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):

@@ -1,5 +1,7 @@
-import os
-import sys
+# ICVT modules
+from utils import yolobbox2bbox
+
+# Extra modules
 import cv2
 import numpy as np
 import pybboxes as pbx
@@ -10,8 +12,10 @@ from PyQt5.QtWidgets import QGraphicsItem, QDesktopWidget
 from PyQt5.QtCore import Qt, QSize, QRectF, QPointF  # Import QRectF here
 from PyQt5.QtGui import QPainter, QFont, QFontMetrics
 from PyQt5.QtGui import QPalette, QColor, QBrush, QCursor
+
+# Default python modules
 import shutil
-from utils import yolobbox2bbox
+import os
 from functools import partial
 
 class ThumbnailItem(QGraphicsItem):

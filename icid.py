@@ -1,45 +1,23 @@
 # This file contains the ICID app class that inherits from ICVT AppAncestor class
+
+# ICVT modules
 import utils
 import anno_data
-import vid_data
 import inat_id
 import icvt
-import pandas as pd
+
+# Default python packages
 import os
-import subprocess
 import threading
-import re
-import cv2
-import pytesseract
 import configparser
+import time
+
+# Extra packages
+import pandas as pd
 import tkinter as tk
 from tkinter import messagebox
-from tkinter import filedialog
-from PIL import Image, ImageTk
-import pickle
-import datetime
-import sys
-import random
-import openpyxl
-import math
-import time
-from hachoir.metadata import extractMetadata
-from hachoir.parser import createParser
-import logging
-import xlwings as xw
-import keyboard
-from ultralytics import YOLO
-import torch
-import shutil
-import asyncio
-import cProfile
-import tracemalloc
-from typing import Dict, Callable
-from datetime import datetime
-from datetime import timedelta
 os.environ["PATH"] = os.path.dirname(__file__) + os.pathsep + os.environ["PATH"]
 import mpv
-import requests
 
 class ICID(icvt.AppAncestor):
     def __init__(self):
@@ -49,38 +27,27 @@ class ICID(icvt.AppAncestor):
         # First log
         self.logger.info("Initializing ICID - Insect Communities ID application class...")
 
-        # Start the loading bar in a separate thread
-        time.sleep(0.2)
-        loading_thread = threading.Thread(target=self.loading_bar)
-        loading_thread.start()
-        self.loading_progress = 1
-        self.stop_loading = True
-
         # Init basic instance variables and get config
         self.app_title = "Insect Communities ID"
         self.config = self.config_create()
         self.config_read()
-        self.loading_progress = 20
 
         # Define variables
         self.video_filepaths = []
         self.player = None
         self.dir_hierarchy = False
-        self.loading_progress = 25
         self.gui_imgs = []
+        self.ocr_roi = None
 
         # Initiation functions - get directories and files
         self.scan_default_folders()
-        self.loading_progress = 35
 
         # If video folder path not supplied ask user to specify it
         while not self.check_path():
             self.get_video_folder(1)
-        self.loading_progress = 40
 
         # Ask the user to specify the Excel path
         self.get_excel_path(1, 1)
-        self.loading_progress = 45
 
         # Load the videos
         self.main_window = tk.Tk()

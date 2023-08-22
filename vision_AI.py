@@ -1,12 +1,8 @@
 from google.cloud import vision
 import cv2
-import numpy as np
-import os
-import utils
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
-import tkinter as tk
 from tkinter import filedialog
 import shutil
 

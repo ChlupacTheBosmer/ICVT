@@ -1,0 +1,11 @@
+conda install Pillow>=9.5.0
+conda install pandas>=2.0.0
+conda install xlwings>=0.30.5
+conda install numpy>=1.24.2
+conda install opencv-contrib-python>=4.8.0.74
+conda install opencv-python>=4.7.0.72
+conda install hachoir>=3.2.0
+conda install imageio>=2.27.0
+conda install google-cloud-vision~=3.4.4
+conda install openpyxl>=3.1.2
+conda install typing_extensions>=4.5.0

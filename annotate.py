@@ -14,7 +14,6 @@ import pickle
 import shutil
 import datetime
 import sys
-import openpyxl
 
 # load config or create the file
 # Set default values

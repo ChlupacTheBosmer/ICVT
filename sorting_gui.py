@@ -1,13 +1,18 @@
 
+# ICVT modules
+import utils
+
+# extra packages
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 import numpy as np
+from tkinter import filedialog
+
+#PIL Default pyhton packages
 import cv2
 import random
 import os
-from tkinter import filedialog
-import utils
 
 class ImageGridWindow:
     def __init__(self, visit_number, image_details_dict):

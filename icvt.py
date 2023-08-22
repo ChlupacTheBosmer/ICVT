@@ -1,19 +1,24 @@
 # This file contains the ancestral class of application used in ICVT. Any other tool can inherit from this.
+
+# ICVT modules
 import utils
 import vid_data
-import os
+
+# Extra packages
 import tkinter as tk
-from tkinter import messagebox
-import logging
-from datetime import datetime, timedelta
-from datetime import timedelta
 import pandas as pd
-import sys
-import time
-import random
 from PIL import Image, ImageTk
 import numpy as np
 import cv2
+
+# Default python packages
+import os
+import sys
+import time
+import random
+import logging
+from datetime import datetime, timedelta
+from datetime import timedelta
 
 class AppAncestor:
     def __init__(self):

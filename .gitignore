@@ -1,5 +1,6 @@
 /runtime.log
-/test.py
+/test_upscalling.py
+/legacy/sort.py
 /settings.ini
 /settings_crop.ini
 /settings_sort.ini

@@ -1,27 +1,13 @@
 # Import ICVT components
-import sorting_gui
-import utils
-import anno_data
-import vid_data
-import vision_AI
-import icvt
 from iccs import ICCS
+import utils
+import vid_data
 
-# Import other modules
-import pandas as pd
-import os
-import cv2
-import configparser
-import tkinter as tk
-from tkinter import messagebox
-from PIL import Image, ImageTk
-import pickle
-import random
-import math
-from ultralytics import YOLO
-import shutil
+# Part of python modules
 import asyncio
+import configparser
 import json
+import os
 
 class mtcCrop(ICCS):
     def __init__(self):

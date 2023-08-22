@@ -1,8 +1,13 @@
+# ICVT modules
+from image_viewer import ImageViewer
+
+# Extra packages
 from tkinter import filedialog
 from PyQt5.QtWidgets import QApplication
+
+# Default python packages
 import sys
 import os
-from image_viewer import ImageViewer
 
 if __name__ == '__main__':
     # Specify the folder path
