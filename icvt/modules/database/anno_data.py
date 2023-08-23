@@ -16,7 +16,7 @@
 # annotation_data_array = filtered_data
 
 # ICVT modules
-import utils
+from modules.utility import utils
 
 # Extra modules
 import pandas as pd
@@ -36,6 +36,19 @@ class Ancestor_annotation_file():
 
         # Define variables
         self.filepath = filepath
+
+        # Get relative path to root folder
+        self.root_folder = self.get_root_folder()
+
+    def get_root_folder(self):
+
+        # Get the path of the directory containing the current script
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+
+        # Navigate two parent folders above
+        two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+
+        return two_parent_folders_up
 
     def evaluate_string_formula(self, cell):
         # If the cell contains a number, return the value as is
@@ -71,7 +84,7 @@ class Ancestor_annotation_file():
                 cell = months_number.get(str(cell))
                 pass
             else:
-                self.logger.warning("Invalid month abbreviation in Excel file")
+                #self.logger.warning("Invalid month abbreviation in Excel file")
                 cell = '01'
         except:
             raise
@@ -112,8 +125,10 @@ class Ancestor_annotation_file():
 
     def save_temp_file(self, dataframe):
 
+        # Construct the desired path relative to the two parent folders above
+        temp_excel_dir = os.path.join(self.root_folder, 'resources', 'exc')
+
         # Save temp file
-        temp_excel_dir = os.path.join("resources", "exc")
         utils.create_dir(temp_excel_dir)
         dataframe.to_excel(os.path.join(temp_excel_dir, "output_filtered_crop.xlsx"), index=False)
 
@@ -134,8 +149,8 @@ class Ancestor_annotation_file():
                 sheet.api.AutoFilterMode = False
 
             # Save to temporary file
-            utils.create_dir(os.path.join("resources", "exc"))
-            temp_filepath = os.path.join("resources", "exc", "temp.xlsx")
+            utils.create_dir(os.path.join(self.root_folder, "resources", "exc"))
+            temp_filepath = os.path.join(self.root_folder, "resources", "exc", "temp.xlsx")
             workbook.save(temp_filepath)
             workbook.close()
 
@@ -166,6 +181,9 @@ class Annotation_watcher_file(Ancestor_annotation_file):
         self.load_visit_data = load_visit_data
         self.load_visitor_data = load_visitor_data
         self.load_behavior_data = load_behavior_data
+
+        # Get relative path to root folder
+        self.root_folder = self.get_root_folder()
 
         # Load the Excel file into dataframe
         self.dataframe = self.construct_dataframe()
@@ -315,6 +333,9 @@ class Annotation_custom_file(Ancestor_annotation_file):
 
         # Define variables
         self.filepath = filepath
+
+        # Get relative path to root folder
+        self.root_folder = self.get_root_folder()
 
         # Load the Excel file into dataframe
         self.dataframe = self.construct_dataframe()

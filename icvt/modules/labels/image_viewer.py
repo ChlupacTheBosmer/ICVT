@@ -1,16 +1,16 @@
 # ICVT modules
-from utils import yolobbox2bbox
+from modules.utility.utils import yolobbox2bbox
 
 # Extra modules
 import cv2
 import numpy as np
 import pybboxes as pbx
 import PyQt5 as pyqt
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QAction, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRubberBand, QFrame
-from PyQt5.QtGui import QPixmap, QImage, QPen
+from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QVBoxLayout, QHBoxLayout, QPushButton, QWidget, QLabel, QComboBox, QRubberBand, QFrame
+from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import QGraphicsItem, QDesktopWidget
-from PyQt5.QtCore import Qt, QSize, QRectF, QPointF  # Import QRectF here
-from PyQt5.QtGui import QPainter, QFont, QFontMetrics
+from PyQt5.QtCore import Qt, QRectF  # Import QRectF here
+from PyQt5.QtGui import QFont, QFontMetrics
 from PyQt5.QtGui import QPalette, QColor, QBrush, QCursor
 
 # Default python modules

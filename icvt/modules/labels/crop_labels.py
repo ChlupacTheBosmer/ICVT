@@ -7,6 +7,7 @@ import os
 import shutil
 import random
 import pybboxes as pbx
+import numpy as np
 
 
 
@@ -62,7 +63,15 @@ else:
 
 
 # Specify the paths of the original and destination folders
-tmp_folder = "resources/tmp"
+
+# Get the path of the directory containing the current script
+script_directory = os.path.dirname(os.path.abspath(__file__))
+
+# Navigate two parent folders above
+two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+
+# Construct the desired path relative to the two parent folders above
+tmp_folder = os.path.join(two_parent_folders_up, 'resources', 'tmp')
 create_dir(tmp_folder)
 
 # Iterate through all files in the folder
@@ -83,7 +92,7 @@ for filename in os.listdir(folder_path_img):
         img = Image.open(destination_path)
 
         # Open the corresponding txt file
-        txt_path = f"{folder_path_lbl}/{filename[:-4]}.txt"
+        txt_path = os.path.join(folder_path_lbl, f"{filename[:-4]}.txt")
         if not os.path.exists(txt_path):
             # Calculate the centre of the random point
             x = random.randint(0, img.size[0])
@@ -125,7 +134,11 @@ for filename in os.listdir(folder_path_img):
         img_cropped = img.crop((x1, y1, x2, y2))
 
         # Open the image
-        img1 = cv2.imread(f"{tmp_folder}/{filename[:-4]}.jpg")
+        with open(os.path.join(tmp_folder, f"{filename[:-4]}.jpg"), "rb") as stream:
+            bytes = bytearray(stream.read())
+            numpyarray = np.asarray(bytes, dtype=np.uint8)
+            img1 = cv2.imdecode(numpyarray, cv2.IMREAD_UNCHANGED)
+        #img1 = cv2.imread(os.path.join(tmp_folder, f"{filename[:-4]}.jpg"))
         if img1 is not None:
             # Image loaded successfully
             # Draw a rectangle on the image using the bounding box coordinates
@@ -136,6 +149,18 @@ for filename in os.listdir(folder_path_img):
                 # Show the image
                 cv2.imshow('image', img1)
                 cv2.namedWindow('image')
+
+                # Get the screen width and height
+                screen_width, screen_height = 1920, 1080  # Set these values to your screen's resolution
+
+                # Calculate the position to center the window
+                window_width, window_height = img1.shape[1], img1.shape[0]
+                x_position = (screen_width - window_width) // 2
+                y_position = (screen_height - window_height) // 2
+
+                # Move the OpenCV window to the calculated position
+                cv2.moveWindow('image', x_position, y_position)
+
                 # Make the window topmost
                 cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
                 cv2.waitKey(frames)
@@ -149,7 +174,7 @@ for filename in os.listdir(folder_path_img):
         img_resized = img_cropped.resize((320, 320))
 
         # Save the new image to a file
-        new_img_path = f"{tmp_folder}/{filename[:-4]}_320.jpg"
+        new_img_path = os.path.join(tmp_folder, f"{filename[:-4]}_320.jpg")
         img_resized.save(new_img_path)
 
         # Calculate the new coordinates of the bounding box in the cropped and resized image
@@ -168,11 +193,15 @@ for filename in os.listdir(folder_path_img):
             #bb = bbox2yolobbox((img_resized.size[0], img_resized.size[1]), b)
 
             # Write the new coordinates to a new txt file
-            new_txt_path = f"{out_folder_path_lbl}/{filename[:-4]}_320.txt"
+            new_txt_path = os.path.join(out_folder_path_lbl, f"{filename[:-4]}_320.txt")
             with open(new_txt_path, "w") as f:
                 f.write(f"0 {max(round(bb[0], 6), 1)} {max(round(bb[1], 6), 1)} {max(round(bb[2], 6), 1)} {max(round(bb[3], 6), 1)}")
 
-        img2 = cv2.imread(f"{tmp_folder}/{filename[:-4]}_320.jpg")
+        #img2 = cv2.imread(new_img_path)
+        with open(new_img_path, "rb") as stream:
+            bytes = bytearray(stream.read())
+            numpyarray = np.asarray(bytes, dtype=np.uint8)
+            img2 = cv2.imdecode(numpyarray, cv2.IMREAD_UNCHANGED)
         if img2 is not None:
             # Image loaded successfully
             # Draw a rectangle on the image using the bounding box coordinates
@@ -183,6 +212,18 @@ for filename in os.listdir(folder_path_img):
                 # Show the image
                 cv2.imshow('image', img2)
                 cv2.namedWindow('image')
+
+                # Get the screen width and height
+                screen_width, screen_height = 1920, 1080  # Set these values to your screen's resolution
+
+                # Calculate the position to center the window
+                window_width, window_height = img1.shape[1], img1.shape[0]
+                x_position = (screen_width - window_width) // 2
+                y_position = (screen_height - window_height) // 2
+
+                # Move the OpenCV window to the calculated position
+                cv2.moveWindow('image', x_position, y_position)
+
                 # Make the window topmost
                 cv2.setWindowProperty('image', cv2.WND_PROP_TOPMOST, 1)
                 cv2.waitKey(frames)

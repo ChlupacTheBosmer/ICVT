@@ -1,8 +1,8 @@
 # This file contains the ancestral class of application used in ICVT. Any other tool can inherit from this.
 
 # ICVT modules
-import utils
-import vid_data
+from modules.utility import utils
+from modules.video import vid_data
 
 # Extra packages
 import tkinter as tk
@@ -17,7 +17,7 @@ import sys
 import time
 import random
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from datetime import timedelta
 
 class AppAncestor:
@@ -27,8 +27,13 @@ class AppAncestor:
 
         # Set basic instance variables
         self.app_title = "Insect Communities Video Tools"
-        self.video_folder_path = "videos"
-        self.annotation_file_path = "excel"
+
+        # Get the path of the directory containing the current script
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+        two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+
+        self.video_folder_path = os.path.join(two_parent_folders_up, 'videos')
+        self.annotation_file_path = os.path.join(two_parent_folders_up, 'excel')
         self.scan_folders = "1"
         self.scanned_folders = []
         self.dir_hierarchy = False

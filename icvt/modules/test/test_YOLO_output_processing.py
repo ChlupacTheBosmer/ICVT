@@ -9,7 +9,7 @@ model = YOLO('D:/Program files/anaconda3/envs/YOLO/runs\detect/640_def/weights/b
 
 # Specify the folder path
 #folder_path = filedialog.askdirectory(title="Select the image folder", initialdir=os.path.dirname(os.path.abspath(__file__)))
-folder_path = "output"
+folder_path = "../../output"
 
 # Get a list of all image files in the folder
 image_names = [f for f in os.listdir(folder_path) if f.endswith('.jpg')]

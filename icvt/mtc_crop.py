@@ -1,15 +1,15 @@
 # Import ICVT components
-from iccs import ICCS
-import utils
-import vid_data
+from modules.base.icvt import AppAncestor
+from modules.utility import utils
+from modules.video import vid_data
+from modules.crop import crop
 
 # Part of python modules
-import asyncio
 import configparser
 import json
 import os
 
-class mtcCrop(ICCS):
+class mtcCrop(AppAncestor):
     def __init__(self):
 
         # Define logger
@@ -144,6 +144,13 @@ class mtcCrop(ICCS):
         with open('settings_mtc_crop.ini', 'w', encoding='utf-8') as configfile:
             config.write(configfile)
 
+    def reload_roi_entries(self):
+        self.logger.debug('Running function reload_points_of_interest()')
+
+        # Clear the array of POIs and reconstruct it with empty lists.
+        self.points_of_interest_entry.clear()
+        self.points_of_interest_entry = [[[], filepath] for filepath in self.video_filepaths]
+
     # TODO: Modify
     def load_progress(self):
 
@@ -240,7 +247,7 @@ class mtcCrop(ICCS):
                 self.visit_duration = total_frames // self.fps
                 frame_number_start = 2
                 success, frame = self.video_file_object.read_video_frame(frame_number_start)
-                img_paths = asyncio.run(self.generate_frames(frame, success, os.path.basename(self.video_filepaths[i]), i, frame_number_start))
+                img_paths = crop.generate_frames(self, frame, success, os.path.basename(self.video_filepaths[i]), i, frame_number_start)
             self.whole_frame = orig_wf
 
 if __name__ == '__main__':

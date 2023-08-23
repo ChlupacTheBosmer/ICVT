@@ -1,6 +1,6 @@
 
 # ICVT modules
-import utils
+from modules.utility import utils
 
 # extra packages
 import tkinter as tk
@@ -26,6 +26,11 @@ class ImageGridWindow:
         self.filtered_details = [details for key, details in self.image_details_dict.items() if details[3] == visit_number]
         #print(self.filtered_details)
         self.roi_numbers = set(details[2] for details in self.image_details_dict.values())
+
+        # Set resources folder
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+        two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+        self.resources_folder = os.path.join(two_parent_folders_up, 'resources')
 
         self.window = tk.Tk()
         self.window.title(f"Visit Number: {visit_number}")
@@ -107,7 +112,7 @@ class ImageGridWindow:
             image_paths = [sublist[0] for sublist in filtered_by_empty_frames] + [sublist[0] for sublist in filtered_by_detected_visitors]
 
             # Create "show other images" button
-            img_else = self.load_icon("resources/img/more_images.png", icon_size, self.window)
+            img_else = self.load_icon(os.path.join(self.resources_folder, "img", "more_images.png"), icon_size, self.window)
             button = ttk.Button(button_frame, image=img_else,
                                 command=lambda image_paths=image_paths: self.view_images(image_paths))
             button.grid(row=i, column=7, sticky='ew')

@@ -1,5 +1,5 @@
 # ICVT modules
-from image_viewer import ImageViewer
+from modules.labels.image_viewer import ImageViewer
 
 # Extra packages
 from tkinter import filedialog

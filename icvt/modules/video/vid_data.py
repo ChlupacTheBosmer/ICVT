@@ -1,8 +1,8 @@
 # This file contains the video data classes
 #
 # Modules of ICVT
-import utils
-import vision_AI
+from modules.utility import utils
+from modules.vision import vision_AI
 
 # Other modules
 import pandas as pd

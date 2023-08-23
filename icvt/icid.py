@@ -1,16 +1,14 @@
 # This file contains the ICID app class that inherits from ICVT AppAncestor class
 
 # ICVT modules
-import utils
-import anno_data
-import inat_id
-import icvt
+from modules.utility import utils
+from modules.database import anno_data
+from modules.inat import inat_id
+from modules.base import icvt
 
 # Default python packages
 import os
-import threading
 import configparser
-import time
 
 # Extra packages
 import pandas as pd

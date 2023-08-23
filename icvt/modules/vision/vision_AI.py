@@ -29,7 +29,9 @@ def get_grouped_rois_from_frame(frames, unique_rois, grouping_radius_dimensions)
 
 def get_unique_rois_from_frame(frame, min_confidence: float = 0.2):
 
-    key_path = r"resources\key\ICVT.json"
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+    key_path = os.path.join(two_parent_folders_up, 'resources', 'key', 'ICVT.json')
 
     if not os.path.exists(key_path):
         install_google_api_key()
@@ -72,7 +74,9 @@ def get_unique_rois_from_frame(frame, min_confidence: float = 0.2):
 
 def get_text_with_OCR(frame):
 
-    key_path = r"resources\key\ICVT.json"
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+    key_path = os.path.join(two_parent_folders_up, 'resources', 'key', 'ICVT.json')
 
     if not os.path.exists(key_path):
         install_google_api_key()
@@ -134,11 +138,12 @@ def install_google_api_key():
     # Open a file dialog to get the new file path
     new_file_path = filedialog.askopenfilename()
 
-    # Get the directory of the script
+    # Get the root directory
     script_directory = os.path.dirname(os.path.abspath(__file__))
+    two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
 
     # Create the target directory if it doesn't exist
-    target_directory = os.path.join(script_directory, "resources", "key")
+    target_directory = os.path.join(two_parent_folders_up, "resources", "key")
     os.makedirs(target_directory, exist_ok=True)
 
     # Move the file to the target directory

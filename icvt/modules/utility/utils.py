@@ -43,24 +43,34 @@ def scan_default_folders(scan_folders, file_type_index: int = 1):
     # Check if scan folder feature is on
     if scan_folders == "1":
 
+        # Get the path of the directory containing the current script
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+
+        # Navigate two parent folders above
+        two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+
+        # Construct the desired path relative to the two parent folders above
+        videos_path = os.path.join(two_parent_folders_up, 'videos')
+        excel_path = os.path.join(two_parent_folders_up, 'excel')
+
         # Create directories if they do not exist
-        create_dir("videos/")
-        create_dir("excel/")
+        create_dir(videos_path)
+        create_dir(excel_path)
 
         # Detect video files
         video_folder_path: str = ""
-        scan_video_files = [f for f in os.listdir('videos') if f.endswith('.mp4')]
+        scan_video_files = [f for f in os.listdir(videos_path) if f.endswith('.mp4')]
         if scan_video_files:
             response = ask_yes_no(f"Video files detected in the default folder. Do you want to continue?")
             if response:
-                video_folder_path = 'videos'
+                video_folder_path = videos_path
 
         # Check if the current default crop mode requires an annotation file.
         if file_type_index == 1 or file_type_index == 2:
 
             # Detect Excel files
             annotation_file_path: str = ""
-            scan_excel_files = [f for f in os.listdir('excel') if f.endswith('.xlsx') or f.endswith('.xls')]
+            scan_excel_files = [f for f in os.listdir(excel_path) if f.endswith('.xlsx') or f.endswith('.xls')]
             if scan_excel_files:
                 response = ask_yes_no(f"Excel files detected in the default folder. Do you want to continue?")
                 if response:
@@ -98,7 +108,7 @@ def scan_default_folders(scan_folders, file_type_index: int = 1):
 
                     # Assign the path of the selected file to a variable
                     if selection > 0 and selection <= len(scan_excel_files):
-                        annotation_file_path = os.path.join(("excel/"), scan_excel_files[selection - 1])
+                        annotation_file_path = os.path.join((excel_path), scan_excel_files[selection - 1])
                         logger.debug(f'Selected file: {annotation_file_path}')
                     else:
                         logger.warning('Invalid selection')
@@ -278,8 +288,17 @@ def log_define():
         logger = logging.getLogger(__name__)
         logger.setLevel(logging.DEBUG)
 
+        # Get the path of the directory containing the current script
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+
+        # Navigate two parent folders above
+        two_parent_folders_up = os.path.abspath(os.path.join(script_directory, '..', '..'))
+
+        # Construct the desired path relative to the two parent folders above
+        log_path = os.path.join(two_parent_folders_up, 'runtime.log')
+
         # Create a file handler that logs all messages, and set its formatter
-        file_handler = logging.FileHandler('runtime.log', encoding='utf-8')
+        file_handler = logging.FileHandler(log_path, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s - %(filename)s - %(levelname)s - %(message)s')
         file_handler.setFormatter(formatter)

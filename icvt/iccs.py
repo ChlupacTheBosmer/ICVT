@@ -1,12 +1,13 @@
 # This file contains the ICCS app class that inherits from ICVT AppAncestor class
 
 # Import ICVT components
-import sorting_gui
-import utils
-import anno_data
-import vid_data
-import vision_AI
-import icvt
+from modules.sort import sorting_gui
+from modules.utility import utils
+from modules.database import anno_data
+from modules.video import vid_data
+from modules.vision import vision_AI
+from modules.base import icvt
+from modules.crop import crop
 
 # Import other modules
 import pandas as pd
@@ -19,11 +20,11 @@ from ultralytics import YOLO
 # Part of python
 import asyncio
 import json
-import random
 import math
 import shutil
 import configparser
 import os
+
 
 class ICCS(icvt.AppAncestor):
     def __init__(self):
@@ -82,7 +83,6 @@ class ICCS(icvt.AppAncestor):
 
         # Open window
         self.open_main_window()
-
 
     def config_create(self):
         # Set default values
@@ -237,133 +237,133 @@ class ICCS(icvt.AppAncestor):
             self.logger.error("Error: Invalid video folder path")
             messagebox.showerror("Error", "Invalid video folder path")
 
-######################################### SECTION DEALS WITH THE BACKEND ###############################################
-########################################################################################################################
-########################################################################################################################
-########################################################################################################################
-########################################################################################################################
+    ######################################### SECTION DEALS WITH THE BACKEND ###############################################
+    ########################################################################################################################
+    ########################################################################################################################
+    ########################################################################################################################
+    ########################################################################################################################
 
     ######################################### CROP FUNCTIONALITY ######################################################
 
-    async def capture_crop(self, frame, point):
-
-       # Define logger
-        self.logger.debug(f"Running function capture_crop({point})")
-
-        # Prepare local variables
-        x, y = point
-
-        # Add a random offset to the coordinates, but ensure they remain within the image bounds
-        # DONE: Implement Milesight functionality
-        frame_width, frame_height = self.video_file_object.get_frame_shape()
-
-        # Check if any of the dimensions is smaller than crop_size and if so upscale the image to prevent crops smaller than desired crop_size
-        if frame_height < self.crop_size or frame_width < self.crop_size:
-            # Calculate the scaling factor to upscale the image
-            scaling_factor = self.crop_size / min(frame_height, frame_width)
-
-            # Calculate the new dimensions for the upscaled frame
-            new_width = int(round(frame_width * scaling_factor))
-            new_height = int(round(frame_height * scaling_factor))
-
-            # Upscale the frame using cv2.resize with Lanczos upscaling algorithm
-            frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
-
-        # Get the new frame size
-        frame_height, frame_width = frame.shape[:2]
-
-        # Calculate the coordinates for the area that will be cropped
-        x_offset = random.randint(-self.offset_range, self.offset_range)
-        y_offset = random.randint(-self.offset_range, self.offset_range)
-        x1 = max(0, min(((x - self.crop_size // 2) + x_offset), frame_width - self.crop_size))
-        y1 = max(0, min(((y - self.crop_size // 2) + y_offset), frame_height - self.crop_size))
-        x2 = max(self.crop_size, min(((x + self.crop_size // 2) + x_offset), frame_width))
-        y2 = max(self.crop_size, min(((y + self.crop_size // 2) + y_offset), frame_height))
-
-        # Crop the image
-        crop = frame[y1:y2, x1:x2]
-
-        # Convert to correct color space
-        crop_img = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
-        if crop_img.shape[2] == 3:
-            crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
-
-        # Return the cropped image and the coordinates for future reference
-        return crop_img, x1, y1, x2, y2
-
-    async def generate_frames(self, frame, success, tag, index, frame_number_start):
-
-        # Define logger
-        self.logger.debug(f"Running function generate_frames({index})")
-
-        # Prepare name elements
-        filename_parts = tag[:-4].split("_")
-        recording_identifier = "_".join(filename_parts[:-3])
-        timestamp = "_".join(filename_parts[-3:])
-
-        # Define local variables
-        crop_counter = 1
-        frame_skip_loc = self.frame_skip
-
-        # Calculate the frame skip variable based on the limited number of frames per visit
-        if self.frames_per_visit > 0:
-            frame_skip_loc = int((self.visit_duration * self.fps) // self.frames_per_visit)
-            if frame_skip_loc < 1:
-                frame_skip_loc = 1
-
-        # Loop through the video and crop y images every n-th frame
-        frame_count = 0
-        image_paths = []
-
-        while success:
-            # Crop images every n-th frame
-            if int(frame_count % frame_skip_loc) == 0:
-                for i, point in enumerate(self.points_of_interest_entry[index][0]):
-                    if self.cropped_frames == 1:
-                        crop_img, x1, y1, x2, y2 = await self.capture_crop(frame, point)
-                        frame_number = frame_number_start + frame_count
-                        roi_number = i + 1
-                        visit_number = self.visit_index
-                        image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{roi_number}_{frame_number}_{visit_number}_{x1},{y1}_{x2},{y2}.jpg" #Now the output images will be ordered by the ROI therefore one will be able to delete whole segments of pictures.
-                        image_path = os.path.join(self.output_folder, image_name)
-                        #image_path = f"./{self.output_folder}/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
-                        cv2.imwrite(image_path, crop_img)
-                        image_paths.append(image_path)
-                        self.image_details_dict[image_name] = [image_path, frame_number, roi_number, visit_number, 0]
-                if self.whole_frame == 1:
-                    frame_number = frame_number_start + frame_count
-                    visit_number = self.visit_index
-                    image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{frame_number}_{visit_number}_whole.jpg"
-                    image_path = os.path.join(self.output_folder, "whole frames", image_name)
-                    #image_path = f"./{self.output_folder}/whole frames/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
-                    cv2.imwrite(image_path, frame)
-                crop_counter += 1
-
-            # If the random frame skip interval is activated add a random number to the counter or add the set frame skip interval
-            if self.randomize == 1:
-                if (frame_skip_loc - frame_count == 1):
-                    frame_count += 1
-                else:
-                    frame_count += random.randint(1, max((frame_skip_loc - frame_count), 2))
-            else:
-                frame_count += frame_skip_loc
-
-            # Read the next frame
-            # DONE: Implement Milesight functionality
-            frame_to_read = frame_number_start + frame_count
-            success, frame = self.video_file_object.read_video_frame(frame_to_read)
-
-            # If the frame count is equal or larger than the amount of frames that comprises the duration of the visit end the loop
-            if not (frame_count < (self.visit_duration * self.fps)-1):
-                # Release the video capture object and close all windows
-                # DONE: Implement Milesight functionality
-                if not self.video_file_object.video_origin == "MS":
-                    self.video_file_object.cap.release()
-                cv2.destroyAllWindows()
-                break
-
-        # Return the resulting list of image paths for future reference
-        return image_paths
+    # async def capture_crop(self, frame, point):
+    #
+    #    # Define logger
+    #     self.logger.debug(f"Running function capture_crop({point})")
+    #
+    #     # Prepare local variables
+    #     x, y = point
+    #
+    #     # Add a random offset to the coordinates, but ensure they remain within the image bounds
+    #     # DONE: Implement Milesight functionality
+    #     frame_width, frame_height = self.video_file_object.get_frame_shape()
+    #
+    #     # Check if any of the dimensions is smaller than crop_size and if so upscale the image to prevent crops smaller than desired crop_size
+    #     if frame_height < self.crop_size or frame_width < self.crop_size:
+    #         # Calculate the scaling factor to upscale the image
+    #         scaling_factor = self.crop_size / min(frame_height, frame_width)
+    #
+    #         # Calculate the new dimensions for the upscaled frame
+    #         new_width = int(round(frame_width * scaling_factor))
+    #         new_height = int(round(frame_height * scaling_factor))
+    #
+    #         # Upscale the frame using cv2.resize with Lanczos upscaling algorithm
+    #         frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_LANCZOS4)
+    #
+    #     # Get the new frame size
+    #     frame_height, frame_width = frame.shape[:2]
+    #
+    #     # Calculate the coordinates for the area that will be cropped
+    #     x_offset = random.randint(-self.offset_range, self.offset_range)
+    #     y_offset = random.randint(-self.offset_range, self.offset_range)
+    #     x1 = max(0, min(((x - self.crop_size // 2) + x_offset), frame_width - self.crop_size))
+    #     y1 = max(0, min(((y - self.crop_size // 2) + y_offset), frame_height - self.crop_size))
+    #     x2 = max(self.crop_size, min(((x + self.crop_size // 2) + x_offset), frame_width))
+    #     y2 = max(self.crop_size, min(((y + self.crop_size // 2) + y_offset), frame_height))
+    #
+    #     # Crop the image
+    #     crop = frame[y1:y2, x1:x2]
+    #
+    #     # Convert to correct color space
+    #     crop_img = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+    #     if crop_img.shape[2] == 3:
+    #         crop_img = cv2.cvtColor(crop_img, cv2.COLOR_BGR2RGB)
+    #
+    #     # Return the cropped image and the coordinates for future reference
+    #     return crop_img, x1, y1, x2, y2
+    #
+    # async def generate_frames(self, frame, success, tag, index, frame_number_start):
+    #
+    #     # Define logger
+    #     self.logger.debug(f"Running function generate_frames({index})")
+    #
+    #     # Prepare name elements
+    #     filename_parts = tag[:-4].split("_")
+    #     recording_identifier = "_".join(filename_parts[:-3])
+    #     timestamp = "_".join(filename_parts[-3:])
+    #
+    #     # Define local variables
+    #     crop_counter = 1
+    #     frame_skip_loc = self.frame_skip
+    #
+    #     # Calculate the frame skip variable based on the limited number of frames per visit
+    #     if self.frames_per_visit > 0:
+    #         frame_skip_loc = int((self.visit_duration * self.fps) // self.frames_per_visit)
+    #         if frame_skip_loc < 1:
+    #             frame_skip_loc = 1
+    #
+    #     # Loop through the video and crop y images every n-th frame
+    #     frame_count = 0
+    #     image_paths = []
+    #
+    #     while success:
+    #         # Crop images every n-th frame
+    #         if int(frame_count % frame_skip_loc) == 0:
+    #             for i, point in enumerate(self.points_of_interest_entry[index][0]):
+    #                 if self.cropped_frames == 1:
+    #                     crop_img, x1, y1, x2, y2 = await self.capture_crop(frame, point)
+    #                     frame_number = frame_number_start + frame_count
+    #                     roi_number = i + 1
+    #                     visit_number = self.visit_index
+    #                     image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{roi_number}_{frame_number}_{visit_number}_{x1},{y1}_{x2},{y2}.jpg" #Now the output images will be ordered by the ROI therefore one will be able to delete whole segments of pictures.
+    #                     image_path = os.path.join(self.output_folder, image_name)
+    #                     #image_path = f"./{self.output_folder}/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_{i + 1}_{x1},{y1}_{x2},{y2}.jpg"
+    #                     cv2.imwrite(image_path, crop_img)
+    #                     image_paths.append(image_path)
+    #                     self.image_details_dict[image_name] = [image_path, frame_number, roi_number, visit_number, 0]
+    #             if self.whole_frame == 1:
+    #                 frame_number = frame_number_start + frame_count
+    #                 visit_number = self.visit_index
+    #                 image_name = f"{self.prefix}{recording_identifier}_{timestamp}_{frame_number}_{visit_number}_whole.jpg"
+    #                 image_path = os.path.join(self.output_folder, "whole frames", image_name)
+    #                 #image_path = f"./{self.output_folder}/whole frames/{self.prefix}{recording_identifier}_{timestamp}_{frame_number_start + frame_count}_{crop_counter}_whole.jpg"
+    #                 cv2.imwrite(image_path, frame)
+    #             crop_counter += 1
+    #
+    #         # If the random frame skip interval is activated add a random number to the counter or add the set frame skip interval
+    #         if self.randomize == 1:
+    #             if (frame_skip_loc - frame_count == 1):
+    #                 frame_count += 1
+    #             else:
+    #                 frame_count += random.randint(1, max((frame_skip_loc - frame_count), 2))
+    #         else:
+    #             frame_count += frame_skip_loc
+    #
+    #         # Read the next frame
+    #         # DONE: Implement Milesight functionality
+    #         frame_to_read = frame_number_start + frame_count
+    #         success, frame = self.video_file_object.read_video_frame(frame_to_read)
+    #
+    #         # If the frame count is equal or larger than the amount of frames that comprises the duration of the visit end the loop
+    #         if not (frame_count < (self.visit_duration * self.fps)-1):
+    #             # Release the video capture object and close all windows
+    #             # DONE: Implement Milesight functionality
+    #             if not self.video_file_object.video_origin == "MS":
+    #                 self.video_file_object.cap.release()
+    #             cv2.destroyAllWindows()
+    #             break
+    #
+    #     # Return the resulting list of image paths for future reference
+    #     return image_paths
 
     async def yolo_preprocessing(self, img_paths, valid_annotations_array, index):
 
@@ -372,7 +372,8 @@ class ICCS(icvt.AppAncestor):
 
         # Define and run the model
         model = YOLO('resources/yolo/best.pt')
-        results = model(img_paths, save=False, imgsz=self.crop_size, conf=self.yolo_conf, save_txt=False, max_det=2, stream=True)
+        results = model(img_paths, save=False, imgsz=self.crop_size, conf=self.yolo_conf, save_txt=False, max_det=2,
+                        stream=True)
         for i, result in enumerate(results):
             boxes = result.boxes.data
             image_name = os.path.basename(img_paths[i])
@@ -418,14 +419,10 @@ class ICCS(icvt.AppAncestor):
 
         def apply_filter():
             results = []
-            #print(checkbox_vars)
             for i, var in enumerate(checkbox_vars):
                 checkbox_value = var.get()
-                #print(checkbox_value)
                 checkbox_text = checkboxes[i].cget("text")
-                #print(checkbox_text)
                 dropdown_value = selected_items[i].get()
-                #print(dropdown_value)
                 if not dropdown_value[0].isdigit():
                     dropdown_value = "0. Default"
                 results.append([int(checkbox_value), checkbox_text, int(dropdown_value[0])])
@@ -439,7 +436,7 @@ class ICCS(icvt.AppAncestor):
                                             f"One of the selected groups of visitors was not assigned a correct category for labelling. Please try again.")
                         self.filtered_array = []
                         return
-            #print(results)
+
             selected_values = [value.get() for value in checkbox_vars]
             self.filtered_array = []
             for row in valid_annotations_array:
@@ -447,7 +444,6 @@ class ICCS(icvt.AppAncestor):
                     matching_result = next(result for result in results if result[1] == row[5])
                     filtered_row = row + [matching_result[2]]
                     self.filtered_array.append(filtered_row)
-            #print(self.filtered_array)  # Do something with the filtered array
             filter_window.quit()
             filter_window.destroy()
 
@@ -508,7 +504,7 @@ class ICCS(icvt.AppAncestor):
             for row in valid_annotations_array:
                 filtered_row = row + [0]
                 self.filtered_array.append(filtered_row)
-            #print(self.filtered_array)  # Do something with the filtered array
+            # print(self.filtered_array)  # Do something with the filtered array
             filter_window.quit()
             filter_window.destroy()
 
@@ -554,7 +550,6 @@ class ICCS(icvt.AppAncestor):
 
                 # Gather video and excel data - Watcher file
                 if self.crop_mode == 1:
-
                     # Load data from excel
                     excel = anno_data.Annotation_watcher_file(self.annotation_file_path, True, True, True, True)
                     annotation_data_array = excel.dataframe.loc[:, ['duration', 'ts']].values.tolist()
@@ -562,7 +557,6 @@ class ICCS(icvt.AppAncestor):
 
                 # Gather video and excel data - Croplog file
                 if self.crop_mode == 2:
-
                     # Load data from excel
                     excel = anno_data.Annotation_custom_file(self.annotation_file_path)
                     annotation_data_array = excel.dataframe.loc[:, ['duration', 'ts']].values.tolist()
@@ -618,16 +612,18 @@ class ICCS(icvt.AppAncestor):
 
                 # Process the visits and generate cropped images
                 for index in range(len(valid_annotations_array)):
-                    self.logger.info(f"Processing visit {index+1}")
+                    self.logger.info(f"Processing visit {index + 1}")
 
                     # Define index which will be shared to sync the stage of the process
                     self.visit_index = index
 
                     # Define the variables
-                    visit_duration, visit_timestamp, video_filepath, video_start_time, *_ = valid_annotations_array[index]
+                    visit_duration, visit_timestamp, video_filepath, video_start_time, *_ = valid_annotations_array[
+                        index]
 
                     # Pick the correct video file object from the list - Filter the list to find the object with matching filepath
-                    self.video_file_object = next((video for video in video_files if video.filepath == video_filepath), None)
+                    self.video_file_object = next((video for video in video_files if video.filepath == video_filepath),
+                                                  None)
 
                     # Turn timestamp into datetime and calculate how many seconds from the start_time of the video recording does the visit take place
                     visit_time = pd.to_datetime(visit_timestamp, format='%Y%m%d_%H_%M_%S')
@@ -645,7 +641,7 @@ class ICCS(icvt.AppAncestor):
 
                     # The actual duration is taken as limited by the end of the video, therefore cropping wont carry on for longer than one entire video file.
                     self.visit_duration = (min(((visit_time_from_start * self.fps) + (int(visit_duration) * self.fps)),
-                                          total_frames) - (visit_time_from_start * self.fps)) // self.fps
+                                               total_frames) - (visit_time_from_start * self.fps)) // self.fps
 
                     # First frame to capture - start of the visit
                     frame_number_start = int(visit_time_from_start * self.fps)
@@ -666,9 +662,8 @@ class ICCS(icvt.AppAncestor):
                         self.logger.warning("No ROI entry found for a video file. Defaults to index 0")
 
                     # Generate frames and get back their paths
-                    img_paths = asyncio.run(
-                        self.generate_frames(frame, success, os.path.basename(video_filepath),
-                                        roi_index, frame_number_start))
+                    img_paths = crop.generate_frames(self, frame, success, os.path.basename(video_filepath),
+                                                     roi_index, frame_number_start)
 
                     # If relevant preprocess the images using yolo
                     if self.yolo_processing == 1 and len(img_paths) > 0:
@@ -698,7 +693,8 @@ class ICCS(icvt.AppAncestor):
                     self.visit_duration = total_frames // self.fps
                     frame_number_start = 2
                     success, frame = self.video_file_object.read_video_frame(frame_number_start)
-                    img_paths = self.generate_frames(frame, success, os.path.basename(self.video_filepaths[i]), i, frame_number_start)
+                    img_paths = crop.generate_frames(self, frame, success, os.path.basename(self.video_filepaths[i]), i,
+                                                     frame_number_start)
                 self.whole_frame = orig_wf
 
         # When done, reload the application
@@ -724,12 +720,11 @@ class ICCS(icvt.AppAncestor):
                 self.image_details_dict = sorting_gui.gather_image_details(self.output_folder)
             sorting_gui.survey_visits_for_sorting(self.image_details_dict)
 
-
-######################################### SECTION DEALS WITH THE GUI ###################################################
-########################################################################################################################
-########################################################################################################################
-########################################################################################################################
-########################################################################################################################
+    ######################################### SECTION DEALS WITH THE GUI ###################################################
+    ########################################################################################################################
+    ########################################################################################################################
+    ########################################################################################################################
+    ########################################################################################################################
 
     def open_main_window(self):
 
@@ -740,7 +735,8 @@ class ICCS(icvt.AppAncestor):
         root = tk.Tk()
         self.main_window = root
         root.focus()
-        root.title(f"{self.app_title} - Folder: {os.path.basename(os.path.normpath(self.video_folder_path))} - Table: {os.path.basename(os.path.normpath(self.annotation_file_path))}")
+        root.title(
+            f"{self.app_title} - Folder: {os.path.basename(os.path.normpath(self.video_folder_path))} - Table: {os.path.basename(os.path.normpath(self.annotation_file_path))}")
 
         # Arbitrary variable for lambdas
         j = 0
@@ -760,7 +756,8 @@ class ICCS(icvt.AppAncestor):
         if self.loaded == True:
             for each in range(len(self.video_filepaths)):
                 first = -1
-                self.update_button_image(self.frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
+                self.update_button_image(self.frames[each].copy(), (max(each, 0) // 6),
+                                         (each - ((max(each, 0) // 6) * 6)), first)
             # if auto is defined, set the auto processing to that value otherwise set it to 0
             if self.auto is None:
                 self.auto_processing.set(0)
@@ -780,12 +777,14 @@ class ICCS(icvt.AppAncestor):
         def can_switch_folder(where):
             btn_state = "disabled"
             if where == "right":
-                if self.dir_hierarchy and (self.scanned_folders.index(os.path.basename(os.path.normpath(self.video_folder_path))) + 1) != len(self.scanned_folders):
+                if self.dir_hierarchy and (self.scanned_folders.index(
+                        os.path.basename(os.path.normpath(self.video_folder_path))) + 1) != len(self.scanned_folders):
                     btn_state = "normal"
                 else:
                     btn_state = "disabled"
             elif where == "left":
-                if self.dir_hierarchy and self.scanned_folders.index(os.path.basename(os.path.normpath(self.video_folder_path))) != 0:
+                if self.dir_hierarchy and self.scanned_folders.index(
+                        os.path.basename(os.path.normpath(self.video_folder_path))) != 0:
                     btn_state = "normal"
                 else:
                     btn_state = "disabled"
@@ -800,12 +799,15 @@ class ICCS(icvt.AppAncestor):
         toolbar.pack(side=tk.TOP, fill=tk.BOTH)
 
         # LEFT button
-        left_button = tk.Button(toolbar, image=self.load_icon("resources/img/la.png", master = outer_frame), compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
-                                height=48, width=200, state=can_switch_folder("left"), command=lambda j=j: self.switch_folder("left"))
+        left_button = tk.Button(toolbar, image=self.load_icon("resources/img/la.png", master=outer_frame),
+                                compound=tk.LEFT, text="Previous folder", padx=10, pady=5,
+                                height=48, width=200, state=can_switch_folder("left"),
+                                command=lambda j=j: self.switch_folder("left"))
         left_button.grid(row=0, column=0, padx=0, pady=5, sticky="ew")
 
         # MENU button
-        menu_button = tk.Button(toolbar, image=self.load_icon("resources/img/mn.png", master = outer_frame), compound=tk.LEFT, text="Menu", padx=10, pady=5, height=48,
+        menu_button = tk.Button(toolbar, image=self.load_icon("resources/img/mn.png", master=outer_frame),
+                                compound=tk.LEFT, text="Menu", padx=10, pady=5, height=48,
                                 command=lambda j=j: self.open_menu())
         menu_button.grid(row=0, column=1, padx=0, pady=5, sticky="ew")
 
@@ -818,11 +820,14 @@ class ICCS(icvt.AppAncestor):
 
         # CROP_MODE buttons
         # create the radio buttons and group them together
-        rb1 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/1.png", master = outer_frame), variable=self.selected_option, value=1, indicatoron=False,
+        rb1 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/1.png", master=outer_frame),
+                             variable=self.selected_option, value=1, indicatoron=False,
                              height=56, width=116, font=("Arial", 17), command=lambda j_=j: self.update_crop_mode(1))
-        rb2 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/2.png", master = outer_frame), variable=self.selected_option, value=2, indicatoron=False,
+        rb2 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/2.png", master=outer_frame),
+                             variable=self.selected_option, value=2, indicatoron=False,
                              height=56, width=116, font=("Arial", 17), command=lambda j=j: self.update_crop_mode(2))
-        rb3 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/3.png", master = outer_frame), variable=self.selected_option, value=3,
+        rb3 = tk.Radiobutton(radio_frame, text="", image=self.load_icon("resources/img/3.png", master=outer_frame),
+                             variable=self.selected_option, value=3,
                              indicatoron=False,
                              height=56, width=116, font=("Arial", 17), command=lambda j=j: self.update_crop_mode(3))
 
@@ -841,40 +846,47 @@ class ICCS(icvt.AppAncestor):
         self.off_image.put(("red",), to=(57, 0, 115, 56))
         self.auto_processing = tk.IntVar(value=0)
         self.auto_processing.set(0)
-        cb1 = tk.Checkbutton(toolbar, image=self.off_image, selectimage=self.on_image, indicatoron=False, onvalue=1, offvalue=0,
+        cb1 = tk.Checkbutton(toolbar, image=self.off_image, selectimage=self.on_image, indicatoron=False, onvalue=1,
+                             offvalue=0,
                              variable=self.auto_processing)
         cb1.grid(row=0, column=3, padx=0, pady=5, sticky="ew")
 
         # AUTO button
-        auto_button = tk.Button(toolbar, image=self.load_icon("resources/img/au.png", master = outer_frame), compound=tk.LEFT, text="Automatic evaluation", padx=10,
+        auto_button = tk.Button(toolbar, image=self.load_icon("resources/img/au.png", master=outer_frame),
+                                compound=tk.LEFT, text="Automatic evaluation", padx=10,
                                 pady=5, height=48,
                                 command=lambda j=j: self.auto_processing.set(1 - self.auto_processing.get()))
         auto_button.grid(row=0, column=4, padx=0, pady=5, sticky="ew")
 
         # VIDEO FOLDER button
-        fl_button = tk.Button(toolbar, image=self.load_icon("resources/img/fl.png", master = outer_frame), compound=tk.LEFT, text="Select video folder", padx=10, pady=5,
+        fl_button = tk.Button(toolbar, image=self.load_icon("resources/img/fl.png", master=outer_frame),
+                              compound=tk.LEFT, text="Select video folder", padx=10, pady=5,
                               height=48, command=lambda j=j: self.change_video_folder())
         fl_button.grid(row=0, column=5, padx=0, pady=5, sticky="ew")
 
         # EXCEL PATH button
-        et_button = tk.Button(toolbar, image=self.load_icon("resources/img/et.png", master = outer_frame), compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
+        et_button = tk.Button(toolbar, image=self.load_icon("resources/img/et.png", master=outer_frame),
+                              compound=tk.LEFT, text="Select Excel table", padx=10, pady=5,
                               height=48, command=lambda j=j: self.change_excel_path())
         et_button.grid(row=0, column=6, padx=0, pady=5, sticky="ew")
 
         # OCR button
-        ocr_button = tk.Button(toolbar, image=self.load_icon("resources/img/ocr.png", master = outer_frame), compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48,
+        ocr_button = tk.Button(toolbar, image=self.load_icon("resources/img/ocr.png", master=outer_frame),
+                               compound=tk.LEFT, text="OCR", padx=10, pady=5, height=48,
                                width=100, command=lambda j=j: self.open_ocr_roi_gui(self.video_filepaths[0]))
         ocr_button.grid(row=0, column=7, padx=0, pady=5, sticky="ew")
 
         # Generate ROIs button
         genrois_button = tk.Button(toolbar, image=self.load_icon("resources/img/od.png", master=outer_frame),
-                               compound=tk.LEFT, text="ROIs", padx=10, pady=5, height=48,
-                               width=100, command=lambda j=j: self.generate_roi_entries())
+                                   compound=tk.LEFT, text="ROIs", padx=10, pady=5, height=48,
+                                   width=100, command=lambda j=j: self.generate_roi_entries())
         genrois_button.grid(row=0, column=8, padx=0, pady=5, sticky="ew")
 
         # RIGHT button
-        right_button = tk.Button(toolbar, image=self.load_icon("resources/img/ra.png", master = outer_frame), compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
-                                 height=48, width=200, state=can_switch_folder("right"), command=lambda j=j: self.switch_folder("right"))
+        right_button = tk.Button(toolbar, image=self.load_icon("resources/img/ra.png", master=outer_frame),
+                                 compound=tk.RIGHT, text="Next folder", padx=10, pady=5,
+                                 height=48, width=200, state=can_switch_folder("right"),
+                                 command=lambda j=j: self.switch_folder("right"))
         right_button.grid(row=0, column=9, padx=0, pady=5, sticky="ew")
 
         # configure columns of toolbox
@@ -980,7 +992,8 @@ class ICCS(icvt.AppAncestor):
         bottom_left_panel.pack(side=tk.LEFT)
 
         # Create buttons
-        fl_button = tk.Button(bottom_left_panel, image=self.load_icon("resources/img/fl.png", master = parent), compound=tk.LEFT, text="", padx=10, pady=5, width=60,
+        fl_button = tk.Button(bottom_left_panel, image=self.load_icon("resources/img/fl.png", master=parent),
+                              compound=tk.LEFT, text="", padx=10, pady=5, width=60,
                               height=58,
                               command=lambda j=j: os.startfile(self.video_folder_path))
         fl_button.pack(side=tk.LEFT)
@@ -998,12 +1011,14 @@ class ICCS(icvt.AppAncestor):
         bottom_right_panel.pack(side=tk.RIGHT)
 
         # Create buttons
-        et_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/et.png", master = parent), compound=tk.LEFT, text="", padx=10, pady=5, width=60,
+        et_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/et.png", master=parent),
+                              compound=tk.LEFT, text="", padx=10, pady=5, width=60,
                               height=58,
                               command=lambda j=j: os.startfile(self.annotation_file_path))
         et_button.pack(side=tk.RIGHT)
 
-        ef_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/ef.png", master = parent), compound=tk.LEFT, text="", padx=0, pady=5, width=60,
+        ef_button = tk.Button(bottom_right_panel, image=self.load_icon("resources/img/ef.png", master=parent),
+                              compound=tk.LEFT, text="", padx=0, pady=5, width=60,
                               height=58,
                               command=lambda j=j: os.startfile(os.path.dirname(self.annotation_file_path)))
         ef_button.pack(side=tk.RIGHT)
@@ -1021,19 +1036,27 @@ class ICCS(icvt.AppAncestor):
         bottom_toolbar.pack(side=tk.TOP, fill=tk.BOTH)
 
         # Create buttons
-        save_button = tk.Button(bottom_toolbar, text="Save", image=self.load_icon("resources/img/sv_1.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
+        save_button = tk.Button(bottom_toolbar, text="Save",
+                                image=self.load_icon("resources/img/sv_1.png", master=parent), compound=tk.LEFT,
+                                padx=10, pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.save_progress())
 
-        crop_button = tk.Button(bottom_toolbar, text="Crop", image=self.load_icon("resources/img/cr_1.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
+        crop_button = tk.Button(bottom_toolbar, text="Crop",
+                                image=self.load_icon("resources/img/cr_1.png", master=parent), compound=tk.LEFT,
+                                padx=10, pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.crop_engine())
 
-        sort_button = tk.Button(bottom_toolbar, text="Sort", image=self.load_icon("resources/img/so.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
+        sort_button = tk.Button(bottom_toolbar, text="Sort",
+                                image=self.load_icon("resources/img/so.png", master=parent), compound=tk.LEFT, padx=10,
+                                pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.sort_engine())
 
-        load_button = tk.Button(bottom_toolbar, text="Load", image=self.load_icon("resources/img/lo.png", master = parent), compound=tk.LEFT, padx=10, pady=5,
+        load_button = tk.Button(bottom_toolbar, text="Load",
+                                image=self.load_icon("resources/img/lo.png", master=parent), compound=tk.LEFT, padx=10,
+                                pady=5,
                                 width=300,
                                 height=48, command=lambda j=j: self.load_progress())
 
@@ -1071,11 +1094,11 @@ class ICCS(icvt.AppAncestor):
         self.loaded = is_window_already_loaded
         self.open_main_window()
 
-######################################### SECTION DEALS WITH GUI BACKEND #########################################
-########################################################################################################################
-########################################################################################################################
-########################################################################################################################
-########################################################################################################################
+    ######################################### SECTION DEALS WITH GUI BACKEND ###########################################
+    ####################################################################################################################
+    ####################################################################################################################
+    ####################################################################################################################
+    ####################################################################################################################
 
     def change_excel_path(self):
 
@@ -1083,7 +1106,8 @@ class ICCS(icvt.AppAncestor):
         self.logger.debug(f'Running function change_video_folder()')
 
         # Get new Excel path
-        self.annotation_file_path = utils.get_excel_path(self.annotation_file_path, 0, self.video_folder_path, self.crop_mode)
+        self.annotation_file_path = utils.get_excel_path(self.annotation_file_path, 0, self.video_folder_path,
+                                                         self.crop_mode)
 
         # Reload the window with the new input
         self.reload(False, True)
@@ -1095,7 +1119,8 @@ class ICCS(icvt.AppAncestor):
         self.loaded = False
 
         # Get new video folder and reload the GUI
-        self.video_folder_path, self.scanned_folders, self.dir_hierarchy = utils.get_video_folder(self.video_folder_path, 0)
+        self.video_folder_path, self.scanned_folders, self.dir_hierarchy = utils.get_video_folder(
+            self.video_folder_path, 0)
         self.reload(False, True)
 
     def switch_folder(self, which):
@@ -1109,10 +1134,12 @@ class ICCS(icvt.AppAncestor):
         # Check if there is another folder either left or right in the directory hierarchy and if yes, then switch and reload.
         index = self.scanned_folders.index(os.path.basename(os.path.normpath(self.video_folder_path)))
         if index > 0 and which == "left":
-            self.video_folder_path = os.path.join(os.path.dirname(self.video_folder_path), self.scanned_folders[index - 1])
+            self.video_folder_path = os.path.join(os.path.dirname(self.video_folder_path),
+                                                  self.scanned_folders[index - 1])
             self.reload(False, True)
         if (index + 1) < len(self.scanned_folders) and which == "right":
-            self.video_folder_path = os.path.join(os.path.dirname(self.video_folder_path), self.scanned_folders[index + 1])
+            self.video_folder_path = os.path.join(os.path.dirname(self.video_folder_path),
+                                                  self.scanned_folders[index + 1])
             self.reload(False, True)
 
     def open_menu(self):
@@ -1187,9 +1214,11 @@ class ICCS(icvt.AppAncestor):
         save_button.grid(row=16, column=0, columnspan=2)
 
         # Set initial values for the input fields
-        self.initial_values = [self.output_folder, self.scan_folders, self.prefix, self.crop_mode, self.frame_skip, self.frames_per_visit, self.filter_visitors,
-                          self.yolo_processing, self.default_label_category, self.yolo_conf, self.randomize, self.whole_frame,
-                          self.cropped_frames, self.crop_size, self.offset_range]
+        self.initial_values = [self.output_folder, self.scan_folders, self.prefix, self.crop_mode, self.frame_skip,
+                               self.frames_per_visit, self.filter_visitors,
+                               self.yolo_processing, self.default_label_category, self.yolo_conf, self.randomize,
+                               self.whole_frame,
+                               self.cropped_frames, self.crop_size, self.offset_range]
         for i in range(len(self.initial_values)):
             fields[i].insert(0, str(self.initial_values[i]))
 
@@ -1209,6 +1238,7 @@ class ICCS(icvt.AppAncestor):
         # function that will open a frame with an image and prompt the user to drag a rectangle around the text and the
         # top left and bottom right coordinates will be saved in the settings_crop.ini file
         self.logger.debug(f'Running function open_ocr_roi_gui({video_filepath})')
+
         def draw_rectangle(event, x, y, flags, param):
             # DONE: Implement Milesight functionality
             frame = self.video_file_object.read_video_frame()[1]
@@ -1236,13 +1266,14 @@ class ICCS(icvt.AppAncestor):
             # Handle cases where conversion to integer fails
             self.logger.warning('Invalid integer value found in settings_crop.ini')
         # check if video_filepath is valid path to a video file
-        if not os.path.isfile(video_filepath) or not (video_filepath.endswith(".mp4") or video_filepath.endswith(".avi")):
+        if not os.path.isfile(video_filepath) or not (
+                video_filepath.endswith(".mp4") or video_filepath.endswith(".avi")):
             self.logger.warning('Invalid video file path')
             return
 
         # Set up video cap
         # DONE: MS
-        #self.cap = cv2.VideoCapture(video_filepath)
+        # self.cap = cv2.VideoCapture(video_filepath)
 
         # Create a window and pass it to the mouse callback function
         cv2.namedWindow('image')
@@ -1252,10 +1283,11 @@ class ICCS(icvt.AppAncestor):
         cv2.setMouseCallback('image', draw_rectangle)
         # DONE: MS
         while True:
-            #ret, frame = self.cap.read()
+            # ret, frame = self.cap.read()
             ret, frame = self.video_file_object.read_video_frame()
             if ret:
-                cv2.rectangle(frame, (self.x_coordinate, self.y_coordinate), (self.x_coordinate + self.width, self.y_coordinate + self.height),
+                cv2.rectangle(frame, (self.x_coordinate, self.y_coordinate),
+                              (self.x_coordinate + self.width, self.y_coordinate + self.height),
                               (0, 255, 0),
                               2)
                 cv2.imshow('image', frame)
@@ -1287,9 +1319,10 @@ class ICCS(icvt.AppAncestor):
 
         self.reload_roi_entries()
 
-        result = utils.ask_yes_no("Would you like to perform single ROI detection? Only the first frame will be used for the detection. "
-                                  "If you click 'No' all frames will be querried. Please use the advanced option only in the case of often changing flower location. "
-                                  "\n\nThe number of frames querried will be reflected in the quota usage and you might be billed. ")
+        result = utils.ask_yes_no(
+            "Would you like to perform single ROI detection? Only the first frame will be used for the detection. "
+            "If you click 'No' all frames will be querried. Please use the advanced option only in the case of often changing flower location. "
+            "\n\nThe number of frames querried will be reflected in the quota usage and you might be billed. ")
         if result:
             limit = 1
         else:
@@ -1302,7 +1335,8 @@ class ICCS(icvt.AppAncestor):
             unique_rois = vision_AI.get_unique_rois_from_frame(frame)
             overlaps = []
             for roi in unique_rois:
-                rectangles = self.get_roi_extreme_offset_dimensions(roi, (width, height), 0, self.crop_size, self.offset_range)
+                rectangles = self.get_roi_extreme_offset_dimensions(roi, (width, height), 0, self.crop_size,
+                                                                    self.offset_range)
                 top_left_corner, bottom_right_corner = self.get_roi_offset_overlap(rectangles)
 
                 # Calculate width and height
@@ -1373,8 +1407,9 @@ class ICCS(icvt.AppAncestor):
             frame = frame_tmp.copy()
 
             # Draw a rectangle around the already selected points of interest
-            frame = self.draw_roi_offset_boundaries(frame, self.points_of_interest_entry[index][0], dict_of_extremes_to_draw, True,
-                                               True, True)
+            frame = self.draw_roi_offset_boundaries(frame, self.points_of_interest_entry[index][0],
+                                                    dict_of_extremes_to_draw, True,
+                                                    True, True)
 
             # Display the image with the rectangles marking the already selected points of interest
             cv2.imshow("Frame", frame)
@@ -1437,9 +1472,11 @@ class ICCS(icvt.AppAncestor):
         for each in range(index, len(self.video_filepaths)):
             first = first - 1
             if first >= 0 and (
-                    index == 0 or not self.points_of_interest_entry[max(index - 1, 0)][0] == self.points_of_interest_entry[index][0]):
+                    index == 0 or not self.points_of_interest_entry[max(index - 1, 0)][0] ==
+                                      self.points_of_interest_entry[index][0]):
                 self.modified_frames.append(each)
-            self.update_button_image(self.frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)), first)
+            self.update_button_image(self.frames[each].copy(), (max(each, 0) // 6), (each - ((max(each, 0) // 6) * 6)),
+                                     first)
 
     def update_button_image(self, frame, i, j, first):
 
@@ -1457,8 +1494,9 @@ class ICCS(icvt.AppAncestor):
 
         if (first >= 0 or index in self.modified_frames) and (
                 (index == 0 and not len(self.points_of_interest_entry[0][0]) == 0) or not self.points_of_interest_entry[
-                                                                                      max(index - 1, 0)][0] ==
-                                                                                  self.points_of_interest_entry[index][0]):
+                                                                                              max(index - 1, 0)][0] ==
+                                                                                          self.points_of_interest_entry[
+                                                                                              index][0]):
             # Define the ROI
             frame = cv2.resize(frame, (276, 156), interpolation=cv2.INTER_AREA)
             height, width, channels = frame.shape
@@ -1493,14 +1531,16 @@ class ICCS(icvt.AppAncestor):
         self.button_images[index] = img
         self.buttons[i][j].configure(image=self.button_images[index])
 
-    def draw_roi_offset_boundaries(self, frame, list_of_ROIs, dict_of_extremes_to_draw, draw_roi: bool, draw_extremes: bool,
+    def draw_roi_offset_boundaries(self, frame, list_of_ROIs, dict_of_extremes_to_draw, draw_roi: bool,
+                                   draw_extremes: bool,
                                    draw_overlap: bool):
 
         # Define variables
         labels = ['BR', 'UL', 'UR', 'BL']
         offsets = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
-        conditions = [dict_of_extremes_to_draw["b_r"] > 0, dict_of_extremes_to_draw["u_l"] > 0, dict_of_extremes_to_draw["u_r"] > 0, dict_of_extremes_to_draw["b_l"] > 0]
-        pos_off = 0 # Offset if you want the lines to artificially draw next to each other in case you do not want an overlap of the lines.
+        conditions = [dict_of_extremes_to_draw["b_r"] > 0, dict_of_extremes_to_draw["u_l"] > 0,
+                      dict_of_extremes_to_draw["u_r"] > 0, dict_of_extremes_to_draw["b_l"] > 0]
+        pos_off = 0  # Offset if you want the lines to artificially draw next to each other in case you do not want an overlap of the lines.
         height, width, _ = frame.shape
 
         # For each point draw desired shapes
@@ -1511,7 +1551,8 @@ class ICCS(icvt.AppAncestor):
 
             # Draw basic roi area
             if draw_roi:
-                top_left_corner, bottom_right_corner = self.get_roi_dimensions_from_center(point, (width, height), self.crop_size)
+                top_left_corner, bottom_right_corner = self.get_roi_dimensions_from_center(point, (width, height),
+                                                                                           self.crop_size)
                 top_right_corner = (bottom_right_corner[0], top_left_corner[1])
                 bottom_left_corner = (top_left_corner[0], bottom_right_corner[1])
                 center_of_roi = (point[0], point[1])
@@ -1524,7 +1565,8 @@ class ICCS(icvt.AppAncestor):
 
             # Draw the offset extremes rectangles
             if draw_extremes or draw_overlap:
-                rectangles = self.get_roi_extreme_offset_dimensions(point, (width, height), 0, self.crop_size, self.offset_range)
+                rectangles = self.get_roi_extreme_offset_dimensions(point, (width, height), 0, self.crop_size,
+                                                                    self.offset_range)
                 for rectangle, condition in zip(rectangles, conditions):
                     if condition:
                         cv2.rectangle(frame, rectangle[0], rectangle[1], (255, 229, 0), 2)
@@ -1544,15 +1586,17 @@ class ICCS(icvt.AppAncestor):
 
         # Calculater top-left and bottom-right corner coords
         x1, y1 = max(0, center_point[0] - (square_crop_size // 2)), max(0, center_point[1] - (square_crop_size // 2))
-        x2, y2 = min(width, center_point[0] + (square_crop_size // 2)), min(height, center_point[1] + (square_crop_size // 2))
+        x2, y2 = min(width, center_point[0] + (square_crop_size // 2)), min(height,
+                                                                            center_point[1] + (square_crop_size // 2))
 
         return (x1, y1), (x2, y2)
 
-    def get_roi_extreme_offset_dimensions(self, center_point, frame_dimensions: tuple, pos_off: int = 0, square_crop_size: int = 640, offset_range: int = 100):
+    def get_roi_extreme_offset_dimensions(self, center_point, frame_dimensions: tuple, pos_off: int = 0,
+                                          square_crop_size: int = 640, offset_range: int = 100):
 
         # Define variables
         width, height = frame_dimensions
-        labels = ['BR', 'UL', 'UR', 'BL'] # This will be the mapping of the output
+        labels = ['BR', 'UL', 'UR', 'BL']  # This will be the mapping of the output
         offsets = [(1, 1), (-1, -1), (1, -1), (-1, 1)]
         rectangles = []
 
@@ -1641,7 +1685,7 @@ class ICCS(icvt.AppAncestor):
                         self.points_of_interest_entry = [item for item in data_matched.values()]
                         video_filepaths_new = [item[1] for item in data_matched.values()]
 
-                   # Compare the loaded and the currently found video filepaths.
+                    # Compare the loaded and the currently found video filepaths.
                     set1 = set({os.path.basename(filepath) for filepath in video_filepaths_new})
                     set2 = set({os.path.basename(filepath) for filepath in self.video_filepaths})
                     if not set1 == set2:
@@ -1657,6 +1701,7 @@ class ICCS(icvt.AppAncestor):
                                         "There are no save files in the current directory.")
             else:
                 messagebox.showerror("Error", "Invalid video folder path")
+
 
 if __name__ == '__main__':
     iccs = ICCS()

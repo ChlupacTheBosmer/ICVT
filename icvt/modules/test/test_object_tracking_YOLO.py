@@ -24,7 +24,7 @@ def run_object_detection():
     height, width, _ = crop.shape
     print(height)
 
-    model = YOLO(r"D:\Dílna\Kutění\Python\ICCS\resources\yolo\best.pt")
+    model = YOLO(r"/resources/yolo/best.pt")
     results = model(crop, save=True, imgsz=height, conf=0.75, save_txt=False, max_det=1,
                     stream=True)
     for i, result in enumerate(results):
@@ -61,7 +61,7 @@ def run_object_detection():
 
 
 # Load the video
-video_path = r"D:\Dílna\Kutění\Python\ICCS\videos\GR2_L2_LavSto2_20220524_10_29.mp4"
+video_path = r"/videos/GR2_L2_LavSto2_20220524_10_29.mp4"
 cap = cv2.VideoCapture(video_path)
 
 # Set the position of the first frame to frame number 5016
