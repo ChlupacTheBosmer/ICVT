@@ -3,6 +3,7 @@
 # Import ICVT components
 from modules.sort import sorting_gui
 from modules.utility import utils
+from modules.utility import validator
 from modules.database import anno_data
 from modules.video import vid_data
 from modules.vision import vision_AI
@@ -365,30 +366,35 @@ class ICCS(icvt.AppAncestor):
     #     # Return the resulting list of image paths for future reference
     #     return image_paths
 
-    async def yolo_preprocessing(self, img_paths, valid_annotations_array, index):
+    def yolo_preprocessing(self, frames, valid_annotations_array, index):
 
         # Define logger
-        self.logger.debug(f"Running function yolo_preprocessing({img_paths})")
+        self.logger.debug(f"Running function yolo_preprocessing({frames[0].name})")
+
+        # Define list
+        list = [frame.frame for frame in frames]
 
         # Define and run the model
         model = YOLO('resources/yolo/best.pt')
-        results = model(img_paths, save=False, imgsz=self.crop_size, conf=self.yolo_conf, save_txt=False, max_det=2,
+        results = model(list, save=False, imgsz=self.crop_size, conf=self.yolo_conf, save_txt=False, max_det=2,
                         stream=True)
-        for i, result in enumerate(results):
+        for i, (result, frame) in enumerate(zip(results, frames)):
             boxes = result.boxes.data
-            image_name = os.path.basename(img_paths[i])
-            original_path = os.path.join(img_paths[i])
+            image_name = frame.name
+            #original_path = os.path.join(img_paths[i])
             utils.create_dir(f"{self.output_folder}/empty")
             utils.create_dir(f"{self.output_folder}/visitor")
             utils.create_dir(f"{self.output_folder}/visitor/labels")
-            empty_path = os.path.join(f"{self.output_folder}/empty", image_name)
-            visitor_path = os.path.join(f"{self.output_folder}/visitor", image_name)
-            label_path = os.path.join(f"{self.output_folder}/visitor/labels", image_name[:-4])
+            empty_path = os.path.join(f"{self.output_folder}", "empty", image_name)
+            visitor_path = os.path.join(f"{self.output_folder}", "visitor", image_name)
+            label_path = os.path.join(f"{self.output_folder}", "visitor", "labels", image_name[:-4])
 
             if len(result.boxes.data) > 0:
-                shutil.move(original_path, visitor_path)
+                #shutil.move(original_path, visitor_path)
+                frame.save(os.path.join(f"{self.output_folder}", "visitor"))
                 self.image_details_dict[image_name][0] = visitor_path
                 self.image_details_dict[image_name][4] = 1
+                frame.visitor_detected = True
                 with open(f"{label_path}.txt", 'w') as file:
                     # Write the box_data to the file
                     txt = []
@@ -403,9 +409,11 @@ class ICCS(icvt.AppAncestor):
                         visitor_category = valid_annotations_array[index][6]
                     file.write(f"{visitor_category} {txt.replace('[', '').replace(']', '').replace(',', '')}")
             else:
-                shutil.move(original_path, empty_path)
+                #shutil.move(original_path, empty_path)
+                frame.save(os.path.join(f"{self.output_folder}", "empty"))
                 self.image_details_dict[image_name][0] = empty_path
                 self.image_details_dict[image_name][4] = 0
+                frame.visitor_detected = False
 
     def filter_array_by_visitors(self, valid_annotations_array):
 
@@ -611,59 +619,13 @@ class ICCS(icvt.AppAncestor):
                         return
 
                 # Process the visits and generate cropped images
-                for index in range(len(valid_annotations_array)):
-                    self.logger.info(f"Processing visit {index + 1}")
+                for index, visit_entry in enumerate(valid_annotations_array):
+                    self.selective_mode_crop_generation(valid_annotations_array, index, video_files)
 
-                    # Define index which will be shared to sync the stage of the process
-                    self.visit_index = index
-
-                    # Define the variables
-                    visit_duration, visit_timestamp, video_filepath, video_start_time, *_ = valid_annotations_array[
-                        index]
-
-                    # Pick the correct video file object from the list - Filter the list to find the object with matching filepath
-                    self.video_file_object = next((video for video in video_files if video.filepath == video_filepath),
-                                                  None)
-
-                    # Turn timestamp into datetime and calculate how many seconds from the start_time of the video recording does the visit take place
-                    visit_time = pd.to_datetime(visit_timestamp, format='%Y%m%d_%H_%M_%S')
-                    visit_time_from_start = (visit_time - video_start_time).total_seconds()
-
-                    # Define shared cap to open the video filepath
-                    # TODO: Check if not obsolete
-                    if not self.video_file_object.video_origin == "MS":
-                        self.cap = self.video_file_object.cap
-
-                    # The actual duration is taken as limited by the end of the video, therefore cropping wont carry on for longer than one entire video file.
-                    visit_duration = (min(((visit_time_from_start * self.video_file_object.fps) + (int(visit_duration) * self.video_file_object.fps)),
-                                               self.video_file_object.total_frames) - (visit_time_from_start * self.video_file_object.fps)) // self.video_file_object.fps
-
-                    # First frame to capture - start of the visit
-                    frame_number_start = int(visit_time_from_start * self.video_file_object.fps)
-
-                    # Read the frame
-                    # DONE: Implement Milesight functionality
-                    #success, frame = self.video_file_object.read_video_frame(frame_number_start)
-
-                    # Iterate over the list of lists to find which points of interest entry index to summon for each visit-video combo
-                    roi_index = 0
-                    for ix, sublist in enumerate(self.points_of_interest_entry):
-                        if sublist[1] == video_filepath:
-                            # Found the specific filepath
-                            roi_index = ix
-                            break
-                    else:
-                        # Filepath not found in any of the nested lists
-                        self.logger.warning("No ROI entry found for a video file. Defaults to index 0")
-
-                    # Generate frames and get back their paths
-                    img_paths = crop.generate_frames(self, self.video_file_object,
-                                                     self.points_of_interest_entry[roi_index][0], frame_number_start)
-                    frame = crop.generate_frames(self, self.video_file_object, self.points_of_interest_entry[roi_index][0], frame_number_start, visit_duration, index, self.frame_skip, self.frames_per_visit, bool(self.cropped_frames))
-
-                    # If relevant preprocess the images using yolo
-                    if self.yolo_processing == 1 and len(img_paths) > 0:
-                        asyncio.run(self.yolo_preprocessing(img_paths, valid_annotations_array, index))
+                # argument_list = [(valid_annotations_array, index, video_files) for index in
+                #                  range(len(valid_annotations_array))]
+                # import joblib
+                # joblib.Parallel(n_jobs=4)(joblib.delayed(self.selective_mode_crop_generation)(*entry) for entry in argument_list)
 
             # This is for when the crop_mode is 3 and no annotation file is supplied
             else:
@@ -700,13 +662,69 @@ class ICCS(icvt.AppAncestor):
                         # Filepath not found in any of the nested lists
                         self.logger.warning("No ROI entry found for a video file. Defaults to index 0")
 
-                    frame = crop.generate_frames(self, self.video_file_object, self.points_of_interest_entry[roi_index][0], frame_number_start, visit_duration, name_prefix=self.prefix)
-                    success, image_path = frame.save(self.output_folder)
-                    self.image_details_dict[frame.name] = [image_path, frame.frame_number, frame.roi_number, frame.visit_number, int(frame.visitor_detected)]
+                    frame_generator = crop.generate_frames(self, self.video_file_object, self.points_of_interest_entry[roi_index][0], frame_number_start, visit_duration, name_prefix=self.prefix)
+
+                    for frame in frame_generator:
+                        success, image_path = frame.save(self.output_folder)
+                        self.image_details_dict[frame.name] = [image_path, frame.frame_number, frame.roi_number, frame.visit_number, int(frame.visitor_detected)]
                 self.whole_frame = orig_wf
 
         # When done, reload the application
         self.reload(True, False)
+
+    def selective_mode_crop_generation(self, valid_annotations_array, index, video_files):
+        self.logger.info(f"Processing visit {index + 1}")
+
+        # Define index which will be shared to sync the stage of the process
+        self.visit_index = index
+
+        # Defien entry
+        visit_entry = valid_annotations_array[index]
+
+        # Define the variables
+        visit_duration, visit_timestamp, video_filepath, video_start_time, *_ = visit_entry
+
+        # Pick the correct video file object from the list - Filter the list to find the object with matching filepath
+        self.video_file_object = next((video for video in video_files if video.filepath == video_filepath),
+                                      None)
+
+        # Turn timestamp into datetime and calculate how many seconds from the start_time of the video recording does the visit take place
+        visit_time = pd.to_datetime(visit_timestamp, format='%Y%m%d_%H_%M_%S')
+        visit_time_from_start = (visit_time - video_start_time).total_seconds()
+
+        # The actual duration is taken as limited by the end of the video, therefore cropping wont carry on for longer than one entire video file.
+        visit_duration = (min(((visit_time_from_start * self.video_file_object.fps) + (
+                    int(visit_duration) * self.video_file_object.fps)),
+                              self.video_file_object.total_frames) - (
+                                      visit_time_from_start * self.video_file_object.fps)) // self.video_file_object.fps
+
+        # First frame to capture - start of the visit
+        frame_number_start = int(visit_time_from_start * self.video_file_object.fps)
+
+        # Find the index of the specific filepath in the list of lists
+        try:
+            roi_index = next(ix for ix, sublist in enumerate(self.points_of_interest_entry) if
+                             sublist[1] == video_filepath)
+        except StopIteration:
+            roi_index = 0
+            self.logger.warning("No ROI entry found for a video file. Defaults to index 0")
+
+        # Generate frames and get back their paths
+        frames_list = []
+        frame_generator = crop.generate_frames(self, self.video_file_object,
+                                               self.points_of_interest_entry[roi_index][0], frame_number_start,
+                                               visit_duration, index, self.frame_skip, self.frames_per_visit,
+                                               bool(self.cropped_frames))
+
+        # If relevant preprocess the images using yolo
+        for frame in frame_generator:
+            self.image_details_dict[frame.name] = ["", frame.frame_number, frame.roi_number, frame.visit_number,
+                                                   int(frame.visitor_detected)]
+            frames_list.append(frame)
+
+        # Wait until all frames are generated and run YOLO OD on them
+        if self.yolo_processing == 1:
+            self.yolo_preprocessing(frames_list, valid_annotations_array, index)
 
     def sort_engine(self):
 
