@@ -41,3 +41,7 @@
 [submodule "icvt/modules/vision"]
 	path = icvt/modules/vision
 	url = https://github.com/ChlupacTheBosmer/iclv-vision
+
+[submodule "icvt/modules/yolo"]
+	path = icvt/modules/yolo
+	url = https://github.com/ChlupacTheBosmer/iclv-yolo
