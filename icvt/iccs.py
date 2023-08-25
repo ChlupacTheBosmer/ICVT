@@ -630,25 +630,20 @@ class ICCS(icvt.AppAncestor):
                     visit_time_from_start = (visit_time - video_start_time).total_seconds()
 
                     # Define shared cap to open the video filepath
-                    # DONE: Implement Milesight functionality
+                    # TODO: Check if not obsolete
                     if not self.video_file_object.video_origin == "MS":
                         self.cap = self.video_file_object.cap
 
-                    # Calculat the total number of video frames, fps ... and figure out where t oset the cap and read a frame
-                    # DONE: Implement Milesight functionality
-                    total_frames = self.video_file_object.total_frames
-                    self.fps = self.video_file_object.fps
-
                     # The actual duration is taken as limited by the end of the video, therefore cropping wont carry on for longer than one entire video file.
-                    self.visit_duration = (min(((visit_time_from_start * self.fps) + (int(visit_duration) * self.fps)),
-                                               total_frames) - (visit_time_from_start * self.fps)) // self.fps
+                    visit_duration = (min(((visit_time_from_start * self.video_file_object.fps) + (int(visit_duration) * self.video_file_object.fps)),
+                                               self.video_file_object.total_frames) - (visit_time_from_start * self.video_file_object.fps)) // self.video_file_object.fps
 
                     # First frame to capture - start of the visit
-                    frame_number_start = int(visit_time_from_start * self.fps)
+                    frame_number_start = int(visit_time_from_start * self.video_file_object.fps)
 
                     # Read the frame
                     # DONE: Implement Milesight functionality
-                    success, frame = self.video_file_object.read_video_frame(frame_number_start)
+                    #success, frame = self.video_file_object.read_video_frame(frame_number_start)
 
                     # Iterate over the list of lists to find which points of interest entry index to summon for each visit-video combo
                     roi_index = 0
@@ -662,8 +657,9 @@ class ICCS(icvt.AppAncestor):
                         self.logger.warning("No ROI entry found for a video file. Defaults to index 0")
 
                     # Generate frames and get back their paths
-                    img_paths = crop.generate_frames(self, frame, success, os.path.basename(video_filepath),
-                                                     roi_index, frame_number_start)
+                    img_paths = crop.generate_frames(self, self.video_file_object,
+                                                     self.points_of_interest_entry[roi_index][0], frame_number_start)
+                    frame = crop.generate_frames(self, self.video_file_object, self.points_of_interest_entry[roi_index][0], frame_number_start, visit_duration, index, self.frame_skip, self.frames_per_visit, bool(self.cropped_frames))
 
                     # If relevant preprocess the images using yolo
                     if self.yolo_processing == 1 and len(img_paths) > 0:
@@ -685,16 +681,28 @@ class ICCS(icvt.AppAncestor):
                 self.whole_frame = 1
 
                 # Starting from the second frame of every video frames are generated.
-                for i, filepath in enumerate(self.video_filepaths):
-                    # DONE: Implement Milesight functionality
-                    self.video_file_object = vid_data.Video_file(filepath, self.main_window, self.ocr_roi, False)
-                    self.fps = self.video_file_object.fps
+                for i, video_filepath in enumerate(self.video_filepaths):
+
+                    # Define relevant video object
+                    self.video_file_object = vid_data.Video_file(video_filepath, self.main_window, self.ocr_roi, False)
                     total_frames = self.video_file_object.total_frames
-                    self.visit_duration = total_frames // self.fps
+                    visit_duration = total_frames // self.video_file_object.fps
                     frame_number_start = 2
-                    success, frame = self.video_file_object.read_video_frame(frame_number_start)
-                    img_paths = crop.generate_frames(self, frame, success, os.path.basename(self.video_filepaths[i]), i,
-                                                     frame_number_start)
+
+                    # Iterate over the list of lists to find which points of interest entry index to summon for each visit-video combo
+                    roi_index = 0
+                    for ix, sublist in enumerate(self.points_of_interest_entry):
+                        if sublist[1] == video_filepath:
+                            # Found the specific filepath
+                            roi_index = ix
+                            break
+                    else:
+                        # Filepath not found in any of the nested lists
+                        self.logger.warning("No ROI entry found for a video file. Defaults to index 0")
+
+                    frame = crop.generate_frames(self, self.video_file_object, self.points_of_interest_entry[roi_index][0], frame_number_start, visit_duration, name_prefix=self.prefix)
+                    success, image_path = frame.save(self.output_folder)
+                    self.image_details_dict[frame.name] = [image_path, frame.frame_number, frame.roi_number, frame.visit_number, int(frame.visitor_detected)]
                 self.whole_frame = orig_wf
 
         # When done, reload the application
