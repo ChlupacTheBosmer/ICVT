@@ -516,6 +516,48 @@ class ICCS(icvt.AppAncestor):
             filter_window.quit()
             filter_window.destroy()
 
+    def generate_frames_for_visits(self, valid_annotations_array: list, video_files: list,
+                                   frames_per_visit: int = 20, frame_skip: int = 15) -> dict:
+        frames_per_video_dict = {}
+        visitor_category_dict = {}
+        for iter_num, (_, _, video_filepath, *_) in enumerate(valid_annotations_array):
+            matching_annotations = [
+                (iter_num, duration, time_of_visit, fp, video_start_time, *_)
+                for duration, time_of_visit, fp, video_start_time, *_
+                in valid_annotations_array if fp == video_filepath
+            ]
+            if len(valid_annotations_array[iter_num]) > 0:
+                visitor_category_dict[iter_num] = valid_annotations_array[iter_num][5]
+
+
+
+            list_of_visit_frames = []
+            list_of_visit_number = []
+            for visit_number, duration, time_of_visit, video_filepath, video_start_time, *_ in matching_annotations:
+                try:
+                    fps, total_frames = next((video_file.fps, video_file.total_frames) for video_file in video_files if
+                                             video_file.filename == os.path.basename(video_filepath))
+                except StopIteration:
+                    self.logger.warning("No video file found for visit.")
+                    continue
+                time_from_start = int(
+                    (pd.to_datetime(time_of_visit, format='%Y%m%d_%H_%M_%S') - video_start_time).total_seconds())
+                first_frame = time_from_start * fps
+                adjusted_visit_duration = (min(
+                    time_from_start * fps + int(duration) * fps,
+                    total_frames
+                ) - time_from_start * fps) // fps
+                last_frame = first_frame + (adjusted_visit_duration * fps)
+                list_of_visit_frames += list(range(first_frame, last_frame, frame_skip if frames_per_visit < 1 else (
+                            (adjusted_visit_duration * fps) // frames_per_visit)))
+                list_of_visit_number += [visit_number for _ in list_of_visit_frames]
+
+            frames_per_video_dict[os.path.basename(video_filepath)] = (tuple(list_of_visit_frames),
+                                                                       tuple(list_of_visit_number),
+                                                                       visitor_category_dict)
+
+        return frames_per_video_dict
+
     def crop_engine(self):
 
         # Define logger
@@ -618,14 +660,13 @@ class ICCS(icvt.AppAncestor):
                         self.reload(True, False)
                         return
 
+                # Generate which frames should be exported for each video
+                self.generate_frames_for_visits(valid_annotations_array, video_files, self.frame_skip,
+                                                self.frames_per_visit)
+
                 # Process the visits and generate cropped images
                 for index, visit_entry in enumerate(valid_annotations_array):
                     self.selective_mode_crop_generation(valid_annotations_array, index, video_files)
-
-                # argument_list = [(valid_annotations_array, index, video_files) for index in
-                #                  range(len(valid_annotations_array))]
-                # import joblib
-                # joblib.Parallel(n_jobs=4)(joblib.delayed(self.selective_mode_crop_generation)(*entry) for entry in argument_list)
 
             # This is for when the crop_mode is 3 and no annotation file is supplied
             else:
