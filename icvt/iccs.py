@@ -19,10 +19,8 @@ from PIL import Image, ImageTk
 from ultralytics import YOLO
 
 # Part of python
-import asyncio
 import json
 import math
-import shutil
 import configparser
 import os
 
