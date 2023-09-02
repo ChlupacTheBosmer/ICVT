@@ -6,7 +6,6 @@ from modules.utility import utils
 from modules.utility import validator
 from modules.database import anno_data
 from modules.video import vid_data
-from modules.video import video_inter
 from modules.vision import vision_AI
 from modules.base import icvt
 from modules.crop import crop
@@ -14,6 +13,7 @@ from modules.crop import crop
 # Import other modules
 import pandas as pd
 import cv2
+
 import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk
@@ -22,6 +22,7 @@ from ultralytics import YOLO
 # Part of python
 import json
 import math
+import shutil
 import configparser
 import os
 
@@ -221,9 +222,9 @@ class ICCS(icvt.AppAncestor):
                 if any(filename.endswith(format) for format in video_formats):
                     video_path = os.path.join(self.video_folder_path, filename)
                     try:
-                        video_file_object = video_inter.VideoFileInteractive(filepath=video_path, initiate_start_and_end_times=False)
-                        frame = video_file_object.read_video_frame(25, False)[0][3]
-                        if frame is not None:
+                        video_file_object = vid_data.Video_file(filepath=video_path, initiate_start_and_end_times=False)
+                        success, frame = video_file_object.read_video_frame(25)
+                        if success:
                             self.frames.append(frame)
                         else:
                             # If the read operation fails, add a default image
@@ -449,8 +450,11 @@ class ICCS(icvt.AppAncestor):
             for row in valid_annotations_array:
                 if row[5] in [result[1] for result in results]:
                     matching_result = next(result for result in results if result[1] == row[5])
-                    filtered_row = row + [matching_result[2]]
-                    self.filtered_array.append(filtered_row)
+                    row[5] = matching_result[2]
+                    self.filtered_array.append(row)
+                    print(row)
+                    #filtered_row = row[5] + [matching_result[2]]
+                    #self.filtered_array.append(filtered_row)
             filter_window.quit()
             filter_window.destroy()
 
@@ -526,7 +530,7 @@ class ICCS(icvt.AppAncestor):
                 in valid_annotations_array if fp == video_filepath
             ]
             if len(valid_annotations_array[iter_num]) > 0:
-                visitor_category_dict[iter_num] = valid_annotations_array[iter_num][5]
+                visitor_category_dict[iter_num] = 0 if not isinstance(valid_annotations_array[iter_num][5], int) else valid_annotations_array[iter_num][5]
 
 
 
@@ -534,8 +538,8 @@ class ICCS(icvt.AppAncestor):
             list_of_visit_number = []
             for visit_number, duration, time_of_visit, video_filepath, video_start_time, *_ in matching_annotations:
                 try:
-                    fps, total_frames = next((video_file.fps, video_file.total_frames) for video_file in video_files if
-                                             video_file.filename == os.path.basename(video_filepath))
+                    fps, total_frames = (next((video_file.fps, video_file.total_frames) for video_file in video_files if
+                                             video_file.filename == os.path.basename(video_filepath)))
                 except StopIteration:
                     self.logger.warning("No video file found for visit.")
                     continue
@@ -547,8 +551,8 @@ class ICCS(icvt.AppAncestor):
                     total_frames
                 ) - time_from_start * fps) // fps
                 last_frame = first_frame + (adjusted_visit_duration * fps)
-                list_of_visit_frames += list(range(first_frame, last_frame, frame_skip if frames_per_visit < 1 else (
-                            (adjusted_visit_duration * fps) // frames_per_visit)))
+                list_of_visit_frames += list(range(first_frame, last_frame, max(1,frame_skip if frames_per_visit < 1 else (
+                            (adjusted_visit_duration * fps) // frames_per_visit))))
                 list_of_visit_number += [visit_number for _ in list_of_visit_frames]
 
             frames_per_video_dict[os.path.basename(video_filepath)] = (tuple(list_of_visit_frames),
@@ -659,13 +663,20 @@ class ICCS(icvt.AppAncestor):
                         self.reload(True, False)
                         return
 
-                # Generate which frames should be exported for each video
-                self.generate_frames_for_visits(valid_annotations_array, video_files, self.frame_skip,
-                                                self.frames_per_visit)
+                frame_dict = self.generate_frames_for_visits(valid_annotations_array, video_files, self.frames_per_visit, self.frame_skip)
 
-                # Process the visits and generate cropped images
-                for index, visit_entry in enumerate(valid_annotations_array):
-                    self.selective_mode_crop_generation(valid_annotations_array, index, video_files)
+                from modules.crop.frame_generator import FrameGenerator
+                fg = FrameGenerator(tuple(self.video_filepaths), frame_dict, self.points_of_interest_entry, 640, 100, "",
+                                    self.output_folder)
+
+                #
+                # # Generate which frames should be exported for each video
+                # self.generate_frames_for_visits(valid_annotations_array, video_files, self.frame_skip,
+                #                                 self.frames_per_visit)
+                #
+                # # Process the visits and generate cropped images
+                # for index, visit_entry in enumerate(valid_annotations_array):
+                #     self.selective_mode_crop_generation(valid_annotations_array, index, video_files)
 
             # This is for when the crop_mode is 3 and no annotation file is supplied
             else:
@@ -686,7 +697,7 @@ class ICCS(icvt.AppAncestor):
                 for i, video_filepath in enumerate(self.video_filepaths):
 
                     # Define relevant video object
-                    self.video_file_object = video_inter.VideoFileInteractive(video_filepath, self.main_window, self.ocr_roi, False)
+                    self.video_file_object = vid_data.Video_file(video_filepath, self.main_window, self.ocr_roi, False)
                     total_frames = self.video_file_object.total_frames
                     visit_duration = total_frames // self.video_file_object.fps
                     frame_number_start = 2
@@ -754,7 +765,7 @@ class ICCS(icvt.AppAncestor):
         frame_generator = crop.generate_frames(self, self.video_file_object,
                                                self.points_of_interest_entry[roi_index][0], frame_number_start,
                                                visit_duration, index, self.frame_skip, self.frames_per_visit,
-                                               bool(self.cropped_frames), bool(self.whole_frame))
+                                               bool(self.cropped_frames))
 
         # If relevant preprocess the images using yolo
         for frame in frame_generator:
@@ -1307,7 +1318,7 @@ class ICCS(icvt.AppAncestor):
 
         def draw_rectangle(event, x, y, flags, param):
             # DONE: Implement Milesight functionality
-            frame = self.video_file_object.read_video_frame(1, False)[0][3]
+            frame = self.video_file_object.read_video_frame()[1]
             if event == cv2.EVENT_LBUTTONDOWN:
                 self.x_coordinate = x
                 self.y_coordinate = y
@@ -1322,7 +1333,7 @@ class ICCS(icvt.AppAncestor):
         # Read settings from settings_crop.ini
         self.config.read('settings_crop.ini', encoding='utf-8')
         # Create video object
-        self.video_file_object = video_inter.VideoFileInteractive(video_filepath, self.main_window, self.ocr_roi, False)
+        self.video_file_object = vid_data.Video_file(video_filepath, self.main_window, self.ocr_roi, False)
         try:
             self.x_coordinate = int(self.config['OCR settings'].get('x_coordinate', '0').strip())
             self.y_coordinate = int(self.config['OCR settings'].get('y_coordinate', '0').strip())
@@ -1350,8 +1361,8 @@ class ICCS(icvt.AppAncestor):
         # DONE: MS
         while True:
             # ret, frame = self.cap.read()
-            frame = self.video_file_object.read_video_frame(1, False)[0][3]
-            if frame is not None:
+            ret, frame = self.video_file_object.read_video_frame()
+            if ret:
                 cv2.rectangle(frame, (self.x_coordinate, self.y_coordinate),
                               (self.x_coordinate + self.width, self.y_coordinate + self.height),
                               (0, 255, 0),
