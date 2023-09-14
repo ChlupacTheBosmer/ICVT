@@ -3,35 +3,27 @@
 # Import ICVT components
 from modules.sort import sorting_gui
 from modules.utility import utils
-from modules.utility import validator
 from modules.database import anno_data
-from modules.video import vid_data
 from modules.video import video_inter
 from modules.vision import vision_AI
 from modules.base import icvt
 from modules.crop import crop
-from modules.iccs.gui import ICCS_GUI, RightClickableQPushButton, DatabaseEntryWindow
-from modules.iccs.mpv import MPVThread
+from modules.iccs.gui import ICCS_GUI
 
 # Import other modules
 import pandas as pd
 import cv2
 import tkinter as tk
 from tkinter import messagebox
-from PIL import Image, ImageTk
+from PIL import Image
 from ultralytics import YOLO
 
 
-from PyQt5.QtWidgets import (QSplashScreen, QToolBar, QFrame, QSpacerItem, QPushButton, QRadioButton, QCheckBox,
-                             QGridLayout, QSizePolicy, QVBoxLayout, QHBoxLayout, QScrollArea, QLabel, QWidget,
-                             QMainWindow, QApplication, QWidget, QLineEdit, QPushButton, QVBoxLayout, QTableWidget,
-                             QTableWidgetItem, QDesktopWidget)
+from PyQt5.QtWidgets import (QSplashScreen, QMainWindow, QApplication)
 from PyQt5.QtGui import QPixmap, QIcon, QImage
 import PyQt5.QtGui as QtGui
-import PyQt5.QtCore as QtCore
-from PyQt5.QtCore import QTimer, QCoreApplication, QThread, Qt, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QTimer, Qt
 import PyQt5
-import sqlite3
 
 # Part of python
 import json
