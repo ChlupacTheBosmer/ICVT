@@ -4,44 +4,44 @@
 
 [submodule "icvt/modules/base"]
 	path = icvt/modules/base
-	url = https://github.com/ChlupacTheBosmer/iclv-base
+	url = https://github.com/ChlupacTheBosmer/icvt-base
 
 [submodule "icvt/modules/crop"]
 	path = icvt/modules/crop
-	url = https://github.com/ChlupacTheBosmer/iclv-crop
+	url = https://github.com/ChlupacTheBosmer/icvt-crop
 
 [submodule "icvt/modules/database"]
 	path = icvt/modules/database
-	url = https://github.com/ChlupacTheBosmer/iclv-database
+	url = https://github.com/ChlupacTheBosmer/icvt-database
 
 [submodule "icvt/modules/inat"]
 	path = icvt/modules/inat
-	url = https://github.com/ChlupacTheBosmer/iclv-inat
+	url = https://github.com/ChlupacTheBosmer/icvt-inat
 
 [submodule "icvt/modules/labels"]
 	path = icvt/modules/labels
-	url = https://github.com/ChlupacTheBosmer/iclv-labels
+	url = https://github.com/ChlupacTheBosmer/icvt-labels
 
 [submodule "icvt/modules/sort"]
 	path = icvt/modules/sort
-	url = https://github.com/ChlupacTheBosmer/iclv-sort
+	url = https://github.com/ChlupacTheBosmer/icvt-sort
 
 [submodule "icvt/modules/test"]
 	path = icvt/modules/test
-	url = https://github.com/ChlupacTheBosmer/iclv-test
+	url = https://github.com/ChlupacTheBosmer/icvt-test
 
 [submodule "icvt/modules/utility"]
 	path = icvt/modules/utility
-	url = https://github.com/ChlupacTheBosmer/iclv-utility
+	url = https://github.com/ChlupacTheBosmer/icvt-utility
 
 [submodule "icvt/modules/video"]
 	path = icvt/modules/video
-	url = https://github.com/ChlupacTheBosmer/iclv-video
+	url = https://github.com/ChlupacTheBosmer/icvt-video
 
 [submodule "icvt/modules/vision"]
 	path = icvt/modules/vision
-	url = https://github.com/ChlupacTheBosmer/iclv-vision
+	url = https://github.com/ChlupacTheBosmer/icvt-vision
 
 [submodule "icvt/modules/yolo"]
 	path = icvt/modules/yolo
-	url = https://github.com/ChlupacTheBosmer/iclv-yolo
+	url = https://github.com/ChlupacTheBosmer/icvt-yolo
