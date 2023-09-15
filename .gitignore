@@ -28,3 +28,14 @@
 /icvt/resources/exc/output_filtered_crop.xlsx
 /icvt/resources/exc/~$croplog_template.xlsx
 /icvt/resources/memory/
+/icvt/modules/vision/
+/icvt/modules/test/
+/icvt/modules/database/
+/icvt/modules/sort/
+/icvt/modules/yolo/
+/icvt/modules/base/
+/icvt/modules/utility/
+/icvt/modules/video/
+/icvt/modules/labels/
+/icvt/modules/inat/
+/icvt/modules/crop/
