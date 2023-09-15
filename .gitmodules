@@ -9,6 +9,7 @@
 [submodule "icvt/modules/crop"]
 	path = icvt/modules/crop
 	url = https://github.com/ChlupacTheBosmer/icvt-crop
+	branch = dev
 
 [submodule "icvt/modules/database"]
 	path = icvt/modules/database
