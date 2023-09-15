@@ -13,11 +13,8 @@ from modules.iccs.gui import ICCS_GUI
 # Import other modules
 import pandas as pd
 import cv2
-import tkinter as tk
-from tkinter import messagebox
 from PIL import Image
 from ultralytics import YOLO
-
 
 from PyQt5.QtWidgets import (QSplashScreen, QMainWindow, QApplication)
 from PyQt5.QtGui import QPixmap, QIcon, QImage
@@ -26,6 +23,8 @@ from PyQt5.QtCore import QTimer, Qt
 import PyQt5
 
 # Part of python
+import tkinter as tk
+from tkinter import messagebox
 import json
 import math
 import configparser

@@ -2,11 +2,12 @@
 
 # Part of python
 import os
+import sys
 
 # Extra packages
 import PyQt5
 from PyQt5.QtCore import pyqtSignal, QThread
-import sys
+
 # Get the directory containing the main script
 main_script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 

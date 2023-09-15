@@ -1,18 +1,19 @@
+import math
+import os
+from datetime import datetime, timedelta
+import sys
+import sqlite3
 
 import PyQt5
 import PyQt5.QtCore as QtCore
 import PyQt5.QtGui as QtGui
-import math
-import os
-import sqlite3
 import cv2
 from PIL import Image
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap, QIcon, QImage
 from PyQt5.QtWidgets import (QToolBar, QSpacerItem, QGridLayout, QSizePolicy, QHBoxLayout, QScrollArea, QLabel,
                              QMainWindow, QPushButton)
-from datetime import datetime, timedelta
-import sys
+
 # Get the directory containing the main script
 main_script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 
