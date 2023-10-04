@@ -117,7 +117,7 @@ def install_packages(requirements_file, bare_installation, installer):
 
     with open(requirements_file, encoding='utf-8') as f:
         for line in f:
-            package = line.strip()
+            package = line.strip().split('#')[0]
             package_name = re.match(r'([^=]+)', package).group()
             try:
                 subprocess.check_call([installer, "install", package])
