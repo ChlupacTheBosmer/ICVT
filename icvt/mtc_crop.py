@@ -50,8 +50,7 @@ class mtcCrop(AppAncestor):
         self.reload_roi_entries()
 
         # Create output folders
-        utils.create_dir(self.output_folder)
-        utils.create_dir(os.path.join(self.output_folder, "whole frames"))
+        os.makedirs(os.path.join(".", self.output_folder, "whole frames"), exist_ok=True)
 
         self.load_videos()
 

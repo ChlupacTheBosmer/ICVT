@@ -79,8 +79,7 @@ class ICCS(icvt.AppAncestor):
         self.load_video_frames()
 
         # Create output folders
-        utils.create_dir(self.output_folder)
-        utils.create_dir(os.path.join(".", self.output_folder, "whole frames"))
+        os.makedirs(os.path.join(".", self.output_folder, "whole frames"), exist_ok=True)
 
         # Open window
         self.open_main_window()
@@ -382,9 +381,9 @@ class ICCS(icvt.AppAncestor):
             boxes = result.boxes.data
             image_name = frame.name
             #original_path = os.path.join(img_paths[i])
-            utils.create_dir(f"{self.output_folder}/empty")
-            utils.create_dir(f"{self.output_folder}/visitor")
-            utils.create_dir(f"{self.output_folder}/visitor/labels")
+            os.makedirs(f"{self.output_folder}/empty", exist_ok=True)
+            os.makedirs(f"{self.output_folder}/visitor", exist_ok=True)
+            os.makedirs(f"{self.output_folder}/visitor/labels", exist_ok=True)
             empty_path = os.path.join(f"{self.output_folder}", "empty", image_name)
             visitor_path = os.path.join(f"{self.output_folder}", "visitor", image_name)
             label_path = os.path.join(f"{self.output_folder}", "visitor", "labels", image_name[:-4])
@@ -1253,8 +1252,7 @@ class ICCS(icvt.AppAncestor):
             self.config_write()
 
             # Create new output dirs
-            utils.create_dir(self.output_folder)
-            utils.create_dir(os.path.join(".", self.output_folder, "whole frames"))
+            os.makedirs(os.path.join(".", self.output_folder, "whole frames"), exist_ok=True)
 
             # Destroy menu window
             window.destroy()
