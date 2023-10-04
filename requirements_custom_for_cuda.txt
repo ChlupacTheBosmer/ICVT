@@ -1,0 +1,6 @@
+
+# pip install nvidia-pyindex
+# conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+# conda install -c conda-forge ultralytics
+# pip install nvidia-cuda-runtime-cu11
+# conda install cuda -c nvidia
