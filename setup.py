@@ -139,6 +139,8 @@ def install_packages(requirements_file, bare_installation, installer):
 def select_requirements_file(directory_path: str = ""):
 
     # Get txt files in the relevant folder
+    if directory_path == "":
+        directory_path = os.path.dirname(os.path.abspath(__file__))
     txt_files = [file for file in os.listdir(directory_path) if file.endswith(".txt")]
 
     print("Available .txt files:")
