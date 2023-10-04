@@ -1,0 +1,6 @@
+{
+    "ICCS": ["icvt/modules/base", "icvt/modules/crop", "icvt/modules/database", "icvt/modules/sort", "icvt/modules/utility", "icvt/modules/video", "icvt/modules/vision"],
+    "ICID": ["icvt/modules/base", "icvt/modules/inat"],
+    "ICAS": ["icvt/modules/base"],
+    "ICLV": ["icvt/modules/base", "icvt/modules/labels"]
+}
