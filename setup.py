@@ -104,10 +104,12 @@ def install_basic_requirements():
     subprocess.run(["pip", "install", "-r", "requirements.txt"])
 
 def install_packages(requirements_file, bare_installation, installer):
-    try:
-        subprocess.check_call(["conda", "config", "--add", "channels", "conda-forge"])
-    except subprocess.CalledProcessError as e:
-        print(f"Error updating conda channels: {e}")
+
+    if installer == "conda":
+        try:
+            subprocess.check_call(["conda", "config", "--add", "channels", "conda-forge"])
+        except subprocess.CalledProcessError as e:
+            print(f"Error updating conda channels: {e}")
 
     error_list = ["Error installing the following packages, bare install executed:"]
     fail_list = ["Error installing the following packages, package installation failed:"]
