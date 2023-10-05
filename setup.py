@@ -148,6 +148,7 @@ def select_requirements_file(directory_path: str = ""):
     txt_files = [file for file in os.listdir(directory_path) if file.endswith(".txt")]
 
     print("Available .txt files:")
+    print("0. Skip")
     for i, txt_file in enumerate(txt_files, start=1):
         print(f"{i}. {txt_file}")
 
