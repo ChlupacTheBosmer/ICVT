@@ -120,6 +120,7 @@ def install_packages(requirements_file, bare_installation, installer):
             package = line.strip().split('#')[0]
             package_name = re.match(r'([^=]+)', package).group()
             try:
+                print(f"Installing package: {package}")
                 subprocess.check_call([installer, "install", package])
                 success_list.append(f"{package_name}")
             except subprocess.CalledProcessError as e:
