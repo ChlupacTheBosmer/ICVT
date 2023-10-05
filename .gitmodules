@@ -46,3 +46,6 @@
 [submodule "icvt/modules/yolo"]
 	path = icvt/modules/yolo
 	url = https://github.com/ChlupacTheBosmer/icvt-yolo
+[submodule "icvt/modules/iccs"]
+	path = icvt/modules/iccs
+	url = https://github.com/ChlupacTheBosmer/icvt-iccs
