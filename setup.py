@@ -108,7 +108,7 @@ def install_packages(requirements_file, bare_installation, installer):
 
     if installer == "conda":
         try:
-            subprocess.check_call(["conda", "config", "--add", "channels", "conda-forge"])
+            subprocess.check_call(["conda", "config", "--add", "channels", "conda-forge"], shell=True)
         except subprocess.CalledProcessError as e:
             print(f"Error updating conda channels: {e}")
 
