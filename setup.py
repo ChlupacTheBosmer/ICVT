@@ -122,14 +122,14 @@ def install_packages(requirements_file, bare_installation, installer):
             package_name = re.match(r'([^=]+)', package).group()
             try:
                 print(f"Installing package: {package}")
-                subprocess.check_call([installer, "install", package])
+                subprocess.check_call([installer, "install", package], shell=True)
                 success_list.append(f"{package_name}")
             except subprocess.CalledProcessError as e:
                 print(f"Error installing {package}: {e}")
                 if bare_installation:
                     try:
                         print("Attempting bare installation of the package")
-                        subprocess.check_call([installer, "install", package_name])
+                        subprocess.check_call([installer, "install", package_name], shell=True)
                         error_list.append(f"{package_name}")
                     except subprocess.CalledProcessError as e:
                         print(f"Error installing {package}: {e}")
