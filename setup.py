@@ -85,7 +85,8 @@ def install_submodule(submodule_path):
 
     print(f"Installing dependencies for submodule at {submodule_path}")
     requirements_file = select_requirements_file(submodule_path)
-    install_packages(requirements_file, bare_install, installer)
+    if not requirements_file == "None":
+        install_packages(requirements_file, bare_install, installer)
 
     # # Check if this submodule has its own submodule dependencies
     # modules_json_path = f"{submodule_path}/modules.json"
@@ -155,6 +156,9 @@ def select_requirements_file(directory_path: str = ""):
             user_choice = int(input("Enter the number of the .txt file you want to use: "))
             if 1 <= user_choice <= len(txt_files):
                 requirements_file = txt_files[user_choice - 1]
+                break
+            elif user_choice == 0:
+                requirements_file = "None"
                 break
             else:
                 print("Invalid input. Please enter a valid number.")
