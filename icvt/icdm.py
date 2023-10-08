@@ -103,6 +103,7 @@ class DatabasePopulator(QThread):
 
         self.progress_signal.emit(total_files)  # Or however you wish to compute progress
         conn.close()
+        self.progress_signal.emit(0)
 
 class FileCounter(QThread):
     finished_counting = pyqtSignal(int, int, int, object)
@@ -232,9 +233,6 @@ class ICDM(QMainWindow):
     def set_progress(self, value):
         print(value)
         self.common_progress_bar.setMaximum(value)
-
-    def start_database_population(self):
-        self.database_populator.start()
 
     # Slot function to update the UI
     def updateUI(self, total_files, image_files, label_files, label):
