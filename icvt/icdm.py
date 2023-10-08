@@ -150,9 +150,9 @@ class ICDM(QMainWindow):
         # Init file counter
         self.file_counter = None
 
-        self.initUI()
+        self.initialize_UI()
 
-    def initUI(self):
+    def initialize_UI(self):
         layout = QVBoxLayout()
         h_layout = QHBoxLayout()
 
@@ -161,7 +161,7 @@ class ICDM(QMainWindow):
         self.addToolBar(toolbar)
 
         open_button = QPushButton('Open Folder', self)
-        open_button.clicked.connect(self.showDialog)
+        open_button.clicked.connect(self.show_open_folder_dialog)
         toolbar.addWidget(open_button)
 
         # Create TreeView for visitor folders
@@ -182,10 +182,12 @@ class ICDM(QMainWindow):
 
         # Connecting actions and events to the visitor view
         self.tree_visitor.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree_visitor.customContextMenuRequested.connect(lambda pos, tree=self.tree_visitor: self.openMenu(pos, tree))
+        self.tree_visitor.customContextMenuRequested.connect(lambda pos, tree=self.tree_visitor: self.open_context_menu(
+            pos, tree))
 
-        self.tree_visitor.doubleClicked.connect(lambda: self.itemDoubleClicked(self.tree_visitor))
-        self.tree_visitor.clicked.connect(lambda: self.initiateUpdateFileCounts(self.tree_visitor, self.visitor_file_count_label)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
+        self.tree_visitor.doubleClicked.connect(lambda: self.item_double_clicked(self.tree_visitor))
+        self.tree_visitor.clicked.connect(lambda: self.initiate_file_count(self.tree_visitor,
+                                                                           self.visitor_file_count_label)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Create TreeView for empty folders
         self.tree_empty = QTreeView(self)
@@ -205,10 +207,11 @@ class ICDM(QMainWindow):
 
         # Connecting actions and events to the empty view
         self.tree_empty.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tree_empty.customContextMenuRequested.connect(lambda pos, tree=self.tree_empty: self.openMenu(pos, tree))
+        self.tree_empty.customContextMenuRequested.connect(lambda pos, tree=self.tree_empty: self.open_context_menu(pos,
+                                                                                                                    tree))
 
-        self.tree_empty.doubleClicked.connect(lambda: self.itemDoubleClicked(self.tree_empty))
-        self.tree_empty.clicked.connect(lambda: self.initiateUpdateFileCounts(self.tree_empty, self.empty_file_count_label)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
+        self.tree_empty.doubleClicked.connect(lambda: self.item_double_clicked(self.tree_empty))
+        self.tree_empty.clicked.connect(lambda: self.initiate_file_count(self.tree_empty, self.empty_file_count_label)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Create a common progress bar
         self.common_progress_bar = QProgressBar()
@@ -235,22 +238,20 @@ class ICDM(QMainWindow):
         self.common_progress_bar.setMaximum(value)
 
     # Slot function to update the UI
-    def updateUI(self, total_files, image_files, label_files, label):
-        #progressBar.setMaximum(total_files)
-        #progressBar.setValue(image_files + label_files)
+    def update_tree_view_label(self, total_files, image_files, label_files, label):
         label.setText(f"Total Files: {total_files}, Image Files: {image_files}, Label Files: {label_files}")
 
     # Function to initiate the counting
-    def initiateUpdateFileCounts(self, tree, label):
-        index, model = self.getSourceAttributes(tree)
+    def initiate_file_count(self, tree, label):
+        index, model = self.get_tree_model_source_attributes(tree)
         folder_path = model.filePath(index)
 
         if os.path.isdir(folder_path):
             self.file_counter = FileCounter(folder_path, label)
-            self.file_counter.finished_counting.connect(self.updateUI)
+            self.file_counter.finished_counting.connect(self.update_tree_view_label)
             self.file_counter.start()
 
-    def showDialog(self):
+    def show_open_folder_dialog(self):
         folder_path = QFileDialog.getExistingDirectory(self, 'Select Folder')
         if folder_path:
             self.import_data(folder_path)
@@ -274,7 +275,7 @@ class ICDM(QMainWindow):
         # Populate database and update progress
         self.database_populator.start()
 
-    def openMenu(self, position, tree):
+    def open_context_menu(self, position, tree):
         menu = QMenu()
         index = tree.currentIndex()
 
@@ -286,41 +287,41 @@ class ICDM(QMainWindow):
         path = source_model.filePath(source_index)
 
         if path.lower().endswith(('.png', '.jpg', '.jpeg')):
-            previewAction = QAction("Preview Image", self)
-            previewAction.triggered.connect(lambda: self.previewImage(path))
-            menu.addAction(previewAction)
+            preview_action = QAction("Preview Image", self)
+            preview_action.triggered.connect(lambda: self.preview_image(path))
+            menu.addAction(preview_action)
 
-        renameAction = QAction('Rename', self)
-        renameAction.triggered.connect(lambda: self.renameItem(tree))
-        menu.addAction(renameAction)
+        rename_action = QAction('Rename', self)
+        rename_action.triggered.connect(lambda: self.rename_item(tree))
+        menu.addAction(rename_action)
 
-        deleteAction = QAction('Delete', self)
-        deleteAction.triggered.connect(lambda: self.deleteItem(tree))
-        menu.addAction(deleteAction)
+        delete_action = QAction('Delete', self)
+        delete_action.triggered.connect(lambda: self.delete_item(tree))
+        menu.addAction(delete_action)
 
-        openAction = QAction('Open', self)
-        openAction.triggered.connect(lambda: self.openItem(tree))
-        menu.addAction(openAction)
+        open_action = QAction('Open', self)
+        open_action.triggered.connect(lambda: self.open_item(tree))
+        menu.addAction(open_action)
 
         if os.path.isdir(path):
-            setRootAction = QAction('Set as Root', self)
-            setRootAction.triggered.connect(lambda: self.setAsRoot(tree))
-            menu.addAction(setRootAction)
+            set_root_action = QAction('Set as Root', self)
+            set_root_action.triggered.connect(lambda: self.set_as_root(tree))
+            menu.addAction(set_root_action)
 
         menu.exec_(tree.viewport().mapToGlobal(position))
 
-    def itemClicked(self):
+    def item_clicked(self):
         pass
 
-    def itemDoubleClicked(self, tree):
+    def item_double_clicked(self, tree):
 
-        index, model = self.getSourceAttributes(tree)
+        index, model = self.get_tree_model_source_attributes(tree)
 
         file_path = model.filePath(index)  # Use the source index to get the file path
         if file_path.lower().endswith('.jpg'):  # Check if the double-clicked item is a .jpg image
-            self.previewImage(file_path)
+            self.preview_image(file_path)
 
-    def previewImage(self, image_path):
+    def preview_image(self, image_path):
         # Get the image
         img = QImage(image_path)
         img_width = img.width()
@@ -359,7 +360,7 @@ class ICDM(QMainWindow):
         self.previewLabel.setPixmap(pixmap)
         self.previewLabel.show()
 
-    def getSourceAttributes(self, tree):
+    def get_tree_model_source_attributes(self, tree):
 
         # Get index and model for the specific tree
         index = tree.currentIndex()
@@ -369,9 +370,9 @@ class ICDM(QMainWindow):
         return source_index, source_model
 
 
-    def renameItem(self, tree):
+    def rename_item(self, tree):
 
-        index, model = self.getSourceAttributes(tree)
+        index, model = self.get_tree_model_source_attributes(tree)
 
         if index.isValid():
             old_name = model.fileName(index)
@@ -383,9 +384,9 @@ class ICDM(QMainWindow):
                 new_path = os.path.join(directory, new_name)
                 os.rename(path, new_path)
 
-    def deleteItem(self, tree):
+    def delete_item(self, tree):
 
-        index, model = self.getSourceAttributes(tree)
+        index, model = self.get_tree_model_source_attributes(tree)
 
         if index.isValid():
             path = model.filePath(index)
@@ -402,21 +403,19 @@ class ICDM(QMainWindow):
                 elif os.path.isdir(path):
                     shutil.rmtree(path)
 
-    def openItem(self, tree):
+    def open_item(self, tree):
 
-        index, model = self.getSourceAttributes(tree)
+        index, model = self.get_tree_model_source_attributes(tree)
 
         if index.isValid():
             path = model.filePath(index)
             if os.path.isfile(path):
                 QDesktopServices.openUrl(QUrl(f"file:///{path}", QUrl.TolerantMode))
 
-    def setAsRoot(self, tree):
+    def set_as_root(self, tree):
 
-        index, model = self.getSourceAttributes(tree)
+        index, model = self.get_tree_model_source_attributes(tree)
         folder_path = model.filePath(index)
-
-        print(folder_path)
 
         if os.path.isdir(folder_path):
             model.setRootPath(folder_path)
@@ -444,65 +443,6 @@ def create_database():
     );
     """)
     conn.commit()
-    conn.close()
-
-
-def populate_database(root_path, batch_size=500):
-    print("Creating database...")
-    conn = sqlite3.connect("metadata.db")
-    cursor = conn.cursor()
-
-    batch_data = []
-    count = 0
-
-    for subdir, _, files in os.walk(root_path):
-        for file in files:
-            #print(f"Scanning: {file}")
-            if file.endswith('.jpg'):
-                print(f"Adding a file to the database: {file}")
-                full_path = os.path.join(subdir, file)
-
-                # Extracting the core filename without the .jpg extension and any aberrations
-                clean_filename = re.sub(r'[^\w\s_,]', '', file[:-4])
-                parts = clean_filename.split('_')
-
-                # Validate that we have enough parts to construct the IDs
-                if len(parts) < 11:
-                    print(f"Skipping file due to unexpected format: {file}")
-                    continue
-
-                # Construct IDs and retrieve metadata
-                recording_id = f"{parts[0]}_{parts[1]}_{parts[2]}"
-                video_file_id = f"{recording_id}_{parts[3]}_{parts[4]}_{parts[5]}"
-
-                # Data validation and conversion to integers
-                try:
-                    frame_no = int(parts[6])
-                    visit_no = int(parts[7])
-                    crop_no = int(parts[8])
-                    x1, y1 = map(int, parts[9].split(','))
-                    x2, y2 = map(int, parts[10].split(','))
-                except ValueError as e:
-                    print(f"Skipping file due to invalid metadata: {file}, Error: {e}")
-                    continue
-
-                label_path = None
-                if "visitor" in subdir:
-                    label_path = os.path.join(subdir, file.replace('.jpg', '.txt'))
-
-                batch_data.append((recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path))
-
-                count += 1
-                if count >= batch_size:
-                    cursor.executemany("INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch_data)
-                    conn.commit()
-                    batch_data = []
-                    count = 0
-
-    if batch_data:
-        cursor.executemany("INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch_data)
-        conn.commit()
-
     conn.close()
 
 
