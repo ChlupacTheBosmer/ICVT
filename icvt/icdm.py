@@ -21,14 +21,95 @@ from PyQt5.QtCore import QSortFilterProxyModel, Qt
 from PyQt5.QtCore import QThread, pyqtSignal
 from pathlib import Path
 
+class DatabasePopulator(QThread):
+    progress_signal = pyqtSignal(int)
+    progress_total_signal = pyqtSignal(int)
+
+    def __init__(self, root_path, batch_size=500):
+        QThread.__init__(self)
+        self.root_path = root_path
+        self.batch_size = batch_size
+
+    def run(self):
+        print("Creating database...")
+        conn = sqlite3.connect("metadata.db")
+        cursor = conn.cursor()
+
+        batch_data = []
+        count = 0
+
+        # Set the maximum for the progressbar
+        total_files = sum(1 for _ in Path(self.root_path).rglob('*'))
+        self.progress_total_signal.emit(total_files)
+        print(total_files)
+
+        progress_counter = 0
+        # Process the files
+        for subdir, _, files in os.walk(self.root_path):
+            progress_counter += 1
+            for i, file in enumerate(files):
+                # print(f"Scanning: {file}")
+                progress_counter += 1
+                self.progress_signal.emit(progress_counter)  # Or however you wish to compute progress.
+                if file.endswith('.jpg'):
+                    print(f"Adding a file to the database: {file}")
+                    full_path = os.path.join(subdir, file)
+
+                    # Extracting the core filename without the .jpg extension and any aberrations
+                    clean_filename = re.sub(r'[^\w\s_,]', '', file[:-4])
+                    parts = clean_filename.split('_')
+
+                    # Validate that we have enough parts to construct the IDs
+                    if len(parts) < 11:
+                        print(f"Skipping file due to unexpected format: {file}")
+                        continue
+
+                    # Construct IDs and retrieve metadata
+                    recording_id = f"{parts[0]}_{parts[1]}_{parts[2]}"
+                    video_file_id = f"{recording_id}_{parts[3]}_{parts[4]}_{parts[5]}"
+
+                    # Data validation and conversion to integers
+                    try:
+                        frame_no = int(parts[6])
+                        visit_no = int(parts[7])
+                        crop_no = int(parts[8])
+                        x1, y1 = map(int, parts[9].split(','))
+                        x2, y2 = map(int, parts[10].split(','))
+                    except ValueError as e:
+                        print(f"Skipping file due to invalid metadata: {file}, Error: {e}")
+                        continue
+
+                    label_path = None
+                    if "visitor" in subdir:
+                        label_path = os.path.join(subdir, file.replace('.jpg', '.txt'))
+
+                    batch_data.append((recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2,
+                                       full_path, label_path))
+
+                    count += 1
+                    if count >= self.batch_size:
+                        cursor.executemany(
+                            "INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            batch_data)
+                        conn.commit()
+                        batch_data = []
+                        count = 0
+
+        if batch_data:
+            cursor.executemany(
+                "INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                batch_data)
+            conn.commit()
+
+        self.progress_signal.emit(total_files)  # Or however you wish to compute progress
+        conn.close()
 
 class FileCounter(QThread):
-    finished_counting = pyqtSignal(int, int, int, object, object)
+    finished_counting = pyqtSignal(int, int, int, object)
 
-    def __init__(self, folder_path, progressBar, label):
+    def __init__(self, folder_path, label):
         QThread.__init__(self)
         self.folder_path = folder_path
-        self.progressBar = progressBar
         self.label = label
 
     def run(self):
@@ -38,7 +119,7 @@ class FileCounter(QThread):
             1 for _ in path.rglob('*.jpeg'))
         label_files = sum(1 for _ in path.rglob('*.txt'))
 
-        self.finished_counting.emit(total_files, image_files, label_files, self.progressBar, self.label)
+        self.finished_counting.emit(total_files, image_files, label_files, self.label)
 
 class FolderFilterProxyModel(QSortFilterProxyModel):
     def __init__(self, filter_string='', *args, **kwargs):
@@ -131,11 +212,11 @@ class ICDM(QMainWindow):
         # Create a common progress bar
         self.common_progress_bar = QProgressBar()
 
-        # add progressbar to the layout
-        h_layout.addWidget(self.common_progress_bar)
-
         # Add the main horizontal layout to the layout = central Widget
         layout.addLayout(h_layout)
+
+        # add progressbar to the layout
+        layout.addWidget(self.common_progress_bar)
 
         # Set the layout for the central widget
         self.centralWidget().setLayout(layout)
@@ -144,19 +225,30 @@ class ICDM(QMainWindow):
         self.setWindowTitle('ICDM - Insect Communities Dataset Manager')
         self.show()
 
+    def update_progress(self, value):
+        print(value)
+        self.common_progress_bar.setValue(value)
+
+    def set_progress(self, value):
+        print(value)
+        self.common_progress_bar.setMaximum(value)
+
+    def start_database_population(self):
+        self.database_populator.start()
+
     # Slot function to update the UI
-    def updateUI(self, total_files, image_files, label_files, progressBar, label):
-        progressBar.setMaximum(total_files)
-        progressBar.setValue(image_files + label_files)
+    def updateUI(self, total_files, image_files, label_files, label):
+        #progressBar.setMaximum(total_files)
+        #progressBar.setValue(image_files + label_files)
         label.setText(f"Total Files: {total_files}, Image Files: {image_files}, Label Files: {label_files}")
 
     # Function to initiate the counting
-    def initiateUpdateFileCounts(self, tree, progressBar, label):
+    def initiateUpdateFileCounts(self, tree, label):
         index, model = self.getSourceAttributes(tree)
         folder_path = model.filePath(index)
 
         if os.path.isdir(folder_path):
-            self.file_counter = FileCounter(folder_path, progressBar, label)
+            self.file_counter = FileCounter(folder_path, label)
             self.file_counter.finished_counting.connect(self.updateUI)
             self.file_counter.start()
 
@@ -166,6 +258,12 @@ class ICDM(QMainWindow):
             self.import_data(folder_path)
 
     def import_data(self, folder_path):
+
+        # Initiate
+        self.database_populator = DatabasePopulator(root_path=folder_path, batch_size=50)
+        self.database_populator.progress_total_signal.connect(self.set_progress)
+        self.database_populator.progress_signal.connect(self.update_progress)
+
         self.model_visitor.setRootPath(folder_path)
         self.tree_visitor.setRootIndex(self.proxyModel_visitor.mapFromSource(self.model_visitor.index(folder_path)))
 
@@ -174,7 +272,9 @@ class ICDM(QMainWindow):
 
         self.tree_visitor.setSortingEnabled(True)
         self.tree_empty.setSortingEnabled(True)
-        populate_database(folder_path)
+
+        # Populate database and update progress
+        self.database_populator.start()
 
     def openMenu(self, position, tree):
         menu = QMenu()
