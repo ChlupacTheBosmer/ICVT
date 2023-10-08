@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import QMessageBox
 from PyQt5.QtGui import QPixmap, QPainter, QColor, QPen, QImage
 from PyQt5.QtWidgets import QDialog, QLabel, QVBoxLayout, QHBoxLayout, QToolBar
 from PyQt5.QtWidgets import QMainWindow, QToolBar, QVBoxLayout, QTreeView, QPushButton, QWidget
-
+from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
+from pathlib import Path
 import shutil
 import PyQt5
 import os
@@ -17,6 +18,27 @@ pyqt = os.path.dirname(PyQt5.__file__)
 os.environ['QT_PLUGIN_PATH'] = os.path.join(pyqt, "Qt5/plugins")
 
 from PyQt5.QtCore import QSortFilterProxyModel, Qt
+from PyQt5.QtCore import QThread, pyqtSignal
+from pathlib import Path
+
+
+class FileCounter(QThread):
+    finished_counting = pyqtSignal(int, int, int, object, object)
+
+    def __init__(self, folder_path, progressBar, label):
+        QThread.__init__(self)
+        self.folder_path = folder_path
+        self.progressBar = progressBar
+        self.label = label
+
+    def run(self):
+        path = Path(self.folder_path)
+        total_files = sum(1 for _ in path.rglob('*'))
+        image_files = sum(1 for _ in path.rglob('*.png')) + sum(1 for _ in path.rglob('*.jpg')) + sum(
+            1 for _ in path.rglob('*.jpeg'))
+        label_files = sum(1 for _ in path.rglob('*.txt'))
+
+        self.finished_counting.emit(total_files, image_files, label_files, self.progressBar, self.label)
 
 class FolderFilterProxyModel(QSortFilterProxyModel):
     def __init__(self, filter_string='', *args, **kwargs):
@@ -43,19 +65,22 @@ class ICDM(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
+        # Init file counter
+        self.file_counter = None
+
         self.initUI()
 
     def initUI(self):
         layout = QVBoxLayout()
-        hLayout = QHBoxLayout()
+        h_layout = QHBoxLayout()
 
         # Initialize the toolbar
         toolbar = QToolBar()
         self.addToolBar(toolbar)
 
-        openButton = QPushButton('Open Folder', self)
-        openButton.clicked.connect(self.showDialog)
-        toolbar.addWidget(openButton)
+        open_button = QPushButton('Open Folder', self)
+        open_button.clicked.connect(self.showDialog)
+        toolbar.addWidget(open_button)
 
         # Create TreeView for visitor folders
         self.tree_visitor = QTreeView(self)
@@ -63,12 +88,22 @@ class ICDM(QMainWindow):
         self.proxyModel_visitor = FolderFilterProxyModel("visitor")
         self.proxyModel_visitor.setSourceModel(self.model_visitor)
         self.tree_visitor.setModel(self.proxyModel_visitor)
-        hLayout.addWidget(self.tree_visitor)
 
+        self.visitor_file_count_label = QLabel("File Count:")
+
+        # Vertical layout for visitor view related widgets
+        visitor_layout = QVBoxLayout()
+        visitor_layout.addWidget(self.tree_visitor)
+        visitor_layout.addWidget(self.visitor_file_count_label)
+
+        h_layout.addLayout(visitor_layout)
+
+        # Connecting actions and events to the visitor view
         self.tree_visitor.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree_visitor.customContextMenuRequested.connect(lambda pos, tree=self.tree_visitor: self.openMenu(pos, tree))
 
         self.tree_visitor.doubleClicked.connect(lambda: self.itemDoubleClicked(self.tree_visitor))
+        self.tree_visitor.clicked.connect(lambda: self.initiateUpdateFileCounts(self.tree_visitor, self.visitor_file_count_label)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Create TreeView for empty folders
         self.tree_empty = QTreeView(self)
@@ -76,20 +111,54 @@ class ICDM(QMainWindow):
         self.proxyModel_empty = FolderFilterProxyModel("empty")
         self.proxyModel_empty.setSourceModel(self.model_empty)
         self.tree_empty.setModel(self.proxyModel_empty)
-        hLayout.addWidget(self.tree_empty)
 
+        self.empty_file_count_label = QLabel("File Count:")
+
+        # Vertical layout for empty view related widgets
+        empty_layout = QVBoxLayout()
+        empty_layout.addWidget(self.tree_empty)
+        empty_layout.addWidget(self.empty_file_count_label)
+
+        h_layout.addLayout(empty_layout)
+
+        # Connecting actions and events to the empty view
         self.tree_empty.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree_empty.customContextMenuRequested.connect(lambda pos, tree=self.tree_empty: self.openMenu(pos, tree))
 
         self.tree_empty.doubleClicked.connect(lambda: self.itemDoubleClicked(self.tree_empty))
+        self.tree_empty.clicked.connect(lambda: self.initiateUpdateFileCounts(self.tree_empty, self.empty_file_count_label)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
-        layout.addLayout(hLayout)
+        # Create a common progress bar
+        self.common_progress_bar = QProgressBar()
+
+        # add progressbar to the layout
+        h_layout.addWidget(self.common_progress_bar)
+
+        # Add the main horizontal layout to the layout = central Widget
+        layout.addLayout(h_layout)
 
         # Set the layout for the central widget
         self.centralWidget().setLayout(layout)
 
+        # Set window properties and show
         self.setWindowTitle('ICDM - Insect Communities Dataset Manager')
         self.show()
+
+    # Slot function to update the UI
+    def updateUI(self, total_files, image_files, label_files, progressBar, label):
+        progressBar.setMaximum(total_files)
+        progressBar.setValue(image_files + label_files)
+        label.setText(f"Total Files: {total_files}, Image Files: {image_files}, Label Files: {label_files}")
+
+    # Function to initiate the counting
+    def initiateUpdateFileCounts(self, tree, progressBar, label):
+        index, model = self.getSourceAttributes(tree)
+        folder_path = model.filePath(index)
+
+        if os.path.isdir(folder_path):
+            self.file_counter = FileCounter(folder_path, progressBar, label)
+            self.file_counter.finished_counting.connect(self.updateUI)
+            self.file_counter.start()
 
     def showDialog(self):
         folder_path = QFileDialog.getExistingDirectory(self, 'Select Folder')
