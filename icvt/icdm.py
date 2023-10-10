@@ -15,6 +15,8 @@ import PyQt5
 import os
 import sqlite3
 import re
+import datetime
+from collections import defaultdict
 pyqt = os.path.dirname(PyQt5.__file__)
 os.environ['QT_PLUGIN_PATH'] = os.path.join(pyqt, "Qt5/plugins")
 
@@ -97,13 +99,90 @@ class DatasetExporter(QThread):
     progress_total_signal = pyqtSignal(int)
     indeterminate_progress_signal = pyqtSignal(bool)
 
-    def __init__(self, dataset_size, empty_visitor_ratio, root_folder_path, destination_folder_path, database_path: str = None):
+    def __init__(self, dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time, root_folder_path, destination_folder_path, database_path: str = None):
         QThread.__init__(self)
         self.dataset_size = dataset_size
+        self.daytime_nighttime_ratio = day_night_ratio
+        self.daytime_start = day_start_time
+        self.daytime_end = day_end_time
         self.empty_visitor_ratio = empty_visitor_ratio
         self.root_folder_path = root_folder_path
         self.destination_folder_path = destination_folder_path
         self.database_path = database_path
+
+    def update_export_database(self):
+        # Modify database path by adding '_export' before '.db'
+        old_database_path = self.database_path
+        new_database_path = os.path.join(os.path.dirname(self.database_path),
+                                         os.path.splitext(os.path.basename(self.database_path))[0] + '_export.db')
+        # Copy database
+        shutil.copy2(old_database_path, new_database_path)
+        self.database_path = new_database_path
+
+        # Modify the database
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+
+        # Add new columns
+        cursor.execute("ALTER TABLE metadata ADD COLUMN time TEXT")
+        cursor.execute("ALTER TABLE metadata ADD COLUMN parent_folder TEXT")
+
+        conn.commit()
+        cursor.execute("SELECT id, video_file_id, full_path FROM metadata")
+
+        for row in cursor.fetchall():
+            id_, video_file_id, full_path = row
+            time = self.extract_time_from_video_file_id(video_file_id)
+            parent_folder = self.extract_parent_folder_from_full_path(full_path)
+
+            cursor.execute("UPDATE metadata SET time = ?, parent_folder = ? WHERE id = ?", (time, parent_folder, id_))
+
+        conn.commit()
+        conn.close()
+
+    def extract_time_from_video_file_id(self, video_file_id: str) -> str:
+        # Extract time using regular expression
+        time_match = re.search(r'_(\d{2}_\d{2})', video_file_id)
+        if time_match:
+            return time_match.group(1).replace('_', ':')  # Replace underscore with colon
+        return None  # Return None if the pattern is not found
+
+    def extract_parent_folder_from_full_path(self, full_path: str) -> str:
+        # Initialize folder_path with the parent directory
+        folder_path = os.path.dirname(full_path)
+
+        while True:
+            # Extract folder name from the folder path
+            folder_name = os.path.basename(folder_path)
+
+            # Check if folder name is neither "empty" nor "visitor"
+            if folder_name.lower() not in ["empty", "visitor"]:
+                return folder_name
+
+            # Move up the directory tree
+            folder_path = os.path.dirname(folder_path)
+
+            # If we're at the root directory, break the loop
+            if folder_path == os.path.dirname(folder_path):
+                break
+
+        return None  # Return None if no such folder is found
+
+    def get_unique_parent_folder_count(self, database_path: str) -> int:
+        # Connect to the database
+        conn = sqlite3.connect(database_path)
+        cursor = conn.cursor()
+
+        # Execute SQL query to count unique parent_folder entries
+        cursor.execute("SELECT COUNT(DISTINCT parent_folder) FROM metadata")
+
+        # Fetch the result and extract the count
+        count = cursor.fetchone()[0]
+
+        # Close the database connection
+        conn.close()
+
+        return count
 
     def get_files_from_database(self):
 
@@ -151,6 +230,156 @@ class DatasetExporter(QThread):
 
         return empty_files, visitor_files
 
+    # def filter_by_daytime(self, visitor_files, empty_files, daytime_start: str = "06:00", daytime_end: str = "20:00"):
+    #
+    #     # Filter for day and night
+    #     day_files = []
+    #     night_files = []
+    #     daytime_start_obj = datetime.datetime.strptime(daytime_start, '%H:%M').time()
+    #     daytime_end_obj = datetime.datetime.strptime(daytime_end, '%H:%M').time()
+    #     for file in visitor_files + empty_files:  # Combine both lists for now
+    #         time_part = file.split('_')[-1]  # Assuming time is the last part
+    #         time_obj = datetime.datetime.strptime(time_part, '%H_%M').time()
+    #         if daytime_start_obj <= time_obj <= daytime_end_obj:
+    #             day_files.append(file)
+    #         else:
+    #             night_files.append(file)
+    #
+    #     return day_files, night_files
+
+    def fetch_files_per_parent_folder(self, database_path: str, total_files_per_folder: int, empty_visitor_ratio: float,
+                                      daytime_nighttime_ratio: float, daytime_start: str, daytime_end: str):
+        # Connect to the database
+        conn = sqlite3.connect(database_path)
+        cursor = conn.cursor()
+
+        # Convert daytime strings to datetime objects
+        # daytime_start = datetime.datetime.strptime(daytime_start, '%H:%M').time()
+        # daytime_end = datetime.datetime.strptime(daytime_end, '%H:%M').time()
+
+        # Calculate counts per category
+        num_empty_per_folder = int(total_files_per_folder * empty_visitor_ratio / (1 + empty_visitor_ratio))
+        num_visitor_per_folder = total_files_per_folder - num_empty_per_folder
+
+        num_daytime_per_type = int(num_empty_per_folder * daytime_nighttime_ratio / (1 + daytime_nighttime_ratio))
+        num_nighttime_per_type = num_empty_per_folder - num_daytime_per_type
+
+        # Initialize result dictionary
+        files_by_folder = defaultdict(dict)
+
+        cursor.execute("SELECT DISTINCT parent_folder FROM metadata")
+        parent_folders = [row[0] for row in cursor.fetchall()]
+
+        print(f"tot:{total_files_per_folder}, emp:{num_empty_per_folder}, vis:{num_visitor_per_folder}")
+        for parent_folder in parent_folders:
+            for label_condition, count_day, count_night, count in [("IS NULL", num_daytime_per_type, num_nighttime_per_type, num_empty_per_folder),
+                                                            ("IS NOT NULL", num_daytime_per_type,
+                                                             num_nighttime_per_type, num_visitor_per_folder)]:
+                if False:
+                    # Query for 'daytime' files
+                    query = """
+                        SELECT full_path
+                        FROM metadata
+                        WHERE parent_folder = ?
+                        AND label_path {}
+                        AND time(time) BETWEEN ? AND ?
+                        LIMIT ?
+                    """.format(label_condition)
+
+                    cursor.execute(query, (parent_folder, daytime_start, daytime_end, count_day))
+                    daytime_files = [row[0] for row in cursor.fetchall()]
+
+                    # Query for 'nighttime' files
+                    query = """
+                        SELECT full_path
+                        FROM metadata
+                        WHERE parent_folder = ?
+                        AND label_path {}
+                        AND (time(time) < ? OR time(time) > ?)
+                        LIMIT ?
+                    """.format(label_condition)
+                    cursor.execute(query, (parent_folder, daytime_start, daytime_end, count_night))
+                    nighttime_files = [row[0] for row in cursor.fetchall()]
+
+                    # Update result dictionary
+                    type_label = 'empty' if label_condition == "IS NULL" else 'visitor'
+                    files_by_folder[parent_folder][type_label] = {
+                        'daytime': daytime_files,
+                        'nighttime': nighttime_files
+                    }
+                else:
+                    print("doing this")
+                    # Fetch files ignoring day/night ratio
+                    query = """
+                                    SELECT full_path
+                                    FROM metadata
+                                    WHERE parent_folder = ?
+                                    AND label_path {}
+                                    LIMIT ?
+                                """.format(label_condition)
+                    print(count)
+                    cursor.execute(query, (parent_folder, count))
+                    all_files = [row[0] for row in cursor.fetchall()]
+
+                    type_label = 'empty' if label_condition == "IS NULL" else 'visitor'
+                    files_by_folder[parent_folder][type_label] = {
+                        'all': all_files
+                    }
+        # Close the database connection
+        conn.close()
+
+        return files_by_folder
+
+    def copy_files(self, result):
+
+        # Setup progress tracking
+        total_files = 0
+        for parent_folder, types in result.items():
+            for file_type, time_dict in types.items():
+                total_files += len(time_dict['all'])
+        progress = int(total_files * 0.1)
+        self.progress_total_signal.emit(int(total_files + progress))
+        self.progress_signal.emit(progress)
+
+        # Create destination folders for each parent folder, if needed
+        parent_folder_destination = self.destination_folder_path
+        empty_folder = os.path.join(parent_folder_destination, 'empty')
+        visitor_folder = os.path.join(parent_folder_destination, 'visitor')
+        os.makedirs(empty_folder, exist_ok=True)
+        os.makedirs(visitor_folder, exist_ok=True)
+
+        # Loop through each parent folder
+        for parent_folder, types_data in result.items():
+            print("parent")
+            # Copy selected empty files
+            for file in types_data['empty']['all']:
+                print(file)
+                file_name = os.path.basename(file)
+                source = file
+                destination = os.path.join(empty_folder, file_name)
+                shutil.copy(source, destination)
+
+                # Update progress
+                progress += 1
+                self.progress_signal.emit(progress)
+
+            # Copy selected visitor files
+            for file in types_data['visitor']['all']:
+                print(file)
+                file_name = os.path.basename(file)
+                source = file
+                destination = os.path.join(visitor_folder, file_name)
+                shutil.copy(source, destination)
+
+                #Move also the txt
+                source = file.rsplit('.', 1)[0] + '.txt'
+                destination = os.path.join(visitor_folder, os.path.basename(source))
+                shutil.copy(source, destination)
+
+                # Update progress
+                progress += 1
+                self.progress_signal.emit(progress)
+
     def run(self):
 
         # Scan subfolders and separate filenames into "empty" and "visitor" lists
@@ -162,59 +391,67 @@ class DatasetExporter(QThread):
         if not os.path.isfile(self.database_path):
             empty_files, visitor_files = self.get_files_default()
         elif self.database_path.lower().endswith(".db"):
-            empty_files, visitor_files = self.get_files_from_database()
+            self.update_export_database()
+            number_of_parent_folders = self.get_unique_parent_folder_count(self.database_path)
+            print(f"parent_folders:{number_of_parent_folders}")
+            files_per_parent_folder = self.dataset_size // number_of_parent_folders
+            result = self.fetch_files_per_parent_folder(self.database_path, files_per_parent_folder, self.empty_visitor_ratio,
+                                                   self.daytime_nighttime_ratio, self.daytime_start, self.daytime_end)
+            print(result)
+            self.copy_files(result)
+            # empty_files, visitor_files = self.get_files_from_database()
 
-        total_files = self.dataset_size
-        progress = int(total_files*0.1)
-        self.progress_total_signal.emit(int(total_files+progress))
-        self.progress_signal.emit(progress)
-
-        # Shuffle files
-        random.shuffle(empty_files)
-        random.shuffle(visitor_files)
-
-        # Calculate the number of "empty" and "visitor" images to include
-        num_empty = int(self.dataset_size * self.empty_visitor_ratio / (1 + self.empty_visitor_ratio))
-        num_visitor = self.dataset_size - num_empty
-
-        # Select files
-        selected_empty = empty_files[:num_empty]
-        selected_visitor = visitor_files[:num_visitor]
-
-        # Copy files
-        # Create subfolders in the destination folder
-        empty_folder = os.path.join(self.destination_folder_path, "empty")
-        visitor_folder = os.path.join(self.destination_folder_path, "visitor")
-        os.makedirs(empty_folder, exist_ok=True)
-        os.makedirs(visitor_folder, exist_ok=True)
-
-        # Copy selected empty files
-        for file in selected_empty:
-            file_name = os.path.basename(file)
-            source = file
-            destination = os.path.join(empty_folder, file_name)
-            shutil.copy(source, destination)
-
-            # Update progress
-            progress += 1
-            self.progress_signal.emit(progress)
-
-
-        # Copy selected visitor files
-        for file in selected_visitor:
-            file_name = os.path.basename(file)
-            source = file
-            destination = os.path.join(visitor_folder, file_name)
-            shutil.copy(source, destination)
-
-            # Move also the txt
-            source = file.rsplit('.', 1)[0] + '.txt'
-            destination = os.path.join(visitor_folder, os.path.basename(source))
-            shutil.copy(source, destination)
-
-            # Update progress
-            progress += 1
-            self.progress_signal.emit(progress)
+        # total_files = self.dataset_size
+        # progress = int(total_files*0.1)
+        # self.progress_total_signal.emit(int(total_files+progress))
+        # self.progress_signal.emit(progress)
+        #
+        # # Shuffle files
+        # random.shuffle(empty_files)
+        # random.shuffle(visitor_files)
+        #
+        # # Calculate the number of "empty" and "visitor" images to include
+        # num_empty = int(self.dataset_size * self.empty_visitor_ratio / (1 + self.empty_visitor_ratio))
+        # num_visitor = self.dataset_size - num_empty
+        #
+        # # Select files
+        # selected_empty = empty_files[:num_empty]
+        # selected_visitor = visitor_files[:num_visitor]
+        #
+        # # Copy files
+        # # Create subfolders in the destination folder
+        # empty_folder = os.path.join(self.destination_folder_path, "empty")
+        # visitor_folder = os.path.join(self.destination_folder_path, "visitor")
+        # os.makedirs(empty_folder, exist_ok=True)
+        # os.makedirs(visitor_folder, exist_ok=True)
+        #
+        # # Copy selected empty files
+        # for file in selected_empty:
+        #     file_name = os.path.basename(file)
+        #     source = file
+        #     destination = os.path.join(empty_folder, file_name)
+        #     shutil.copy(source, destination)
+        #
+        #     # Update progress
+        #     progress += 1
+        #     self.progress_signal.emit(progress)
+        #
+        #
+        # # Copy selected visitor files
+        # for file in selected_visitor:
+        #     file_name = os.path.basename(file)
+        #     source = file
+        #     destination = os.path.join(visitor_folder, file_name)
+        #     shutil.copy(source, destination)
+        #
+        #     # Move also the txt
+        #     source = file.rsplit('.', 1)[0] + '.txt'
+        #     destination = os.path.join(visitor_folder, os.path.basename(source))
+        #     shutil.copy(source, destination)
+        #
+        #     # Update progress
+        #     progress += 1
+        #     self.progress_signal.emit(progress)
 
 class DatabasePopulator(QThread):
     progress_signal = pyqtSignal(int)
@@ -411,8 +648,7 @@ class ICDM(QMainWindow):
             pos, tree))
 
         self.tree_visitor.doubleClicked.connect(lambda: self.item_double_clicked(self.tree_visitor))
-        self.tree_visitor.clicked.connect(lambda: self.initiate_file_count(self.tree_visitor,
-                                                                           self.visitor_file_count_label)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
+        self.tree_visitor.clicked.connect(lambda: self.item_clicked(self.tree_visitor)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Create TreeView for empty folders
         self.tree_empty = QTreeView(self)
@@ -490,32 +726,31 @@ class ICDM(QMainWindow):
 
     def show_export_dialog(self):
 
-        visitor_percentage = 100
-
         dialog = ExportDialog()
         result = dialog.exec_()
 
         if result == QDialog.Accepted:
             dataset_size = int(dialog.datasetSizeInput.text())
-            empty_visitor_ratio = dialog.emptyVisitorRatioSlider.value()
-            day_night_ratio = dialog.dayNightRatioSlider.value()
+            visitor_percentage = dialog.emptyVisitorRatioSlider.value()
+            day_percentage = dialog.dayNightRatioSlider.value()
             day_start_time = dialog.dayBeginInput.time().toString("HH:mm")
             day_end_time = dialog.dayEndInput.time().toString("HH:mm")
             selection_method = dialog.methodDropdown.currentText()
 
             print(
-                f"Retrieved values: Dataset Size: {dataset_size}, Empty/Visitor Ratio: {visitor_percentage}, Day/Night Ratio: {day_night_ratio}, Day Start Time: {day_start_time}, Day End Time: {day_end_time}, Selection Method: {selection_method}")
+                f"Retrieved values: Dataset Size: {dataset_size}, Empty/Visitor Ratio: {visitor_percentage}, Day/Night Ratio: {day_percentage}, Day Start Time: {day_start_time}, Day End Time: {day_end_time}, Selection Method: {selection_method}")
             empty_visitor_ratio = (100 - visitor_percentage) / visitor_percentage
+            day_night_ratio = (100 - day_percentage) / day_percentage
 
-            self.perform_export(dataset_size, empty_visitor_ratio)
+            self.perform_export(dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time)
 
-    def perform_export(self, dataset_size, empty_visitor_ratio):
+    def perform_export(self, dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time):
 
         destination_folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if not destination_folder:
             return
 
-        self.dataset_exporter = DatasetExporter(dataset_size, empty_visitor_ratio, self.root_path, destination_folder, "metadata.db")
+        self.dataset_exporter = DatasetExporter(dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time, self.root_path, destination_folder, self.database_path)
         self.dataset_exporter.progress_total_signal.connect(self.set_progress)
         self.dataset_exporter.progress_signal.connect(self.update_progress)
         self.dataset_exporter.indeterminate_progress_signal.connect(self.set_progress_indeterminate)
@@ -627,7 +862,7 @@ class ICDM(QMainWindow):
 
         # Get the string
         filter_string = tree.model().filter_string
-        print(filter_string)
+        bbox_str = ""
 
         # get the source attributes
         index, model = self.get_tree_model_source_attributes(tree)
@@ -641,7 +876,7 @@ class ICDM(QMainWindow):
             self.current_metadata = self.load_metadata_from_db(file_path)
 
             image_path = file_path
-            text_path = self.current_metadata['label_path']
+            text_path = self.current_metadata['label_path'] if self.current_metadata['label_path'] is not None else ""
 
             # Get the image
             img = QImage(image_path)
@@ -674,7 +909,8 @@ class ICDM(QMainWindow):
                         # Draw rectangle
                         painter.drawRect(x1, y1, x2 - x1, y2 - y1)
 
-            bbox_str = "".join(lines)
+                bbox_str = "".join(lines)
+
             # End painting
             painter.end()
 
