@@ -8,7 +8,8 @@ from PyQt5.QtGui import QPixmap, QPainter, QColor, QPen, QImage
 from PyQt5.QtWidgets import QDialog, QLabel, QVBoxLayout, QHBoxLayout, QToolBar
 from PyQt5.QtWidgets import QMainWindow, QToolBar, QVBoxLayout, QTreeView, QPushButton, QWidget
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
-from PyQt5.QtWidgets import QMainWindow, QDockWidget, QSplitter, QGraphicsView, QGraphicsScene, QTextEdit, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QMainWindow, QDockWidget, QSplitter, QGraphicsView, QGraphicsScene, QTextEdit, QVBoxLayout, QWidget, QTableView
+from PyQt5.QtSql import QSqlTableModel
 from pathlib import Path
 import shutil
 import PyQt5
@@ -25,6 +26,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from pathlib import Path
 import random
 from pathlib import Path
+import hashlib
 
 from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
 
@@ -35,6 +37,10 @@ from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox, Q
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QTimeEdit
 from PyQt5.QtCore import QTime
+from PyQt5.QtWidgets import QApplication, QVBoxLayout, QSizePolicy, QWidget, QPushButton, QDialog, QTabWidget
+from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 class ExportDialog(QDialog):
     def __init__(self):
@@ -98,6 +104,7 @@ class DatasetExporter(QThread):
     progress_signal = pyqtSignal(int)
     progress_total_signal = pyqtSignal(int)
     indeterminate_progress_signal = pyqtSignal(bool)
+    export_database_created_signal = pyqtSignal(str)
 
     def __init__(self, dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time, root_folder_path, destination_folder_path, database_path: str = None):
         QThread.__init__(self)
@@ -230,23 +237,6 @@ class DatasetExporter(QThread):
 
         return empty_files, visitor_files
 
-    # def filter_by_daytime(self, visitor_files, empty_files, daytime_start: str = "06:00", daytime_end: str = "20:00"):
-    #
-    #     # Filter for day and night
-    #     day_files = []
-    #     night_files = []
-    #     daytime_start_obj = datetime.datetime.strptime(daytime_start, '%H:%M').time()
-    #     daytime_end_obj = datetime.datetime.strptime(daytime_end, '%H:%M').time()
-    #     for file in visitor_files + empty_files:  # Combine both lists for now
-    #         time_part = file.split('_')[-1]  # Assuming time is the last part
-    #         time_obj = datetime.datetime.strptime(time_part, '%H_%M').time()
-    #         if daytime_start_obj <= time_obj <= daytime_end_obj:
-    #             day_files.append(file)
-    #         else:
-    #             night_files.append(file)
-    #
-    #     return day_files, night_files
-
     def fetch_files_per_parent_folder(self, database_path: str, total_files_per_folder: int, empty_visitor_ratio: float,
                                       daytime_nighttime_ratio: float, daytime_start: str, daytime_end: str):
         # Connect to the database
@@ -325,8 +315,30 @@ class DatasetExporter(QThread):
                     files_by_folder[parent_folder][type_label] = {
                         'all': all_files
                     }
+
+        # Add a new colum nto the database
+        cursor.execute("ALTER TABLE metadata ADD COLUMN chosen_for_export BOOLEAN DEFAULT 0")
+        conn.commit()
+
+        # Here, let's update the 'chosen_for_export' flag for the selected files.
+        for parent_folder, types in files_by_folder.items():
+            for type_label, time_dict in types.items():
+                for file in time_dict.get('all', []):
+                    update_query = "UPDATE metadata SET chosen_for_export = 1 WHERE full_path = ?"
+                    cursor.execute(update_query, (file,))
+        conn.commit()
+
         # Close the database connection
         conn.close()
+
+        # Generate a unique hash (for example, from the current time)
+        unique_hash = hashlib.sha1(str(datetime.datetime.now()).encode()).hexdigest()[:8]
+
+        # Create a new database name with the unique hash
+        new_database_path = f"{database_path.split('.db')[0]}_{unique_hash}.db"
+
+        # Copy the current database to the new unique name
+        shutil.copy(database_path, new_database_path)
 
         return files_by_folder
 
@@ -371,7 +383,7 @@ class DatasetExporter(QThread):
                 destination = os.path.join(visitor_folder, file_name)
                 shutil.copy(source, destination)
 
-                #Move also the txt
+                # Move also the txt
                 source = file.rsplit('.', 1)[0] + '.txt'
                 destination = os.path.join(visitor_folder, os.path.basename(source))
                 shutil.copy(source, destination)
@@ -379,6 +391,25 @@ class DatasetExporter(QThread):
                 # Update progress
                 progress += 1
                 self.progress_signal.emit(progress)
+
+    def inspect_time_distribution(self):
+
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT time FROM metadata WHERE chosen_for_export = 1")
+        times = [row[0] for row in cursor.fetchall()]
+        conn.close()
+
+        import matplotlib.pyplot as plt
+
+        # Convert times into a format that can be plotted, such as minutes since midnight
+        minutes_since_midnight = [(int(time.split(':')[0]) * 60 + int(time.split(':')[1])) for time in times]
+
+        plt.hist(minutes_since_midnight, bins=48)  # 48 bins for 30-minute intervals
+        plt.xlabel('Minutes Since Midnight')
+        plt.ylabel('Number of Images')
+        plt.title('Distribution of Daytimes')
+        plt.show()
 
     def run(self):
 
@@ -389,7 +420,7 @@ class DatasetExporter(QThread):
         self.indeterminate_progress_signal.emit(True)
 
         if not os.path.isfile(self.database_path):
-            empty_files, visitor_files = self.get_files_default()
+            return
         elif self.database_path.lower().endswith(".db"):
             self.update_export_database()
             number_of_parent_folders = self.get_unique_parent_folder_count(self.database_path)
@@ -399,6 +430,7 @@ class DatasetExporter(QThread):
                                                    self.daytime_nighttime_ratio, self.daytime_start, self.daytime_end)
             print(result)
             self.copy_files(result)
+            self.export_database_created_signal.emit(self.database_path)
             # empty_files, visitor_files = self.get_files_from_database()
 
         # total_files = self.dataset_size
@@ -535,7 +567,6 @@ class DatabasePopulator(QThread):
 
         self.progress_signal.emit(total_files)  # Or however you wish to compute progress
         conn.close()
-        self.progress_signal.emit(0)
 
 class FileCounter(QThread):
     started_counting = pyqtSignal(str, object)
@@ -585,6 +616,201 @@ class CustomDockWidget(QDockWidget):
                                new_size.height() / self.pixmap_item.pixmap().height())
             self.pixmap_item.setScale(scale_factor)
 
+class CustomWidget(QWidget):
+    def __init__(self, graphics_view, pixmap_item, parent=None):
+        super(CustomWidget, self).__init__(parent)
+        self.graphics_view = graphics_view
+        self.pixmap_item = pixmap_item
+
+        # Initialize layout and add the graphics_view
+        layout = QVBoxLayout()
+        layout.addWidget(self.graphics_view)
+        self.setLayout(layout)
+
+    def resizeEvent(self, event):
+        if self.pixmap_item:
+            new_size = self.graphics_view.size()
+            scale_factor = min(new_size.width() / self.pixmap_item.pixmap().width(),
+                               new_size.height() / self.pixmap_item.pixmap().height())
+            self.pixmap_item.setScale(scale_factor)
+
+class TimeDistributionPlot(FigureCanvas):
+    def __init__(self, database_path, parent=None, width=5, height=4, dpi=100):
+        self.database_path = database_path
+        fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+
+        FigureCanvas.__init__(self, fig)
+        self.setParent(parent)
+
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+        if os.path.isfile(self.database_path):
+            self.plot()
+
+    def plot(self):
+        # Clear the existing plot
+        self.axes.clear()
+
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT time FROM metadata WHERE chosen_for_export = 1")
+        times = [row[0] for row in cursor.fetchall()]
+        conn.close()
+
+        minutes_since_midnight = [(int(time.split(':')[0]) * 60 + int(time.split(':')[1])) for time in times]
+
+        # Plot histogram
+        self.axes.hist(minutes_since_midnight, bins=48, color='g')
+
+        # Convert specific minutes since midnight back to time format for labeling
+        tick_positions = list(range(0, 24 * 60, 60 * 3))  # Every 180 minutes (3 hours) from 0 to 24*60
+        tick_labels = [f"{int(minute // 60):02d}:{int(minute % 60):02d}" for minute in tick_positions]
+
+        # Set ticks and custom tick labels
+        self.axes.set_xticks(tick_positions)
+        self.axes.set_xticklabels(tick_labels, rotation=45)  # 45 degree rotation for better visibility
+
+        # Set other axis labels and title
+        self.axes.set_title('Distribution of Daytimes')
+        self.axes.set_xlabel('Time of the Day')
+        self.axes.set_ylabel('Number of Images')
+
+        # Add this line to adjust layout to fit axis labels
+        self.axes.figure.tight_layout()
+
+        self.draw()
+
+    def update_database(self, new_database_path):
+        self.database_path = new_database_path
+        self.plot()
+
+
+class FolderDistributionPlot(FigureCanvas):
+    def __init__(self, database_path, parent=None, width=5, height=4, dpi=100):
+        self.database_path = database_path
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = self.fig.add_subplot(111)
+
+        FigureCanvas.__init__(self, self.fig)
+        self.setParent(parent)
+
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+
+        if os.path.isfile(self.database_path):
+            self.plot()
+
+    def get_folder_distribution(self):
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+
+        # Use a CASE statement to classify based on label_path
+        cursor.execute(
+            """SELECT parent_folder, 
+                CASE 
+                    WHEN label_path IS NULL THEN 'empty' 
+                    ELSE 'visitor' 
+                END AS file_type,
+                COUNT(*) 
+            FROM metadata 
+            WHERE chosen_for_export = 1 
+            GROUP BY parent_folder, file_type""")
+
+        raw_counts = cursor.fetchall()
+        conn.close()
+
+        folder_counts = {}
+        for folder, file_type, count in raw_counts:
+            if folder not in folder_counts:
+                folder_counts[folder] = {'visitor': 0, 'empty': 0}
+            folder_counts[folder][file_type] = count
+
+        return folder_counts
+
+    def plot(self):
+        folder_counts = self.get_folder_distribution()
+        self.axes.clear()
+
+        folder_names = list(folder_counts.keys())
+        visitor_counts = [folder_counts[name].get('visitor', 0) for name in folder_names]
+        empty_counts = [folder_counts[name].get('empty', 0) for name in folder_names]
+
+        # Create stacked bar chart
+        self.axes.barh(folder_names, visitor_counts, label='Visitor Files', color='g')
+        self.axes.barh(folder_names, empty_counts, left=visitor_counts, label='Empty Files', color='r')
+
+        self.axes.set_xlabel('Number of Files')
+        self.axes.set_title('File Distribution Among Folders')
+        self.axes.legend()
+
+        # To adjust layout to fit axis labels
+        self.axes.figure.tight_layout()
+        self.draw()
+
+    def update_database(self, new_database_path):
+        self.database_path = new_database_path
+        self.plot()
+
+class FrameProportionPieChart(FigureCanvas):
+    def __init__(self, database_path, parent=None, width=5, height=4, dpi=100):
+        self.database_path = database_path
+        fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+
+        FigureCanvas.__init__(self, fig)
+        self.setParent(parent)
+
+        FigureCanvas.setSizePolicy(self,
+                                   QSizePolicy.Expanding,
+                                   QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+
+        if os.path.isfile(self.database_path):
+            self.plot()
+
+    def plot(self):
+        frame_proportions = self.get_frame_proportions()
+
+        # Create pie chart
+        labels = list(frame_proportions.keys())
+        sizes = [frame_proportions[label] for label in labels]
+
+        self.axes.clear()
+        self.axes.pie(sizes, labels=labels, autopct='%1.1f%%', colors=("r","g"))
+        self.axes.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+
+        # Add this line to adjust layout to fit axis labels
+        self.axes.figure.tight_layout()
+
+        self.draw()
+
+    def get_frame_proportions(self):
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+
+        # Count empty frames that are chosen for export
+        cursor.execute(
+            "SELECT COUNT(*) FROM metadata WHERE label_path IS NULL AND chosen_for_export = 1")
+        empty_frames = cursor.fetchone()[0]
+
+        # Count visitor frames that are chosen for export
+        cursor.execute(
+            "SELECT COUNT(*) FROM metadata WHERE label_path IS NOT NULL AND chosen_for_export = 1")
+        visitor_frames = cursor.fetchone()[0]
+
+        conn.close()
+
+        return {'Empty Frames': empty_frames, 'Visitor Frames': visitor_frames}
+
+    def update_database(self, new_database_path):
+        self.database_path = new_database_path
+        self.plot()
+
 class ICDM(QMainWindow):
     def __init__(self):
         super(ICDM, self).__init__()
@@ -595,6 +821,7 @@ class ICDM(QMainWindow):
         self.previewLabel = None
         self.pixmap_item = None
         self.database_path = ""
+        self.export_database_path = ""
 
         # Build the GUI
         self.initialize_UI()
@@ -605,8 +832,16 @@ class ICDM(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        layout = QVBoxLayout()
-        h_layout = QHBoxLayout()
+        main_layout = QVBoxLayout()
+        tab_widget = QTabWidget()
+        main_layout.addWidget(tab_widget)
+        vertical_layout = QVBoxLayout()
+        horizontal_layout = QHBoxLayout()
+
+        first_tab = QWidget()
+        existing_layout = QVBoxLayout(first_tab)
+        existing_layout.addLayout(vertical_layout)  # Your existing horizontal layout
+        tab_widget.addTab(first_tab, "Raw Data View")
 
         # Initialize the toolbar
         toolbar = QToolBar()
@@ -640,7 +875,7 @@ class ICDM(QMainWindow):
         visitor_layout.addWidget(self.tree_visitor)
         visitor_layout.addWidget(self.visitor_file_count_label)
 
-        h_layout.addLayout(visitor_layout)
+        horizontal_layout.addLayout(visitor_layout)
 
         # Connecting actions and events to the visitor view
         self.tree_visitor.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -664,7 +899,7 @@ class ICDM(QMainWindow):
         empty_layout.addWidget(self.tree_empty)
         empty_layout.addWidget(self.empty_file_count_label)
 
-        h_layout.addLayout(empty_layout)
+        horizontal_layout.addLayout(empty_layout)
 
         # Connecting actions and events to the empty view
         self.tree_empty.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -676,7 +911,6 @@ class ICDM(QMainWindow):
 
 
         # Make the dockable part for editing
-
         # Initialize Splitter
         self.splitter = QSplitter(Qt.Horizontal)
 
@@ -685,25 +919,25 @@ class ICDM(QMainWindow):
         self.scene = QGraphicsScene()
         self.image_view.setScene(self.scene)
 
-        # Initialize Dock Widget
-        self.dock_widget = CustomDockWidget(self.image_view, self.pixmap_item)
-        self.addDockWidget(Qt.TopDockWidgetArea, self.dock_widget)
+        # Initialize custom widget (instead of Dock Widget)
+        self.custom_widget = CustomWidget(self.image_view, self.pixmap_item)
 
         # Initialize QTextEdit
         self.text_edit = QTextEdit()
 
+        # Initialize container_widget
+        text_edit_container_layout = QVBoxLayout()
+        text_edit_container_widget = QWidget()
+        text_edit_container_layout.addWidget(self.text_edit)
+        text_edit_container_widget.setLayout(text_edit_container_layout)
+
         # Add widgets to splitter
-        self.splitter.addWidget(self.image_view)
-        self.splitter.addWidget(self.text_edit)
+        self.splitter.addWidget(self.custom_widget)  # Replace 'self.image_view' with 'self.custom_widget'
+        self.splitter.addWidget(text_edit_container_widget)
 
         # Set the initial sizes to make the splitter handle appear at the center
         initial_size = self.width() // 2  # Assuming 'self' is the QMainWindow
         self.splitter.setSizes([initial_size, initial_size])
-
-        # Create layout and central widget for dock_widget
-        # layout_split_preview = QVBoxLayout()
-        # layout_split_preview.addWidget(self.splitter)
-        self.dock_widget.setWidget(self.splitter)
 
         # Connect signal
         self.text_edit.textChanged.connect(self.on_text_changed)
@@ -711,18 +945,90 @@ class ICDM(QMainWindow):
         # Create a common progress bar
         self.common_progress_bar = QProgressBar()
 
+        # Create a vertical splitter
+        self.vertical_splitter = QSplitter(Qt.Vertical)
+        vertical_layout.addWidget(self.vertical_splitter)
+
+        # Add the preview layout splitter to the main layout
+        self.vertical_splitter.addWidget(self.splitter)
+
         # Add the main horizontal layout to the layout = central Widget
-        layout.addLayout(h_layout)
+        # Create a container widget and set its layout
+        container_widget = QWidget()
+        container_widget.setLayout(horizontal_layout)
+        self.vertical_splitter.addWidget(container_widget)
 
         # add progressbar to the layout
-        layout.addWidget(self.common_progress_bar)
+        main_layout.addWidget(self.common_progress_bar)
+
+        # SECOND TAB
+        new_tab = QWidget()
+        new_layout = QVBoxLayout(new_tab)
+        tab_widget.addTab(new_tab, "Dataset View")
+
+        # Initialize main vertical splitter for the second tab
+        main_vertical_splitter = QSplitter(Qt.Vertical)
+
+        # Initialize first horizontal splitter
+        horizontal_splitter_1 = QSplitter(Qt.Horizontal)
+        self.time_plot = TimeDistributionPlot("", width=5, height=4, dpi=100)
+        self.folder_plot = FolderDistributionPlot("", width=5, height=4, dpi=100)
+        horizontal_splitter_1.addWidget(self.time_plot)
+        horizontal_splitter_1.addWidget(self.folder_plot)
+
+        # Initialize second horizontal splitter
+        horizontal_splitter_2 = QSplitter(Qt.Horizontal)
+        self.pie_chart = FrameProportionPieChart("", width=5, height=4, dpi=100)
+
+        self.table_view = QTableView()
+        model = QSqlTableModel()
+        model.setTable('metadata')
+        model.select()
+        self.table_view.setModel(model)
+        horizontal_splitter_2.addWidget(self.pie_chart)
+        horizontal_splitter_2.addWidget(self.table_view)
+
+        # Add horizontal splitters to main vertical splitter
+        main_vertical_splitter.addWidget(horizontal_splitter_1)
+        main_vertical_splitter.addWidget(horizontal_splitter_2)
+
+        # Set the initial sizes to make the splitter handle appear at the center
+        initial_size = self.height() // 2  # Assuming 'self' is the QMainWindow
+        horizontal_splitter_1.setSizes([initial_size, initial_size])
+        horizontal_splitter_2.setSizes([initial_size, initial_size])
+
+        # Add main vertical splitter to second tab layout
+        new_layout.addWidget(main_vertical_splitter)
 
         # Set the layout for the central widget
-        self.centralWidget().setLayout(layout)
+        self.centralWidget().setLayout(main_layout)
 
         # Set window properties and show
         self.setWindowTitle('ICDM - Insect Communities Dataset Manager')
         self.show()
+
+    def update_database(self, new_database_path):
+        # Step 1: Close the existing database connection
+        QSqlDatabase.database().close()
+
+        # Step 2: Open a new connection with the new database name
+        db = QSqlDatabase.addDatabase("QSQLITE")
+        db.setDatabaseName(new_database_path)
+        ok = db.open()
+        if not ok:
+            print("Failed to open new database")  # Handle this more gracefully in your actual code
+            return
+
+        self.database_path = new_database_path  # Update the class attribute
+
+        # Step 3: Reinitialize the QSqlTableModel with the new database
+        new_model = QSqlTableModel()
+        new_model.setTable('metadata')  # Assuming 'metadata' is your table name
+        new_model.setFilter("chosen_for_export = 1")  # Optional: apply your filter
+        new_model.select()
+
+        # Step 4: Update the QTableView to use the new model
+        self.table_view.setModel(new_model)  # Assuming `self.table_view` is your QTableView instance
 
     def show_export_dialog(self):
 
@@ -754,6 +1060,7 @@ class ICDM(QMainWindow):
         self.dataset_exporter.progress_total_signal.connect(self.set_progress)
         self.dataset_exporter.progress_signal.connect(self.update_progress)
         self.dataset_exporter.indeterminate_progress_signal.connect(self.set_progress_indeterminate)
+        self.dataset_exporter.export_database_created_signal.connect(self.update_inspection_graphs)
         self.dataset_exporter.start()
 
     def update_progress(self, value):
@@ -772,6 +1079,14 @@ class ICDM(QMainWindow):
 
     def load_tree_view_label(self, text, label):
         label.setText(text)
+
+    def update_inspection_graphs(self, database_path):
+        self.export_database_path = database_path
+        self.time_plot.update_database(self.export_database_path)
+        self.folder_plot.update_database(self.export_database_path)
+        self.pie_chart.update_database(self.export_database_path)
+        self.update_database(self.export_database_path)
+
 
     # Function to initiate the counting
     def initiate_file_count(self, tree, label):
@@ -919,10 +1234,10 @@ class ICDM(QMainWindow):
 
             self.scene.clear()
             self.pixmap_item = self.scene.addPixmap(pixmap)
-            self.dock_widget.pixmap_item = self.pixmap_item
+            self.custom_widget.pixmap_item = self.pixmap_item  # Changed from self.dock_widget.pixmap_item
 
             # Fit the view to the pixmap's bounding rectangle
-            new_size = self.dock_widget.graphics_view.size()
+            new_size = self.custom_widget.graphics_view.size()  # Changed from self.dock_widget.graphics_view.size()
             scale_factor = min(new_size.width() / self.pixmap_item.pixmap().width(),
                                new_size.height() / self.pixmap_item.pixmap().height())
             self.pixmap_item.setScale(scale_factor)
