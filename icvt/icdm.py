@@ -1,104 +1,157 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QFileDialog, QTreeWidget, QVBoxLayout, QPushButton, QTreeView, QFileSystemModel, QTreeWidgetItem, QMenu, QAction, QInputDialog
-from PyQt5.QtCore import QDir
-from PyQt5.QtCore import QTimer, Qt
-from PyQt5.QtGui import QDesktopServices
-from PyQt5.QtCore import QUrl
-from PyQt5.QtWidgets import QMessageBox
-from PyQt5.QtGui import QPixmap, QPainter, QColor, QPen, QImage
-from PyQt5.QtWidgets import QDialog, QLabel, QVBoxLayout, QHBoxLayout, QToolBar
-from PyQt5.QtWidgets import QMainWindow, QToolBar, QVBoxLayout, QTreeView, QPushButton, QWidget
-from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
-from PyQt5.QtWidgets import QMainWindow, QDockWidget, QSplitter, QGraphicsView, QGraphicsScene, QTextEdit, QVBoxLayout, QWidget, QTableView
-from PyQt5.QtSql import QSqlTableModel
-from pathlib import Path
-import shutil
-import PyQt5
-import os
-import sqlite3
-import re
-import datetime
 from collections import defaultdict
-pyqt = os.path.dirname(PyQt5.__file__)
-os.environ['QT_PLUGIN_PATH'] = os.path.join(pyqt, "Qt5/plugins")
+from concurrent.futures import ThreadPoolExecutor
 
-from PyQt5.QtCore import QSortFilterProxyModel, Qt
-from PyQt5.QtCore import QThread, pyqtSignal
-from pathlib import Path
-import random
-from pathlib import Path
+import PyQt5
+import concurrent.futures
+import datetime
 import hashlib
-
-from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox
-
-
-from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QSlider, QLabel, QComboBox
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QDialogButtonBox, QSlider, QLabel, QComboBox, QTimeEdit
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QTimeEdit
-from PyQt5.QtCore import QTime
-from PyQt5.QtWidgets import QApplication, QVBoxLayout, QSizePolicy, QWidget, QPushButton, QDialog, QTabWidget
+import os
+import random
+import re
+import shutil
+import sqlite3
+import yaml
+from PyQt5.QtCore import QSortFilterProxyModel, QThread, pyqtSignal, QSize, QUrl, Qt, QTime
+from PyQt5.QtGui import QDesktopServices, QPixmap, QPainter, QPen, QImage, QFont, QIcon
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
+from PyQt5.QtWidgets import (QApplication, QSizePolicy, QWidget, QPushButton, QTabWidget, QFrame, QDialog, QFormLayout,
+                             QLineEdit, QSlider, QLabel, QTimeEdit, QComboBox, QDialogButtonBox,
+                             QCheckBox, QVBoxLayout, QGroupBox, QFileDialog, QFileSystemModel, QMenu, QAction,
+                             QInputDialog, QHBoxLayout, QProgressBar, QMainWindow, QDockWidget, QSplitter,
+                             QGraphicsView, QGraphicsScene, QTextEdit, QTableView, QMessageBox, QToolBar, QTreeView)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from pathlib import Path
+
+os.environ['QT_PLUGIN_PATH'] = os.path.join(os.path.dirname(PyQt5.__file__), "Qt5/plugins")
+
+# TODO: Add an option to generate dataset so that it comprises as many visits as possible.
+        # When selecting images from folders according to criteria make sure to select uniques (with limit) per visits.
+# TODO: Add an option to somehow select which folders will be exclusive to val dataset so we can make sure to have data
+#       in val that are not in the train dataset to correctly detect for overfitting.
+# TODO: Add a diagnostic graph to see how are the flower morphotypes represented in the datasets.
 
 class ExportDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Export Options")
 
-        layout = QFormLayout()
+        # Main layout
+        mainLayout = QVBoxLayout()
+
+        # Dataset structure settings
+        datasetStructureGroup = QGroupBox("Dataset Structure")
+        datasetStructureGroupLayout = QFormLayout()
 
         # Dataset Size Input
         self.datasetSizeInput = QLineEdit()
-        layout.addRow("Dataset Size", self.datasetSizeInput)
+        datasetStructureGroupLayout.addRow("Dataset Size", self.datasetSizeInput)
+
+        # Training/Validation Ratio Slider
+        self.trainValRatioSlider = QSlider(Qt.Horizontal)
+        self.trainValRatioSlider.setMinimum(0)
+        self.trainValRatioSlider.setMaximum(100)
+        self.trainValRatioSlider.setValue(80)
+        self.trainValRatioLabel = QLabel(f"Train: 80%, Validation: 20%")
+        datasetStructureGroupLayout.addRow("Train/Validation Ratio", self.trainValRatioSlider)
+        datasetStructureGroupLayout.addRow("", self.trainValRatioLabel)
+
+        datasetStructureGroup.setLayout(datasetStructureGroupLayout)
+        mainLayout.addWidget(datasetStructureGroup)
+
+        # Dataset composition settings
+        datasetCompositionGroup = QGroupBox("Dataset Composition")
+        datasetCompositionGroupLayout = QFormLayout()
 
         # Empty/Visitor Ratio Slider
         self.emptyVisitorRatioSlider = QSlider(Qt.Horizontal)
         self.emptyVisitorRatioSlider.setMinimum(0)
         self.emptyVisitorRatioSlider.setMaximum(100)
-        self.emptyVisitorRatioSlider.setValue(50)
-        self.emptyVisitorRatioLabel = QLabel(f"Visitor: 50%, Empty: 50%")
-        layout.addRow("Empty/Visitor Ratio", self.emptyVisitorRatioSlider)
-        layout.addRow("", self.emptyVisitorRatioLabel)
+        self.emptyVisitorRatioSlider.setValue(80)
+        self.emptyVisitorRatioLabel = QLabel(f"Visitor: 80%, Empty: 20%")
+        datasetCompositionGroupLayout.addRow("Empty/Visitor Ratio", self.emptyVisitorRatioSlider)
+        datasetCompositionGroupLayout.addRow("", self.emptyVisitorRatioLabel)
+
+        # Use Day/Night Ratio Checkbox
+        self.useDayNightCheckbox = QCheckBox("Use Day/Night Ratio")
+        self.useDayNightCheckbox.setChecked(False)
+        datasetCompositionGroupLayout.addRow(self.useDayNightCheckbox)
 
         # Day/Night Ratio Slider
         self.dayNightRatioSlider = QSlider(Qt.Horizontal)
         self.dayNightRatioSlider.setMinimum(0)
         self.dayNightRatioSlider.setMaximum(100)
         self.dayNightRatioSlider.setValue(50)
+        self.dayNightRatioSlider.setEnabled(False)
         self.dayNightRatioLabel = QLabel(f"Day: 50%, Night: 50%")
-        layout.addRow("Day/Night Ratio", self.dayNightRatioSlider)
-        layout.addRow("", self.dayNightRatioLabel)
+        datasetCompositionGroupLayout.addRow("Day/Night Ratio", self.dayNightRatioSlider)
+        datasetCompositionGroupLayout.addRow("", self.dayNightRatioLabel)
 
         # Day Begin/End Time
-        self.dayBeginInput = QTimeEdit(QTime.currentTime())
-        self.dayEndInput = QTimeEdit(QTime.currentTime())
-        layout.addRow("Day Begins At", self.dayBeginInput)
-        layout.addRow("Day Ends At", self.dayEndInput)
+        self.dayBeginInput = QTimeEdit(QTime(12, 0))
+        self.dayBeginInput.setEnabled(False)
+        self.dayEndInput = QTimeEdit(QTime(0, 0))
+        self.dayEndInput.setEnabled(False)
+        datasetCompositionGroupLayout.addRow("Day Begins At", self.dayBeginInput)
+        datasetCompositionGroupLayout.addRow("Day Ends At", self.dayEndInput)
+
+        datasetCompositionGroup.setLayout(datasetCompositionGroupLayout)
+        mainLayout.addWidget(datasetCompositionGroup)
+
+        # Dataset Selection Method settings
+        datasetSelectionGroup = QGroupBox("Dataset Selection Method")
+        datasetSelectionGroupLayout = QFormLayout()
 
         # Method Selection Dropdown
         self.methodDropdown = QComboBox()
         self.methodDropdown.addItems(["Method 1", "Method 2", "Method 3"])
-        layout.addRow("Select Method", self.methodDropdown)
+        datasetSelectionGroupLayout.addRow("Select Method", self.methodDropdown)
+
+        datasetSelectionGroup.setLayout(datasetSelectionGroupLayout)
+        mainLayout.addWidget(datasetSelectionGroup)
+
+        # Dataset description file settings
+        datasetDescriptionGroup = QGroupBox("Dataset Description File")
+        datasetDescriptionGroupLayout = QFormLayout()
+
+        # Use Day/Night Ratio Checkbox
+        self.generateYamlCheckbox = QCheckBox("Generate YAML file")
+        self.generateYamlCheckbox.setChecked(True)
+        datasetDescriptionGroupLayout.addRow(self.generateYamlCheckbox)
+
+        datasetDescriptionGroup.setLayout(datasetDescriptionGroupLayout)
+        mainLayout.addWidget(datasetDescriptionGroup)
 
         # Button Box
         buttonBox = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttonBox.accepted.connect(self.accept)
         buttonBox.rejected.connect(self.reject)
-        layout.addRow(buttonBox)
+        mainLayout.addWidget(buttonBox)
 
         # Update Labels on Slider Value Change
         self.emptyVisitorRatioSlider.valueChanged.connect(self.update_emptyVisitorRatioLabel)
         self.dayNightRatioSlider.valueChanged.connect(self.update_dayNightRatioLabel)
+        self.trainValRatioSlider.valueChanged.connect(self.update_trainValRatioLabel)
 
-        self.setLayout(layout)
+        # Enable/disable day-night related controls based on checkbox
+        self.useDayNightCheckbox.toggled.connect(self.toggle_dayNightSettings)
+
+        self.setLayout(mainLayout)
 
     def update_emptyVisitorRatioLabel(self, value):
-        self.emptyVisitorRatioLabel.setText(f"Visitor: {value}%, Empty: {100-value}%")
+        self.emptyVisitorRatioLabel.setText(f"Visitor: {value}%, Empty: {100 - value}%")
 
     def update_dayNightRatioLabel(self, value):
-        self.dayNightRatioLabel.setText(f"Day: {value}%, Night: {100-value}%")
+        self.dayNightRatioLabel.setText(f"Day: {value}%, Night: {100 - value}%")
+
+    def update_trainValRatioLabel(self, value):
+        self.trainValRatioLabel.setText(f"Train: {value}%, Validation: {100 - value}%")
+
+    def toggle_dayNightSettings(self, checked):
+        self.dayNightRatioSlider.setEnabled(checked)
+        self.dayBeginInput.setEnabled(checked)
+        self.dayEndInput.setEnabled(checked)
+
 
 class DatasetExporter(QThread):
     progress_signal = pyqtSignal(int)
@@ -106,74 +159,61 @@ class DatasetExporter(QThread):
     indeterminate_progress_signal = pyqtSignal(bool)
     export_database_created_signal = pyqtSignal(str)
 
-    def __init__(self, dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time, root_folder_path, destination_folder_path, database_path: str = None):
+    def __init__(self, dataset_size, empty_visitor_ratio, use_day_night, day_night_ratio, day_start_time, day_end_time,
+                 train_val_ratio,
+                 generate_yaml, root_folder_path, destination_folder_path, database_path: str = None):
         QThread.__init__(self)
         self.dataset_size = dataset_size
+        self.use_day_night = use_day_night
         self.daytime_nighttime_ratio = day_night_ratio
         self.daytime_start = day_start_time
         self.daytime_end = day_end_time
         self.empty_visitor_ratio = empty_visitor_ratio
+        self.train_val_ratio = train_val_ratio
+        self.generate_yaml = generate_yaml
         self.root_folder_path = root_folder_path
         self.destination_folder_path = destination_folder_path
         self.database_path = database_path
+        self.dataset_name = ""
+        self.export_from_db = False
+        self.progress = 0
+
+        self.check_export_from_existing_export_database()
 
     def update_export_database(self):
-        # Modify database path by adding '_export' before '.db'
+
+        # Generate a unique hash (for example, from the current time)
+        unique_hash = hashlib.sha1(str(datetime.datetime.now()).encode()).hexdigest()[:8]
+        self.dataset_name = unique_hash
+
+        # Modify the name
         old_database_path = self.database_path
         new_database_path = os.path.join(os.path.dirname(self.database_path),
-                                         os.path.splitext(os.path.basename(self.database_path))[0] + '_export.db')
-        # Copy database
-        shutil.copy2(old_database_path, new_database_path)
+                                         os.path.splitext(os.path.basename(self.database_path))[
+                                             0] + f'_{unique_hash}.db')
+
+        # Copy the current database to the new unique name
+        shutil.copy(old_database_path, new_database_path)
         self.database_path = new_database_path
 
-        # Modify the database
-        conn = sqlite3.connect(self.database_path)
+    def check_export_from_existing_export_database(self):
+
+        db_name = self.database_path
+
+        # Connect to the database
+        conn = sqlite3.connect(db_name)
         cursor = conn.cursor()
 
-        # Add new columns
-        cursor.execute("ALTER TABLE metadata ADD COLUMN time TEXT")
-        cursor.execute("ALTER TABLE metadata ADD COLUMN parent_folder TEXT")
+        # Execute the query to count rows where chosen_for_export is not 0
+        cursor.execute("SELECT COUNT(*) FROM metadata WHERE chosen_for_export != 0")
+        count = cursor.fetchone()[0]
 
-        conn.commit()
-        cursor.execute("SELECT id, video_file_id, full_path FROM metadata")
+        # Check the count and take appropriate action
+        if count > 0:
+            self.export_from_db = True
 
-        for row in cursor.fetchall():
-            id_, video_file_id, full_path = row
-            time = self.extract_time_from_video_file_id(video_file_id)
-            parent_folder = self.extract_parent_folder_from_full_path(full_path)
-
-            cursor.execute("UPDATE metadata SET time = ?, parent_folder = ? WHERE id = ?", (time, parent_folder, id_))
-
-        conn.commit()
+        # Close the database connection
         conn.close()
-
-    def extract_time_from_video_file_id(self, video_file_id: str) -> str:
-        # Extract time using regular expression
-        time_match = re.search(r'_(\d{2}_\d{2})', video_file_id)
-        if time_match:
-            return time_match.group(1).replace('_', ':')  # Replace underscore with colon
-        return None  # Return None if the pattern is not found
-
-    def extract_parent_folder_from_full_path(self, full_path: str) -> str:
-        # Initialize folder_path with the parent directory
-        folder_path = os.path.dirname(full_path)
-
-        while True:
-            # Extract folder name from the folder path
-            folder_name = os.path.basename(folder_path)
-
-            # Check if folder name is neither "empty" nor "visitor"
-            if folder_name.lower() not in ["empty", "visitor"]:
-                return folder_name
-
-            # Move up the directory tree
-            folder_path = os.path.dirname(folder_path)
-
-            # If we're at the root directory, break the loop
-            if folder_path == os.path.dirname(folder_path):
-                break
-
-        return None  # Return None if no such folder is found
 
     def get_unique_parent_folder_count(self, database_path: str) -> int:
         # Connect to the database
@@ -247,12 +287,17 @@ class DatasetExporter(QThread):
         # daytime_start = datetime.datetime.strptime(daytime_start, '%H:%M').time()
         # daytime_end = datetime.datetime.strptime(daytime_end, '%H:%M').time()
 
+        print(f"{daytime_nighttime_ratio}")
+
         # Calculate counts per category
         num_empty_per_folder = int(total_files_per_folder * empty_visitor_ratio / (1 + empty_visitor_ratio))
         num_visitor_per_folder = total_files_per_folder - num_empty_per_folder
 
-        num_daytime_per_type = int(num_empty_per_folder * daytime_nighttime_ratio / (1 + daytime_nighttime_ratio))
-        num_nighttime_per_type = num_empty_per_folder - num_daytime_per_type
+        num_daytime_per_empty = int(num_empty_per_folder * daytime_nighttime_ratio / (1 + daytime_nighttime_ratio))
+        num_nighttime_per_empty = num_empty_per_folder - num_daytime_per_empty
+
+        num_daytime_per_visitor = int(num_visitor_per_folder * daytime_nighttime_ratio / (1 + daytime_nighttime_ratio))
+        num_nighttime_per_visitor = num_visitor_per_folder - num_daytime_per_visitor
 
         # Initialize result dictionary
         files_by_folder = defaultdict(dict)
@@ -262,10 +307,14 @@ class DatasetExporter(QThread):
 
         print(f"tot:{total_files_per_folder}, emp:{num_empty_per_folder}, vis:{num_visitor_per_folder}")
         for parent_folder in parent_folders:
-            for label_condition, count_day, count_night, count in [("IS NULL", num_daytime_per_type, num_nighttime_per_type, num_empty_per_folder),
-                                                            ("IS NOT NULL", num_daytime_per_type,
-                                                             num_nighttime_per_type, num_visitor_per_folder)]:
-                if False:
+            for label_condition, count_day, count_night, count in [
+                ("IS NULL", num_daytime_per_empty, num_nighttime_per_empty, num_empty_per_folder),
+                ("IS NOT NULL", num_daytime_per_visitor,
+                 num_nighttime_per_visitor, num_visitor_per_folder)]:
+                if self.use_day_night:
+
+                    print(f"{count_day}, {count_night}, {count}, {daytime_start}, {daytime_end}")
+
                     # Query for 'daytime' files
                     query = """
                         SELECT full_path
@@ -285,7 +334,7 @@ class DatasetExporter(QThread):
                         FROM metadata
                         WHERE parent_folder = ?
                         AND label_path {}
-                        AND (time(time) < ? OR time(time) > ?)
+                        AND NOT time(time) BETWEEN ? AND ?
                         LIMIT ?
                     """.format(label_condition)
                     cursor.execute(query, (parent_folder, daytime_start, daytime_end, count_night))
@@ -295,7 +344,8 @@ class DatasetExporter(QThread):
                     type_label = 'empty' if label_condition == "IS NULL" else 'visitor'
                     files_by_folder[parent_folder][type_label] = {
                         'daytime': daytime_files,
-                        'nighttime': nighttime_files
+                        'nighttime': nighttime_files,
+                        'all': daytime_files + nighttime_files
                     }
                 else:
                     print("doing this")
@@ -316,9 +366,9 @@ class DatasetExporter(QThread):
                         'all': all_files
                     }
 
-        # Add a new colum nto the database
-        cursor.execute("ALTER TABLE metadata ADD COLUMN chosen_for_export BOOLEAN DEFAULT 0")
-        conn.commit()
+        # # Add a new colum nto the database
+        # cursor.execute("ALTER TABLE metadata ADD COLUMN chosen_for_export BOOLEAN DEFAULT 0")
+        # conn.commit()
 
         # Here, let's update the 'chosen_for_export' flag for the selected files.
         for parent_folder, types in files_by_folder.items():
@@ -331,66 +381,333 @@ class DatasetExporter(QThread):
         # Close the database connection
         conn.close()
 
-        # Generate a unique hash (for example, from the current time)
-        unique_hash = hashlib.sha1(str(datetime.datetime.now()).encode()).hexdigest()[:8]
+        return files_by_folder
 
-        # Create a new database name with the unique hash
-        new_database_path = f"{database_path.split('.db')[0]}_{unique_hash}.db"
+    def fetch_files_for_train_val(self, database_path: str):
+        # Connect to the database
+        conn = sqlite3.connect(database_path)
+        cursor = conn.cursor()
 
-        # Copy the current database to the new unique name
-        shutil.copy(database_path, new_database_path)
+        # Initialize result dictionary
+        files_by_folder = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+
+        # Get distinct parent folders
+        cursor.execute("SELECT DISTINCT parent_folder FROM metadata")
+        parent_folders = [row[0] for row in cursor.fetchall()]
+
+        for parent_folder in parent_folders:
+            all_files_in_folder = []
+            for label_condition, type_label in [("IS NULL", "empty"), ("IS NOT NULL", "visitor")]:
+                all_files_by_type = []
+                for dataset_type in [1, 2]:  # 0 = Don't use, 1 = Train, 2 = Val
+                    query = """
+                            SELECT full_path
+                            FROM metadata
+                            WHERE parent_folder = ?
+                            AND label_path {}
+                            AND chosen_for_export = ?
+                        """.format(label_condition)
+
+                    cursor.execute(query, (parent_folder, dataset_type))
+                    files = [row[0] for row in cursor.fetchall()]
+                    all_files_by_type.extend(files)
+                    if dataset_type == 1:
+                        files_by_folder[parent_folder][type_label]['train'] = files
+                    elif dataset_type == 2:
+                        files_by_folder[parent_folder][type_label]['val'] = files
+
+                files_by_folder[parent_folder][type_label]['all'] = all_files_by_type
+            #     all_files_in_folder.extend(all_files_by_type)
+            #
+            # files_by_folder[parent_folder]['all']['all'] = all_files_in_folder
+
+        # Close the database connection
+        conn.close()
+
+        print(files_by_folder)
 
         return files_by_folder
 
-    def copy_files(self, result):
-
+    def setup_progress_tracking(self, result):
         # Setup progress tracking
         total_files = 0
         for parent_folder, types in result.items():
             for file_type, time_dict in types.items():
                 total_files += len(time_dict['all'])
+                print(total_files)
         progress = int(total_files * 0.1)
         self.progress_total_signal.emit(int(total_files + progress))
         self.progress_signal.emit(progress)
+        return progress
+
+    def create_dataset_folders(self):
 
         # Create destination folders for each parent folder, if needed
-        parent_folder_destination = self.destination_folder_path
-        empty_folder = os.path.join(parent_folder_destination, 'empty')
-        visitor_folder = os.path.join(parent_folder_destination, 'visitor')
-        os.makedirs(empty_folder, exist_ok=True)
-        os.makedirs(visitor_folder, exist_ok=True)
+        parent_folder_destination = os.path.join(self.destination_folder_path, self.dataset_name)
+        images_folder = os.path.join(parent_folder_destination, 'images')
+        labels_folder = os.path.join(parent_folder_destination, 'labels')
+        images_train_folder = os.path.join(images_folder, 'train')
+        images_val_folder = os.path.join(images_folder, 'val')
+        labels_train_folder = os.path.join(labels_folder, 'train')
+        labels_val_folder = os.path.join(labels_folder, 'val')
+        for folder in [images_train_folder, images_val_folder, labels_train_folder, labels_val_folder]:
+            os.makedirs(folder, exist_ok=True)
 
-        # Loop through each parent folder
-        for parent_folder, types_data in result.items():
-            print("parent")
-            # Copy selected empty files
-            for file in types_data['empty']['all']:
-                print(file)
-                file_name = os.path.basename(file)
-                source = file
-                destination = os.path.join(empty_folder, file_name)
-                shutil.copy(source, destination)
+        return parent_folder_destination, images_folder, labels_folder, images_train_folder, images_val_folder, labels_train_folder, labels_val_folder
 
-                # Update progress
-                progress += 1
-                self.progress_signal.emit(progress)
+    def copy_files(self, result):
 
-            # Copy selected visitor files
-            for file in types_data['visitor']['all']:
-                print(file)
-                file_name = os.path.basename(file)
-                source = file
-                destination = os.path.join(visitor_folder, file_name)
-                shutil.copy(source, destination)
+        # Setup progress tracking
+        self.progress = self.setup_progress_tracking(result)
 
-                # Move also the txt
-                source = file.rsplit('.', 1)[0] + '.txt'
-                destination = os.path.join(visitor_folder, os.path.basename(source))
-                shutil.copy(source, destination)
+        # Create and check folders for the dataset export
+        parent_folder_destination, images_folder, labels_folder, images_train_folder, images_val_folder, labels_train_folder, labels_val_folder = self.create_dataset_folders()
 
-                # Update progress
-                progress += 1
-                self.progress_signal.emit(progress)
+        # Initialize database connection
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+
+        future_to_file = {}
+
+        with ThreadPoolExecutor() as executor:
+            for parent_folder, types_data in result.items():
+                # Get number of empty files
+                number_of_empty_files = len(types_data['empty']['all'])
+
+                # Calculate counts per category
+                num_empty_files_for_val = int(number_of_empty_files * self.train_val_ratio / (1 + self.train_val_ratio))
+                num_empty_files_for_train = number_of_empty_files - num_empty_files_for_val
+
+                # Prepare list of empty files
+                empty_files = types_data['empty']['all']
+                random.shuffle(empty_files)
+
+                # Get number of visitor files
+                number_of_visitor_files = len(types_data['visitor']['all'])
+
+                # Calculate counts per category
+                num_visitor_files_for_val = int(
+                    number_of_visitor_files * self.train_val_ratio / (1 + self.train_val_ratio))
+                num_visitor_files_for_train = number_of_visitor_files - num_visitor_files_for_val
+
+                # Prepare list of visitor files
+                visitor_files = types_data['visitor']['all']
+                random.shuffle(visitor_files)
+
+            # Loop through each parent folder
+            for parent_folder, types_data in result.items():
+                print(parent_folder)
+
+                # Get number of empty files
+                number_of_empty_files = len(types_data['empty']['all'])
+
+                # Calculate counts per category
+                num_empty_files_for_val = int(number_of_empty_files * self.train_val_ratio / (1 + self.train_val_ratio))
+                num_empty_files_for_train = number_of_empty_files - num_empty_files_for_val
+
+                # Prepare list of empty files
+                empty_files = types_data['empty']['all']
+                random.shuffle(empty_files)
+
+                # Get number of visitor files
+                number_of_visitor_files = len(types_data['visitor']['all'])
+
+                # Calculate counts per category
+                num_visitor_files_for_val = int(
+                    number_of_visitor_files * self.train_val_ratio / (1 + self.train_val_ratio))
+                num_visitor_files_for_train = number_of_visitor_files - num_visitor_files_for_val
+
+                # Prepare list of visitor files
+                visitor_files = types_data['visitor']['all']
+                random.shuffle(visitor_files)
+
+                # Copy selected empty files
+                for i, file in enumerate(empty_files):
+                    print(file)
+                    file_name = os.path.basename(file)
+                    source = file
+                    if (i + 1) <= num_empty_files_for_train:
+                        destination = os.path.join(images_train_folder, file_name)
+                        dataset_type = 'train'
+                    else:
+                        destination = os.path.join(images_val_folder, file_name)
+                        dataset_type = 'val'
+
+                    # Normalize the paths
+                    # normalized_source = os.path.normpath(source)
+                    # normalized_destination = os.path.normpath(destination)
+
+                    # Execute the command
+                    # subprocess.run(["cp", normalized_source, normalized_destination])
+                    future = executor.submit(self.copy_file_task, source, destination, labels_folder, dataset_type,
+                                             'empty')
+                    future_to_file[future] = file  # Keep a reference to the future
+                    # shutil.copy(source, destination)
+
+                    # # Update database
+                    # update_val = 1 if (i + 1) <= num_empty_files_for_train else 2
+                    # cursor.execute("UPDATE metadata SET chosen_for_export=? WHERE full_path=?", (update_val, file))
+
+                    # Update progress
+                    # self.progress += 1
+                    # self.progress_signal.emit(self.progress)
+
+                # Copy selected visitor files
+                for i, file in enumerate(visitor_files):
+                    print(file)
+                    file_name = os.path.basename(file)
+                    source = file
+                    source_txt = file.rsplit('.', 1)[0] + '.txt'
+                    if (i + 1) <= num_visitor_files_for_train:
+                        destination = os.path.join(images_train_folder, file_name)
+                        destination_txt = os.path.join(labels_train_folder, os.path.basename(source_txt))
+                        dataset_type = 'train'
+                    else:
+                        destination = os.path.join(images_val_folder, file_name)
+                        destination_txt = os.path.join(labels_val_folder, os.path.basename(source_txt))
+                        dataset_type = 'val'
+                    # shutil.copy(source, destination)
+                    # shutil.copy(source_txt, destination_txt)
+
+                    # Normalize the paths
+                    # normalized_source = os.path.normpath(source)
+                    # normalized_destination = os.path.normpath(destination)
+                    # normalized_source_txt = os.path.normpath(source_txt)
+                    # normalized_destination_txt = os.path.normpath(destination_txt)
+
+                    # Execute the command
+                    # subprocess.run(["cp", normalized_source, normalized_destination])
+                    # subprocess.run(["cp", normalized_source_txt, normalized_destination_txt])
+                    future = executor.submit(self.copy_file_task, source, destination, labels_folder, dataset_type,
+                                             'visitor')
+                    future_to_file[future] = file
+
+                    # Update database
+                    # update_val = 1 if (i + 1) <= num_visitor_files_for_train else 2
+                    # cursor.execute("UPDATE metadata SET chosen_for_export=? WHERE full_path=?", (update_val, file))
+                    #
+                    # Update progress
+                    # self.progress += 1
+                    # self.progress_signal.emit(self.progress)
+
+            # Getting completion messages
+            for future in concurrent.futures.as_completed(future_to_file):
+                file = future_to_file[future]
+                try:
+                    data = future.result()  # This will give the return value from your function
+                except Exception as exc:
+                    print(f"{file} generated an exception: {exc}")
+                else:
+                    # print(f"{file} returned {data}")
+                    self.progress += 1
+                    self.progress_signal.emit(self.progress)
+
+        # Commit database changes
+        conn.commit()
+
+        # Close database connection
+        conn.close()
+
+        # Add the accompanying files to the dataset folder
+        self.generate_accompanying_files(parent_folder_destination)
+
+    def copy_file_task(self, source, destination, labels_folder, dataset_type, file_type=None, cursor=None):
+
+        # Create a new SQLite connection
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+
+        normalized_source = os.path.normpath(source)
+        normalized_destination = os.path.normpath(destination)
+        shutil.copy(normalized_source, normalized_destination)
+        # subprocess.run(["cp", normalized_source, normalized_destination])
+
+        if file_type == 'visitor':
+            source_txt = source.rsplit('.', 1)[0] + '.txt'
+            destination_txt = os.path.join(labels_folder, dataset_type, os.path.basename(source_txt))
+            normalized_source_txt = os.path.normpath(source_txt)
+            normalized_destination_txt = os.path.normpath(destination_txt)
+            # subprocess.run(["cp", normalized_source_txt, normalized_destination_txt])
+            shutil.copy(normalized_source_txt, normalized_destination_txt)
+
+        if cursor:
+            update_val = 1 if dataset_type == 'train' else 2
+            cursor.execute("UPDATE metadata SET chosen_for_export=? WHERE full_path=?", (update_val, source))
+
+        conn.commit()
+
+        conn.close()
+
+        return source, update_val
+
+    def generate_accompanying_files(self, parent_folder_destination):
+
+        if self.generate_yaml:
+            dataset_path = os.path.join('dataset', self.dataset_name)
+            train_path = os.path.join('images', 'train')
+            val_path = os.path.join('images', 'val')
+            num_classes = 2
+            class_names = ['pollinator', 'lepidoptera']
+            filepath = os.path.join(parent_folder_destination, f'{self.dataset_name}.yaml')
+
+            self.generate_dataset_yaml(dataset_path, train_path, val_path, num_classes, class_names, filepath)
+
+        # Supplement the dataset with the export database for versioning
+        old_database_path = self.database_path
+        new_database_path = os.path.join(parent_folder_destination, os.path.basename(self.database_path))
+        self.database_path = new_database_path
+
+        # Copy the current database to the new unique name
+        shutil.copy(old_database_path, new_database_path)
+
+    def copy_files_and_update_database(self, result):
+
+        # Setup progress tracking
+        self.progress = self.setup_progress_tracking(result)
+
+        # Create and check folders for the dataset export
+        parent_folder_destination, images_folder, labels_folder, images_train_folder, images_val_folder, labels_train_folder, labels_val_folder = self.create_dataset_folders()
+        future_to_file = {}
+        with ThreadPoolExecutor() as executor:
+            for parent_folder, types_data in result.items():
+                for dataset_type in ['train', 'val']:
+                    for file_type in ['empty', 'visitor']:
+                        for file in types_data[file_type][dataset_type]:
+                            print(file)
+                            file_name = os.path.basename(file)
+                            source = file
+                            destination = os.path.join(images_folder, dataset_type, file_name)
+
+                            future = executor.submit(self.copy_file_task, source, destination, labels_folder,
+                                                     dataset_type, file_type)
+                            future_to_file[future] = file
+
+            # Getting completion messages
+            for future in concurrent.futures.as_completed(future_to_file):
+                file = future_to_file[future]
+                try:
+                    data = future.result()  # This will give the return value from your function
+                except Exception as exc:
+                    print(f"{file} generated an exception: {exc}")
+                else:
+                    # print(f"{file} returned {data}")
+                    self.progress += 1
+                    self.progress_signal.emit(self.progress)
+
+        # Add the accompanying files to the dataset folder
+        self.generate_accompanying_files(parent_folder_destination)
+
+    def generate_dataset_yaml(self, dataset_path, train_path, val_path, num_classes, class_names, filepath):
+        data = {
+            'path': dataset_path,
+            'train': train_path,
+            'val': val_path,
+            'nc': num_classes,
+            'names': class_names
+        }
+
+        with open(filepath, 'w') as f:
+            yaml.dump(data, f, sort_keys=False)
 
     def inspect_time_distribution(self):
 
@@ -426,10 +743,16 @@ class DatasetExporter(QThread):
             number_of_parent_folders = self.get_unique_parent_folder_count(self.database_path)
             print(f"parent_folders:{number_of_parent_folders}")
             files_per_parent_folder = self.dataset_size // number_of_parent_folders
-            result = self.fetch_files_per_parent_folder(self.database_path, files_per_parent_folder, self.empty_visitor_ratio,
-                                                   self.daytime_nighttime_ratio, self.daytime_start, self.daytime_end)
-            print(result)
-            self.copy_files(result)
+            if self.export_from_db:
+                result = self.fetch_files_for_train_val(self.database_path)
+                print("coyping")
+                self.copy_files_and_update_database(result)
+            else:
+                result = self.fetch_files_per_parent_folder(self.database_path, files_per_parent_folder,
+                                                            self.empty_visitor_ratio,
+                                                            self.daytime_nighttime_ratio, self.daytime_start,
+                                                            self.daytime_end)
+                self.copy_files(result)
             self.export_database_created_signal.emit(self.database_path)
             # empty_files, visitor_files = self.get_files_from_database()
 
@@ -485,6 +808,7 @@ class DatasetExporter(QThread):
         #     progress += 1
         #     self.progress_signal.emit(progress)
 
+
 class DatabasePopulator(QThread):
     progress_signal = pyqtSignal(int)
     progress_total_signal = pyqtSignal(int)
@@ -495,8 +819,42 @@ class DatabasePopulator(QThread):
         self.batch_size = batch_size
         self.database_path = database_path
 
+    def create_database(self):
+        conn = sqlite3.connect(self.database_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS metadata (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recording_id TEXT,
+            video_file_id TEXT,
+            frame_no INTEGER,
+            visit_no INTEGER,
+            crop_no INTEGER,
+            x1 INTEGER,
+            y1 INTEGER,
+            x2 INTEGER,
+            y2 INTEGER,
+            full_path TEXT,
+            label_path TEXT,
+            time TEXT,
+            parent_folder TEXT,
+            chosen_for_export INTEGER
+        );
+        """)
+        conn.commit()
+        conn.close()
+
     def run(self):
+
+        # Check if database exists
+        if os.path.exists(self.database_path):
+            os.remove(self.database_path)
+            print(f"Deleted existing database: {self.database_path}")
+
+        # Create a new one
         print("Creating database...")
+        self.create_database()
+
         conn = sqlite3.connect(self.database_path)
         cursor = conn.cursor()
 
@@ -532,6 +890,9 @@ class DatabasePopulator(QThread):
                     recording_id = f"{parts[0]}_{parts[1]}_{parts[2]}"
                     video_file_id = f"{recording_id}_{parts[3]}_{parts[4]}_{parts[5]}"
 
+                    time = self.extract_time_from_video_file_id(video_file_id)
+                    parent_folder = self.extract_parent_folder_from_full_path(full_path)
+
                     # Data validation and conversion to integers
                     try:
                         frame_no = int(parts[6])
@@ -548,12 +909,12 @@ class DatabasePopulator(QThread):
                         label_path = os.path.join(subdir, file.replace('.jpg', '.txt'))
 
                     batch_data.append((recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2,
-                                       full_path, label_path))
+                                       full_path, label_path, time, parent_folder))
 
                     count += 1
                     if count >= self.batch_size:
                         cursor.executemany(
-                            "INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            "INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path, time, parent_folder, chosen_for_export) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
                             batch_data)
                         conn.commit()
                         batch_data = []
@@ -561,12 +922,41 @@ class DatabasePopulator(QThread):
 
         if batch_data:
             cursor.executemany(
-                "INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO metadata (recording_id, video_file_id, frame_no, visit_no, crop_no, x1, y1, x2, y2, full_path, label_path, time, parent_folder, chosen_for_export) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
                 batch_data)
             conn.commit()
 
         self.progress_signal.emit(total_files)  # Or however you wish to compute progress
         conn.close()
+
+    def extract_time_from_video_file_id(self, video_file_id: str) -> str:
+        # Extract time using regular expression
+        time_match = re.search(r'_(\d{2}_\d{2})', video_file_id)
+        if time_match:
+            return time_match.group(1).replace('_', ':')  # Replace underscore with colon
+        return None  # Return None if the pattern is not found
+
+    def extract_parent_folder_from_full_path(self, full_path: str) -> str:
+        # Initialize folder_path with the parent directory
+        folder_path = os.path.dirname(full_path)
+
+        while True:
+            # Extract folder name from the folder path
+            folder_name = os.path.basename(folder_path)
+
+            # Check if folder name is neither "empty" nor "visitor"
+            if folder_name.lower() not in ["empty", "visitor"]:
+                return folder_name
+
+            # Move up the directory tree
+            folder_path = os.path.dirname(folder_path)
+
+            # If we're at the root directory, break the loop
+            if folder_path == os.path.dirname(folder_path):
+                break
+
+        return None  # Return None if no such folder is found
+
 
 class FileCounter(QThread):
     started_counting = pyqtSignal(str, object)
@@ -587,6 +977,7 @@ class FileCounter(QThread):
 
         self.finished_counting.emit(total_files, image_files, label_files, self.label)
 
+
 class FolderFilterProxyModel(QSortFilterProxyModel):
     def __init__(self, filter_string='', *args, **kwargs):
         super(FolderFilterProxyModel, self).__init__(*args, **kwargs)
@@ -603,6 +994,7 @@ class FolderFilterProxyModel(QSortFilterProxyModel):
             return False
         return True
 
+
 class CustomDockWidget(QDockWidget):
     def __init__(self, graphics_view, pixmap_item, parent=None):
         super(CustomDockWidget, self).__init__(parent)
@@ -615,6 +1007,7 @@ class CustomDockWidget(QDockWidget):
             scale_factor = min(new_size.width() / self.pixmap_item.pixmap().width(),
                                new_size.height() / self.pixmap_item.pixmap().height())
             self.pixmap_item.setScale(scale_factor)
+
 
 class CustomWidget(QWidget):
     def __init__(self, graphics_view, pixmap_item, parent=None):
@@ -634,9 +1027,11 @@ class CustomWidget(QWidget):
                                new_size.height() / self.pixmap_item.pixmap().height())
             self.pixmap_item.setScale(scale_factor)
 
+
 class TimeDistributionPlot(FigureCanvas):
-    def __init__(self, database_path, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, database_path, dataset_type_filter=1, parent=None, width=5, height=4, dpi=100):
         self.database_path = database_path
+        self.dataset_type_filter = dataset_type_filter
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
 
@@ -656,7 +1051,7 @@ class TimeDistributionPlot(FigureCanvas):
 
         conn = sqlite3.connect(self.database_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT time FROM metadata WHERE chosen_for_export = 1")
+        cursor.execute("SELECT time FROM metadata WHERE chosen_for_export = ?", (self.dataset_type_filter,))
         times = [row[0] for row in cursor.fetchall()]
         conn.close()
 
@@ -689,8 +1084,9 @@ class TimeDistributionPlot(FigureCanvas):
 
 
 class FolderDistributionPlot(FigureCanvas):
-    def __init__(self, database_path, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, database_path, dataset_type_filter=1, parent=None, width=5, height=4, dpi=100):
         self.database_path = database_path
+        self.dataset_type_filter = dataset_type_filter
         self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = self.fig.add_subplot(111)
 
@@ -718,8 +1114,8 @@ class FolderDistributionPlot(FigureCanvas):
                 END AS file_type,
                 COUNT(*) 
             FROM metadata 
-            WHERE chosen_for_export = 1 
-            GROUP BY parent_folder, file_type""")
+            WHERE chosen_for_export = ? 
+            GROUP BY parent_folder, file_type""", (self.dataset_type_filter,))
 
         raw_counts = cursor.fetchall()
         conn.close()
@@ -756,9 +1152,11 @@ class FolderDistributionPlot(FigureCanvas):
         self.database_path = new_database_path
         self.plot()
 
+
 class FrameProportionPieChart(FigureCanvas):
-    def __init__(self, database_path, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, database_path, dataset_type_filter: int = 1, parent=None, width=5, height=4, dpi=100):
         self.database_path = database_path
+        self.dataset_type_filter = dataset_type_filter
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
 
@@ -780,8 +1178,11 @@ class FrameProportionPieChart(FigureCanvas):
         labels = list(frame_proportions.keys())
         sizes = [frame_proportions[label] for label in labels]
 
+        if sizes[0] == 0 and sizes[1] == 00:
+            return
+
         self.axes.clear()
-        self.axes.pie(sizes, labels=labels, autopct='%1.1f%%', colors=("r","g"))
+        self.axes.pie(sizes, labels=labels, autopct='%1.1f%%', colors=("r", "g"))
         self.axes.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
 
         # Add this line to adjust layout to fit axis labels
@@ -795,12 +1196,14 @@ class FrameProportionPieChart(FigureCanvas):
 
         # Count empty frames that are chosen for export
         cursor.execute(
-            "SELECT COUNT(*) FROM metadata WHERE label_path IS NULL AND chosen_for_export = 1")
+            "SELECT COUNT(*) FROM metadata WHERE label_path IS NULL AND chosen_for_export=?",
+            (self.dataset_type_filter,))
         empty_frames = cursor.fetchone()[0]
 
         # Count visitor frames that are chosen for export
         cursor.execute(
-            "SELECT COUNT(*) FROM metadata WHERE label_path IS NOT NULL AND chosen_for_export = 1")
+            "SELECT COUNT(*) FROM metadata WHERE label_path IS NOT NULL AND chosen_for_export = ?",
+            (self.dataset_type_filter,))
         visitor_frames = cursor.fetchone()[0]
 
         conn.close()
@@ -810,6 +1213,7 @@ class FrameProportionPieChart(FigureCanvas):
     def update_database(self, new_database_path):
         self.database_path = new_database_path
         self.plot()
+
 
 class ICDM(QMainWindow):
     def __init__(self):
@@ -847,18 +1251,72 @@ class ICDM(QMainWindow):
         toolbar = QToolBar()
         self.addToolBar(toolbar)
 
+        size = QSize(35, 35)
+
         self.open_button = QPushButton('Open Folder', self)
-        self.open_button.clicked.connect(self.show_open_folder_dialog)
+        self.open_button.clicked.connect(self.show_open_folder_dialog),
+        self.open_button.setIcon(QIcon(QPixmap("resources/img/fl.png")))
+        self.open_button.setIconSize(size)
         toolbar.addWidget(self.open_button)
 
         self.db_button = QPushButton('Generate Database', self)
         self.db_button.clicked.connect(lambda: self.import_data(self.root_path))
+        self.db_button.setIcon(QIcon(QPixmap("resources/img/db_plus.png")))
+        self.db_button.setIconSize(size)
         self.db_button.setEnabled(False)
         toolbar.addWidget(self.db_button)
+
+        # New button for selecting a database
+        self.select_db_button = QPushButton('Select Database', self)
+        self.select_db_button.setEnabled(False)
+        self.select_db_button.setIcon(QIcon(QPixmap("resources/img/db_tick.png")))
+        self.select_db_button.setIconSize(size)
+
+        def select_database():
+            options = QFileDialog.Options()
+            options |= QFileDialog.ReadOnly
+            file_name, _ = QFileDialog.getOpenFileName(self, "Select a database", "",
+                                                       "Database Files (*.db);;All Files (*)", options=options)
+            if file_name:
+                self.db_name_label.setText(f"Selected DB: {os.path.basename(file_name)}")
+                self.database_path = file_name
+                self.export_button.setEnabled(True)
+
+                db_name = self.database_path
+
+                # Connect to the database
+                conn = sqlite3.connect(db_name)
+                cursor = conn.cursor()
+
+                # Execute the query to count rows where chosen_for_export is not 0
+                cursor.execute("SELECT COUNT(*) FROM metadata WHERE chosen_for_export != 0")
+                count = cursor.fetchone()[0]
+
+                # Check the count and take appropriate action
+                if count > 0:
+                    self.update_inspection_graphs(self.database_path)
+
+                # Close the database connection
+                conn.close()
+
+        self.select_db_button.clicked.connect(select_database)
+        toolbar.addWidget(self.select_db_button)
+
+        # Create a QLabel to display the selected database name
+        self.db_name_label = QLabel(f"Selected DB: ... ")
+        self.db_name_label.setFrameShape(QFrame.StyledPanel)  # Set the frame shape
+        self.db_name_label.setFrameShadow(QFrame.Sunken)  # Set the frame shadow
+        self.db_name_label.setLineWidth(1)  # Set the line width of the frame
+
+        # Add padding and margin if needed
+        # self.db_name_label.setContentsMargins(10, 10, 10, 10)  # margin between the text and frame
+        toolbar.addWidget(self.db_name_label)
 
         self.export_button = QPushButton('Export Dataset', self)
         self.export_button.clicked.connect(self.show_export_dialog)
         self.export_button.setEnabled(False)
+        self.export_button.setIcon(QIcon(QPixmap("resources/img/ds_export.png")))
+        self.export_button.setIconSize(size)
         toolbar.addWidget(self.export_button)
 
         # Create TreeView for visitor folders
@@ -883,7 +1341,8 @@ class ICDM(QMainWindow):
             pos, tree))
 
         self.tree_visitor.doubleClicked.connect(lambda: self.item_double_clicked(self.tree_visitor))
-        self.tree_visitor.clicked.connect(lambda: self.item_clicked(self.tree_visitor)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
+        self.tree_visitor.clicked.connect(lambda: self.item_clicked(
+            self.tree_visitor))  # TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Create TreeView for empty folders
         self.tree_empty = QTreeView(self)
@@ -907,8 +1366,8 @@ class ICDM(QMainWindow):
                                                                                                                     tree))
 
         self.tree_empty.doubleClicked.connect(lambda: self.item_double_clicked(self.tree_empty))
-        self.tree_empty.clicked.connect(lambda: self.item_clicked(self.tree_empty)) #TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
-
+        self.tree_empty.clicked.connect(lambda: self.item_clicked(
+            self.tree_empty))  # TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Make the dockable part for editing
         # Initialize Splitter
@@ -966,39 +1425,85 @@ class ICDM(QMainWindow):
         new_layout = QVBoxLayout(new_tab)
         tab_widget.addTab(new_tab, "Dataset View")
 
-        # Initialize main vertical splitter for the second tab
-        main_vertical_splitter = QSplitter(Qt.Vertical)
+        # Create the Vertical Tab Widget
+        self.vertical_tabs = QTabWidget()
+        self.vertical_tabs.setTabPosition(QTabWidget.West)
+        vertical_tabs = []
+        self.plots = {
+            'time': [],
+            'folder': [],
+            'pie': [],
+            'database': []
+        }
 
-        # Initialize first horizontal splitter
-        horizontal_splitter_1 = QSplitter(Qt.Horizontal)
-        self.time_plot = TimeDistributionPlot("", width=5, height=4, dpi=100)
-        self.folder_plot = FolderDistributionPlot("", width=5, height=4, dpi=100)
-        horizontal_splitter_1.addWidget(self.time_plot)
-        horizontal_splitter_1.addWidget(self.folder_plot)
+        for i, tab in enumerate(['Training Dataset', 'Validation Dataset']):
+            # Create tab
+            tab_widget = QWidget()
+            tab_layout = QVBoxLayout(tab_widget)
+            self.vertical_tabs.addTab(tab_widget, tab)
+            vertical_tabs.append(tab_widget)
 
-        # Initialize second horizontal splitter
-        horizontal_splitter_2 = QSplitter(Qt.Horizontal)
-        self.pie_chart = FrameProportionPieChart("", width=5, height=4, dpi=100)
+            # Initialize main vertical splitter for the second tab
+            tab_vertical_splitter = QSplitter(Qt.Vertical)
 
-        self.table_view = QTableView()
-        model = QSqlTableModel()
-        model.setTable('metadata')
-        model.select()
-        self.table_view.setModel(model)
-        horizontal_splitter_2.addWidget(self.pie_chart)
-        horizontal_splitter_2.addWidget(self.table_view)
+            # Initialize QLabel
+            label = QLabel(tab)
+            font = QFont()
+            font.setBold(True)
+            font.setPointSize(10)
+            label.setFont(font)
 
-        # Add horizontal splitters to main vertical splitter
-        main_vertical_splitter.addWidget(horizontal_splitter_1)
-        main_vertical_splitter.addWidget(horizontal_splitter_2)
+            # Set text and alignment
+            label.setText(tab)
+            label.setAlignment(Qt.AlignCenter)
+            tab_layout.addWidget(label)
 
-        # Set the initial sizes to make the splitter handle appear at the center
-        initial_size = self.height() // 2  # Assuming 'self' is the QMainWindow
-        horizontal_splitter_1.setSizes([initial_size, initial_size])
-        horizontal_splitter_2.setSizes([initial_size, initial_size])
+            # Initialize and set QFrame as a line divider
+            divider = QFrame()
+            divider.setFrameShape(QFrame.HLine)
+            divider.setFrameShadow(QFrame.Sunken)
+            divider.setMinimumSize(0, 2)  # Set minimum height to 2 for visibility
+            tab_layout.addWidget(divider)
 
-        # Add main vertical splitter to second tab layout
-        new_layout.addWidget(main_vertical_splitter)
+            # Initialize first horizontal splitter
+            horizontal_splitter_1 = QSplitter(Qt.Horizontal)
+            time_plot = TimeDistributionPlot("", i + 1, width=5, height=4, dpi=100)
+            folder_plot = FolderDistributionPlot("", i + 1, width=5, height=4, dpi=100)
+            horizontal_splitter_1.addWidget(time_plot)
+            horizontal_splitter_1.addWidget(folder_plot)
+
+            # Initialize second horizontal splitter
+            horizontal_splitter_2 = QSplitter(Qt.Horizontal)
+            pie_chart = FrameProportionPieChart("", i + 1, width=5, height=4, dpi=100)
+
+            table_view = QTableView()
+            model = QSqlTableModel()
+            model.setTable('metadata')
+            model.select()
+            table_view.setModel(model)
+            horizontal_splitter_2.addWidget(pie_chart)
+            horizontal_splitter_2.addWidget(table_view)
+
+            # Add horizontal splitters to main vertical splitter
+            tab_vertical_splitter.addWidget(horizontal_splitter_1)
+            tab_vertical_splitter.addWidget(horizontal_splitter_2)
+
+            # Record plot references
+            self.plots['time'].append(time_plot)
+            self.plots['folder'].append(folder_plot)
+            self.plots['pie'].append(pie_chart)
+            self.plots['database'].append(table_view)
+
+            # Set the initial sizes to make the splitter handle appear at the center
+            initial_size = self.height() // 2  # Assuming 'self' is the QMainWindow
+            horizontal_splitter_1.setSizes([initial_size, initial_size])
+            horizontal_splitter_2.setSizes([initial_size, initial_size])
+
+            # Add main vertical splitter to second tab layout
+            tab_layout.addWidget(tab_vertical_splitter)
+
+        # Add the vertical tabs widget to the main tab widget
+        new_layout.addWidget(self.vertical_tabs)
 
         # Set the layout for the central widget
         self.centralWidget().setLayout(main_layout)
@@ -1007,7 +1512,7 @@ class ICDM(QMainWindow):
         self.setWindowTitle('ICDM - Insect Communities Dataset Manager')
         self.show()
 
-    def update_database(self, new_database_path):
+    def update_database(self, database_widget, dataset_type_filter, new_database_path):
         # Step 1: Close the existing database connection
         QSqlDatabase.database().close()
 
@@ -1016,47 +1521,67 @@ class ICDM(QMainWindow):
         db.setDatabaseName(new_database_path)
         ok = db.open()
         if not ok:
-            print("Failed to open new database")  # Handle this more gracefully in your actual code
+            print("Failed to open new database")  # Handle this more gracefully
             return
 
-        self.database_path = new_database_path  # Update the class attribute
+        # self.database_path = new_database_path  # Update the class attribute
 
         # Step 3: Reinitialize the QSqlTableModel with the new database
         new_model = QSqlTableModel()
-        new_model.setTable('metadata')  # Assuming 'metadata' is your table name
-        new_model.setFilter("chosen_for_export = 1")  # Optional: apply your filter
+        new_model.setTable('metadata')  # Assuming 'metadata' is the table name
+        new_model.setFilter(f"chosen_for_export = {dataset_type_filter}")  # Optional: apply your filter
         new_model.select()
 
         # Step 4: Update the QTableView to use the new model
-        self.table_view.setModel(new_model)  # Assuming `self.table_view` is your QTableView instance
+        database_widget.setModel(new_model)  # Assuming `self.table_view` is your QTableView instance
 
     def show_export_dialog(self):
-
         dialog = ExportDialog()
         result = dialog.exec_()
 
         if result == QDialog.Accepted:
-            dataset_size = int(dialog.datasetSizeInput.text())
+            # Gather values from the fields
+            dataset_size = max(int(dialog.datasetSizeInput.text()), 1)
             visitor_percentage = dialog.emptyVisitorRatioSlider.value()
             day_percentage = dialog.dayNightRatioSlider.value()
             day_start_time = dialog.dayBeginInput.time().toString("HH:mm")
             day_end_time = dialog.dayEndInput.time().toString("HH:mm")
             selection_method = dialog.methodDropdown.currentText()
+            train_percentage = dialog.trainValRatioSlider.value()
+            generate_yaml = dialog.generateYamlCheckbox.isChecked()
+            use_day_night = dialog.useDayNightCheckbox.isChecked()
 
             print(
-                f"Retrieved values: Dataset Size: {dataset_size}, Empty/Visitor Ratio: {visitor_percentage}, Day/Night Ratio: {day_percentage}, Day Start Time: {day_start_time}, Day End Time: {day_end_time}, Selection Method: {selection_method}")
-            empty_visitor_ratio = (100 - visitor_percentage) / visitor_percentage
-            day_night_ratio = (100 - day_percentage) / day_percentage
+                f"Retrieved values: Dataset Size: {dataset_size}, Empty/Visitor Ratio: {visitor_percentage}, Day/Night Ratio: {day_percentage}, Day Start Time: {day_start_time}, Day End Time: {day_end_time}, Selection Method: {selection_method}, Train/Validation Ratio: {train_percentage}, Generate YAML: {generate_yaml}, Use Day/Night: {use_day_night}"
+            )
 
-            self.perform_export(dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time)
+            empty_visitor_ratio = max((100 - visitor_percentage), 1) / max(visitor_percentage, 1)
+            day_night_ratio = max((100 - day_percentage), 1) / max(day_percentage, 1)
+            train_val_ratio = max((100 - train_percentage), 1) / max(train_percentage, 1)
 
-    def perform_export(self, dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time):
+            # Pass the new fields as well
+            self.perform_export(
+                dataset_size,
+                empty_visitor_ratio,
+                use_day_night,
+                day_night_ratio,
+                day_start_time,
+                day_end_time,
+                train_val_ratio,
+                generate_yaml
+            )
+
+    def perform_export(self, dataset_size, empty_visitor_ratio, use_day_night, day_night_ratio, day_start_time,
+                       day_end_time, train_val_ratio,
+                       generate_yaml):
 
         destination_folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if not destination_folder:
             return
 
-        self.dataset_exporter = DatasetExporter(dataset_size, empty_visitor_ratio, day_night_ratio, day_start_time, day_end_time, self.root_path, destination_folder, self.database_path)
+        self.dataset_exporter = DatasetExporter(dataset_size, empty_visitor_ratio, use_day_night, day_night_ratio,
+                                                day_start_time, day_end_time, train_val_ratio,
+                                                generate_yaml, self.root_path, destination_folder, self.database_path)
         self.dataset_exporter.progress_total_signal.connect(self.set_progress)
         self.dataset_exporter.progress_signal.connect(self.update_progress)
         self.dataset_exporter.indeterminate_progress_signal.connect(self.set_progress_indeterminate)
@@ -1082,11 +1607,12 @@ class ICDM(QMainWindow):
 
     def update_inspection_graphs(self, database_path):
         self.export_database_path = database_path
-        self.time_plot.update_database(self.export_database_path)
-        self.folder_plot.update_database(self.export_database_path)
-        self.pie_chart.update_database(self.export_database_path)
-        self.update_database(self.export_database_path)
 
+        for i, tab in enumerate(['Train', 'Val']):
+            self.plots['time'][i].update_database(self.export_database_path)
+            self.plots['folder'][i].update_database(self.export_database_path)
+            self.plots['pie'][i].update_database(self.export_database_path)
+            self.update_database(self.plots['database'][i], i + 1, self.export_database_path)
 
     # Function to initiate the counting
     def initiate_file_count(self, tree, label):
@@ -1104,10 +1630,15 @@ class ICDM(QMainWindow):
         if folder_path:
             self.set_tree_roots(folder_path)
             self.root_path = folder_path
-            self.database_path = f'{os.path.basename(folder_path)}.db'
-            print(self.database_path)
+            db_folder = os.path.join("resources", "db")
+            os.makedirs(db_folder, exist_ok=True)
+            self.database_path = os.path.join(db_folder, f'{os.path.basename(folder_path)}.db')
+
+            # Check if database exists
+            if os.path.exists(self.database_path):
+                self.update_gui_on_loaded_database()
+            self.select_db_button.setEnabled(True)
             self.db_button.setEnabled(True)
-            self.export_button.setEnabled(True)
 
     def set_tree_roots(self, folder_path):
         self.model_visitor.setRootPath(folder_path)
@@ -1125,15 +1656,22 @@ class ICDM(QMainWindow):
         total_width = self.tree_visitor.width()
         self.tree_visitor.setColumnWidth(0, int(total_width * 0.6))  # 60% of total width
 
+    def update_gui_on_loaded_database(self):
+        self.db_name_label.setText(f"Selected DB: {os.path.basename(self.database_path)}")
+        self.export_button.setEnabled(True)
+
     def import_data(self, folder_path):
 
-        # Create the database
-        self.create_database(folder_path)
+        db_folder = os.path.join("resources", "db")
+        os.makedirs(db_folder, exist_ok=True)
+        self.database_path = os.path.join(db_folder, f'{os.path.basename(folder_path)}.db')
 
         # Initiate
-        self.database_populator = DatabasePopulator(root_path=folder_path, batch_size=50, database_path=self.database_path)
+        self.database_populator = DatabasePopulator(root_path=folder_path, batch_size=100,
+                                                    database_path=self.database_path)
         self.database_populator.progress_total_signal.connect(self.set_progress)
         self.database_populator.progress_signal.connect(self.update_progress)
+        self.database_populator.finished.connect(self.update_gui_on_loaded_database)
 
         # Populate database and update progress
         self.database_populator.start()
@@ -1245,8 +1783,6 @@ class ICDM(QMainWindow):
             # Load and display the text
             self.text_edit.setPlainText(bbox_str)
 
-
-
     # def resizeEvent(self, event):
     #     if self.pixmap_item:
     #         new_size = self.image_view.size()
@@ -1294,7 +1830,7 @@ class ICDM(QMainWindow):
         txt_path = self.current_metadata['label_path']
         if txt_path:
             with open(txt_path, 'w') as f:
-                    f.write(text_content)
+                f.write(text_content)
 
     def item_double_clicked(self, tree):
 
@@ -1352,7 +1888,6 @@ class ICDM(QMainWindow):
 
         return source_index, source_model
 
-
     def rename_item(self, tree):
 
         index, model = self.get_tree_model_source_attributes(tree)
@@ -1406,31 +1941,10 @@ class ICDM(QMainWindow):
         else:
             QMessageBox.warning(self, "Warning", "Selected item is not a directory.")
 
-    def create_database(self, folder_path):
-        conn = sqlite3.connect(self.database_path)
-        cursor = conn.cursor()
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS metadata (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            recording_id TEXT,
-            video_file_id TEXT,
-            frame_no INTEGER,
-            visit_no INTEGER,
-            crop_no INTEGER,
-            x1 INTEGER,
-            y1 INTEGER,
-            x2 INTEGER,
-            y2 INTEGER,
-            full_path TEXT,
-            label_path TEXT
-        );
-        """)
-        conn.commit()
-        conn.close()
-
 
 if __name__ == '__main__':
     import sys
+
     app = QApplication(sys.argv)
     ex = ICDM()
     sys.exit(app.exec_())
