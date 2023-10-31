@@ -13,7 +13,7 @@ import sqlite3
 import yaml
 from PyQt5.QtCore import QSortFilterProxyModel, QThread, pyqtSignal, QSize, QUrl, Qt, QTime
 from PyQt5.QtGui import QDesktopServices, QPixmap, QPainter, QPen, QImage, QFont, QIcon
-from PyQt5.QtSql import QSqlDatabase, QSqlTableModel
+from PyQt5.QtSql import QSqlDatabase, QSqlTableModel, QSqlQuery
 from PyQt5.QtWidgets import (QApplication, QSizePolicy, QWidget, QPushButton, QTabWidget, QFrame, QDialog, QFormLayout,
                              QLineEdit, QSlider, QLabel, QTimeEdit, QComboBox, QDialogButtonBox,
                              QCheckBox, QVBoxLayout, QGroupBox, QFileDialog, QFileSystemModel, QMenu, QAction,
@@ -22,11 +22,20 @@ from PyQt5.QtWidgets import (QApplication, QSizePolicy, QWidget, QPushButton, QT
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from pathlib import Path
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt5.QtWidgets import QSizePolicy
+import sqlite3
+import os
+import pandas as pd
+import numpy as np
 
 os.environ['QT_PLUGIN_PATH'] = os.path.join(os.path.dirname(PyQt5.__file__), "Qt5/plugins")
 
-# TODO: Add an option to generate dataset so that it comprises as many visits as possible.
+# DONE: Add an option to generate dataset so that it comprises as many visits as possible.
         # When selecting images from folders according to criteria make sure to select uniques (with limit) per visits.
+# TODO: Incorporate the different methods of selecting the files: Random within folder, Per visit equal
 # TODO: Add an option to somehow select which folders will be exclusive to val dataset so we can make sure to have data
 #       in val that are not in the train dataset to correctly detect for overfitting.
 # TODO: Add a diagnostic graph to see how are the flower morphotypes represented in the datasets.
@@ -175,12 +184,10 @@ class DatasetExporter(QThread):
         self.destination_folder_path = destination_folder_path
         self.database_path = database_path
         self.dataset_name = ""
-        self.export_from_db = False
         self.progress = 0
+        self.export_from_db = self.check_export_from_existing_export_database()
 
-        self.check_export_from_existing_export_database()
-
-    def update_export_database(self):
+    def create_unique_export_database(self):
 
         # Generate a unique hash (for example, from the current time)
         unique_hash = hashlib.sha1(str(datetime.datetime.now()).encode()).hexdigest()[:8]
@@ -199,6 +206,7 @@ class DatasetExporter(QThread):
     def check_export_from_existing_export_database(self):
 
         db_name = self.database_path
+        export_from_db = False
 
         # Connect to the database
         conn = sqlite3.connect(db_name)
@@ -210,10 +218,12 @@ class DatasetExporter(QThread):
 
         # Check the count and take appropriate action
         if count > 0:
-            self.export_from_db = True
+            export_from_db = True
 
         # Close the database connection
         conn.close()
+
+        return export_from_db
 
     def get_unique_parent_folder_count(self, database_path: str) -> int:
         # Connect to the database
@@ -231,54 +241,76 @@ class DatasetExporter(QThread):
 
         return count
 
-    def get_files_from_database(self):
-
-        # Connect to the database
-        conn = sqlite3.connect(self.database_path)
-        cursor = conn.cursor()
-
-        # Create empty lists to hold the file paths
-        empty_files = []
-        visitor_files = []
-
-        # Query to get files that do not have a label (label_path is NULL)
-        cursor.execute("SELECT full_path FROM metadata WHERE label_path IS NULL")
-        empty_result = cursor.fetchall()
-
-        # Query to get files that do have a label (label_path is NOT NULL)
-        cursor.execute("SELECT full_path FROM metadata WHERE label_path IS NOT NULL")
-        visitor_result = cursor.fetchall()
-
-        # Close the database connection
-        conn.close()
-
-        # Extract the file paths from the query results and populate the lists
-        empty_files = [row[0] for row in empty_result]
-        visitor_files = [row[0] for row in visitor_result]
-
-        return empty_files, visitor_files
-
-    def get_files_default(self):
-
-        # Create empty lists to hold the file paths
-        empty_files = []
-        visitor_files = []
-
-        for subdir, _, files in os.walk(self.root_folder_path):
-            for file in files:
-                if file.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    full_path = os.path.join(subdir, file)
-                    txt_path = os.path.join(subdir, file.rsplit('.', 1)[0] + '.txt')
-
-                    if os.path.exists(txt_path):
-                        visitor_files.append(full_path)
-                    else:
-                        empty_files.append(full_path)
-
-        return empty_files, visitor_files
+    # def get_files_from_database(self):
+    #
+    #     # Connect to the database
+    #     conn = sqlite3.connect(self.database_path)
+    #     cursor = conn.cursor()
+    #
+    #     # Create empty lists to hold the file paths
+    #     empty_files = []
+    #     visitor_files = []
+    #
+    #     # Query to get files that do not have a label (label_path is NULL)
+    #     cursor.execute("SELECT full_path FROM metadata WHERE label_path IS NULL")
+    #     empty_result = cursor.fetchall()
+    #
+    #     # Query to get files that do have a label (label_path is NOT NULL)
+    #     cursor.execute("SELECT full_path FROM metadata WHERE label_path IS NOT NULL")
+    #     visitor_result = cursor.fetchall()
+    #
+    #     # Close the database connection
+    #     conn.close()
+    #
+    #     # Extract the file paths from the query results and populate the lists
+    #     empty_files = [row[0] for row in empty_result]
+    #     visitor_files = [row[0] for row in visitor_result]
+    #
+    #     return empty_files, visitor_files
+    #
+    # def get_files_default(self):
+    #
+    #     # Create empty lists to hold the file paths
+    #     empty_files = []
+    #     visitor_files = []
+    #
+    #     for subdir, _, files in os.walk(self.root_folder_path):
+    #         for file in files:
+    #             if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+    #                 full_path = os.path.join(subdir, file)
+    #                 txt_path = os.path.join(subdir, file.rsplit('.', 1)[0] + '.txt')
+    #
+    #                 if os.path.exists(txt_path):
+    #                     visitor_files.append(full_path)
+    #                 else:
+    #                     empty_files.append(full_path)
+    #
+    #     return empty_files, visitor_files
 
     def fetch_files_per_parent_folder(self, database_path: str, total_files_per_folder: int, empty_visitor_ratio: float,
                                       daytime_nighttime_ratio: float, daytime_start: str, daytime_end: str):
+
+        def select_files_among_visits(all_relevant_files, count):
+            print(f"selecting {len(all_relevant_files)}")
+            if len(all_relevant_files) > 0:
+                files_by_visit_number = defaultdict(list)
+                for row in all_relevant_files:
+                    full_path, visit_number = row
+                    files_by_visit_number[visit_number].append(full_path)
+
+                selected_files = []
+                while len(selected_files) < min(count, len(all_relevant_files)):
+                    for visit_number, files in files_by_visit_number.items():
+                        if len(selected_files) >= count:
+                            break
+                        if files:
+                            chosen_file = random.choice(files)
+                            files.remove(chosen_file)
+                            selected_files.append(chosen_file)
+            else:
+                return []
+            return selected_files
+
         # Connect to the database
         conn = sqlite3.connect(database_path)
         cursor = conn.cursor()
@@ -287,7 +319,7 @@ class DatasetExporter(QThread):
         # daytime_start = datetime.datetime.strptime(daytime_start, '%H:%M').time()
         # daytime_end = datetime.datetime.strptime(daytime_end, '%H:%M').time()
 
-        print(f"{daytime_nighttime_ratio}")
+        print(f"Day/night ratio: {daytime_nighttime_ratio}")
 
         # Calculate counts per category
         num_empty_per_folder = int(total_files_per_folder * empty_visitor_ratio / (1 + empty_visitor_ratio))
@@ -315,30 +347,57 @@ class DatasetExporter(QThread):
 
                     print(f"{count_day}, {count_night}, {count}, {daytime_start}, {daytime_end}")
 
-                    # Query for 'daytime' files
+                    # Query for daytime files, selected evenly across visits.
                     query = """
-                        SELECT full_path
+                        SELECT full_path, visit_no
                         FROM metadata
                         WHERE parent_folder = ?
                         AND label_path {}
                         AND time(time) BETWEEN ? AND ?
-                        LIMIT ?
                     """.format(label_condition)
+                    cursor.execute(query, (parent_folder, daytime_start, daytime_end))
+                    all_relevant_files = cursor.fetchall()
 
-                    cursor.execute(query, (parent_folder, daytime_start, daytime_end, count_day))
-                    daytime_files = [row[0] for row in cursor.fetchall()]
+                    # Use the custom funciton to return files selected by visit in defined quantity
+                    daytime_files = select_files_among_visits(all_relevant_files, count_day)
 
-                    # Query for 'nighttime' files
+                    # # Query for 'daytime' files
+                    # query = """
+                    #     SELECT full_path
+                    #     FROM metadata
+                    #     WHERE parent_folder = ?
+                    #     AND label_path {}
+                    #     AND time(time) BETWEEN ? AND ?
+                    #     LIMIT ?
+                    # """.format(label_condition)
+                    #
+                    # cursor.execute(query, (parent_folder, daytime_start, daytime_end, count_day))
+                    # daytime_files = [row[0] for row in cursor.fetchall()]
+
+                    # Query for nighttime files, selected evenly across visits.
                     query = """
-                        SELECT full_path
+                        SELECT full_path, visit_no
                         FROM metadata
                         WHERE parent_folder = ?
                         AND label_path {}
                         AND NOT time(time) BETWEEN ? AND ?
-                        LIMIT ?
                     """.format(label_condition)
-                    cursor.execute(query, (parent_folder, daytime_start, daytime_end, count_night))
-                    nighttime_files = [row[0] for row in cursor.fetchall()]
+                    cursor.execute(query, (parent_folder, daytime_start, daytime_end))
+                    all_relevant_files = cursor.fetchall()
+
+                    nighttime_files = select_files_among_visits(all_relevant_files, count_night)
+
+                    # # Query for 'nighttime' files
+                    # query = """
+                    #     SELECT full_path
+                    #     FROM metadata
+                    #     WHERE parent_folder = ?
+                    #     AND label_path {}
+                    #     AND NOT time(time) BETWEEN ? AND ?
+                    #     LIMIT ?
+                    # """.format(label_condition)
+                    # cursor.execute(query, (parent_folder, daytime_start, daytime_end, count_night))
+                    # nighttime_files = [row[0] for row in cursor.fetchall()]
 
                     # Update result dictionary
                     type_label = 'empty' if label_condition == "IS NULL" else 'visitor'
@@ -349,26 +408,34 @@ class DatasetExporter(QThread):
                     }
                 else:
                     print("doing this")
+                    print(f'{parent_folder}')
                     # Fetch files ignoring day/night ratio
                     query = """
-                                    SELECT full_path
-                                    FROM metadata
-                                    WHERE parent_folder = ?
-                                    AND label_path {}
-                                    LIMIT ?
-                                """.format(label_condition)
-                    print(count)
-                    cursor.execute(query, (parent_folder, count))
-                    all_files = [row[0] for row in cursor.fetchall()]
+                        SELECT full_path, visit_no
+                        FROM metadata
+                        WHERE parent_folder = ?
+                        AND label_path {}
+                    """.format(label_condition)
+                    cursor.execute(query, (parent_folder,))
+                    all_relevant_files = cursor.fetchall()
+
+                    all_files = select_files_among_visits(all_relevant_files, count)
+
+                    # query = """
+                    #                 SELECT full_path
+                    #                 FROM metadata
+                    #                 WHERE parent_folder = ?
+                    #                 AND label_path {}
+                    #                 LIMIT ?
+                    #             """.format(label_condition)
+                    # print(count)
+                    # cursor.execute(query, (parent_folder, count))
+                    # all_files = [row[0] for row in cursor.fetchall()]
 
                     type_label = 'empty' if label_condition == "IS NULL" else 'visitor'
                     files_by_folder[parent_folder][type_label] = {
                         'all': all_files
                     }
-
-        # # Add a new colum nto the database
-        # cursor.execute("ALTER TABLE metadata ADD COLUMN chosen_for_export BOOLEAN DEFAULT 0")
-        # conn.commit()
 
         # Here, let's update the 'chosen_for_export' flag for the selected files.
         for parent_folder, types in files_by_folder.items():
@@ -709,25 +776,6 @@ class DatasetExporter(QThread):
         with open(filepath, 'w') as f:
             yaml.dump(data, f, sort_keys=False)
 
-    def inspect_time_distribution(self):
-
-        conn = sqlite3.connect(self.database_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT time FROM metadata WHERE chosen_for_export = 1")
-        times = [row[0] for row in cursor.fetchall()]
-        conn.close()
-
-        import matplotlib.pyplot as plt
-
-        # Convert times into a format that can be plotted, such as minutes since midnight
-        minutes_since_midnight = [(int(time.split(':')[0]) * 60 + int(time.split(':')[1])) for time in times]
-
-        plt.hist(minutes_since_midnight, bins=48)  # 48 bins for 30-minute intervals
-        plt.xlabel('Minutes Since Midnight')
-        plt.ylabel('Number of Images')
-        plt.title('Distribution of Daytimes')
-        plt.show()
-
     def run(self):
 
         # Scan subfolders and separate filenames into "empty" and "visitor" lists
@@ -739,7 +787,7 @@ class DatasetExporter(QThread):
         if not os.path.isfile(self.database_path):
             return
         elif self.database_path.lower().endswith(".db"):
-            self.update_export_database()
+            self.create_unique_export_database()
             number_of_parent_folders = self.get_unique_parent_folder_count(self.database_path)
             print(f"parent_folders:{number_of_parent_folders}")
             files_per_parent_folder = self.dataset_size // number_of_parent_folders
@@ -895,9 +943,9 @@ class DatabasePopulator(QThread):
 
                     # Data validation and conversion to integers
                     try:
-                        frame_no = int(parts[6])
-                        visit_no = int(parts[7])
-                        crop_no = int(parts[8])
+                        frame_no = int(parts[7])
+                        visit_no = int(parts[8])
+                        crop_no = int(parts[6])
                         x1, y1 = map(int, parts[9].split(','))
                         x2, y2 = map(int, parts[10].split(','))
                     except ValueError as e:
@@ -976,6 +1024,23 @@ class FileCounter(QThread):
         label_files = sum(1 for _ in path.rglob('*.txt'))
 
         self.finished_counting.emit(total_files, image_files, label_files, self.label)
+
+
+class PlottingThread(QThread):
+    finished = pyqtSignal()  # Signal emitted when thread finishes
+
+    def __init__(self, plot_instance, database_path, additional_db_path=None):
+        super(PlottingThread, self).__init__()
+        self.plot_instance = plot_instance
+        self.database_path = database_path
+        self.additional_db_path = additional_db_path
+
+    def run(self):
+        if self.additional_db_path is not None:
+            self.plot_instance.update_database(self.database_path, self.additional_db_path)
+        else:
+            self.plot_instance.update_database(self.database_path)
+        self.finished.emit()  # Emit finished signal
 
 
 class FolderFilterProxyModel(QSortFilterProxyModel):
@@ -1215,6 +1280,221 @@ class FrameProportionPieChart(FigureCanvas):
         self.plot()
 
 
+class HeatmapPlot(FigureCanvas):
+    def __init__(self, database_path, dataset_type_filter=1, parent=None, width=5, height=4, dpi=100):
+        print("init")
+        self.database_path = database_path
+        self.dataset_type_filter = dataset_type_filter
+        fig = plt.figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+
+        FigureCanvas.__init__(self, fig)
+        self.setParent(parent)
+        self.number_of_parent_folders = 0
+        self.global_max = 0
+        self.df = None
+
+        FigureCanvas.setSizePolicy(self, QSizePolicy.Expanding, QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+
+        if os.path.isfile(self.database_path):
+            print("plot")
+            self.plot()
+
+    def get_data(self):
+        conn = sqlite3.connect(self.database_path)
+        query = """SELECT parent_folder, visit_no, COUNT(*) as freq 
+                           FROM metadata 
+                           WHERE chosen_for_export = ? 
+                           GROUP BY parent_folder, visit_no"""
+        df = pd.read_sql_query(query, conn, params=(self.dataset_type_filter,))
+
+        print(f"df: {df}")
+        conn.close()
+
+        # Re-index the 'visit_no' within each 'parent_folder'
+        df['new_visit_no'] = df.groupby('parent_folder')['visit_no'].rank(method='first').astype(int)
+
+        # Now pivot the DataFrame
+        df_pivot = df.pivot(index="parent_folder", columns="new_visit_no", values="freq")
+
+        # Fill NaN values with 0 for the heatmap
+        df_pivot.fillna(0, inplace=True)
+
+        self.number_of_parent_folders = len(df_pivot)
+        self.global_max = df['freq'].max()
+        return df_pivot
+
+    def plot(self, start_idx=0, end_idx=10):
+        print(f"indexes {start_idx}, {end_idx}")
+
+        self.figure.clf()
+        self.axes = self.figure.add_subplot(111)
+
+        # Retrieve the data from the database
+        if self.df is None:
+            self.df = self.get_data()
+
+        # Use local variable as it will be filtered and so on
+        df = self.df
+
+        # Check if DataFrame is empty
+        if df.empty:
+            print("Dataframe is empty. No plots will be generated.")
+            return
+
+        # Filter rows based on the slider range
+        df_filtered = df.iloc[start_idx:end_idx]
+
+        print(f"df_filtered: {df_filtered}")
+        if not len(df_filtered) == 0:
+            sns.heatmap(df_filtered, annot=True, fmt=".0f", ax=self.axes, vmin=0, vmax=self.global_max, cmap='crest')
+
+        self.axes.set_title('Heatmap of Visit Numbers by Parent Folder')
+        self.axes.figure.tight_layout()
+        self.draw()
+
+    def update_database(self, new_database_path):
+        self.database_path = new_database_path
+        self.plot()
+
+
+class PlantTraitStackedBarPlot(FigureCanvas):
+    def __init__(self, database_path, morphotype_db_path, dataset_type_filter=1, metric_displayed=0, parent=None, width=5, height=4, dpi=100):
+        fig = plt.figure(figsize=(width, height), dpi=dpi)
+        self.axes = fig.add_subplot(111)
+
+        FigureCanvas.__init__(self, fig)
+        self.setParent(parent)
+
+        metrics = ["family", "color", "shape"]
+        self.metric = metrics[metric_displayed]
+        self.database_path = database_path
+        self.dataset_type_filter = dataset_type_filter
+        self.morphotype_db_path = morphotype_db_path
+        self.df = None
+
+        FigureCanvas.setSizePolicy(self, QSizePolicy.Expanding, QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
+
+        if os.path.isfile(self.database_path) and os.path.isfile(self.morphotype_db_path):
+            self.plot()
+
+    def get_data(self):
+        # Connect to your databases
+        conn1 = sqlite3.connect(self.database_path)
+        conn2 = sqlite3.connect(self.morphotype_db_path)
+
+        # Query 1: Get parent_folder and count of empty and visitor frames
+        query1 = """
+            SELECT recording_id,
+                   CASE 
+                       WHEN label_path IS NULL THEN 'empty' 
+                       ELSE 'visitor' 
+                   END AS file_type, 
+                   COUNT(*) as count_
+            FROM metadata
+            WHERE chosen_for_export = ?
+            GROUP BY parent_folder, file_type;
+            """
+        df1 = pd.read_sql_query(query1, conn1, params=(self.dataset_type_filter,))
+        conn1.close()
+
+        print(df1)
+
+        # Query 2: Get family information for each parent_folder
+        query2 = """
+        SELECT recording_id, {}
+        FROM morphotypes;
+        """.format(self.metric)
+        df2 = pd.read_sql_query(query2, conn2)
+
+        print(df2)
+
+        # Close your database connections
+        conn1.close()
+        conn2.close()
+
+        # Combine the data
+        combined_df = pd.merge(df1, df2, on='recording_id')
+        combined_grouped_df = combined_df.groupby([self.metric, 'file_type']).sum().reset_index()
+
+        print(combined_grouped_df)
+
+        return combined_grouped_df
+
+    def plot(self):
+        self.figure.clf()
+        self.axes = self.figure.add_subplot(111)
+
+        # Retrieve data
+        if self.df is None:
+            self.df = self.get_data()
+
+        if self.df.empty:
+            print("Dataframe is empty. No plots will be generated.")
+            return
+
+        # Create the stacked bar plot
+        #sns.barplot(data=self.df, x='family', y='count_', hue='file_type', ax=self.axes)
+
+        # self.axes.set_title('Family Distribution in the Dataset')
+        # self.axes.figure.tight_layout()
+        # self.draw()
+
+        # Assuming `self.df` has columns ['Family', 'Type', 'Region', 'Count']
+        df_pivot = self.df.pivot(index=self.metric, columns='file_type', values='count_').fillna(0)
+
+        metric_levels = df_pivot.index.tolist()
+        empty_counts = df_pivot['empty'].tolist()
+        visitor_counts = df_pivot['visitor'].tolist()
+
+        x = np.arange(len(metric_levels))  # the label locations
+        width = 0.5  # the width of the bars
+
+        rects1 = self.axes.bar(x, empty_counts, width, label='empty', color='r')
+        rects2 = self.axes.bar(x, visitor_counts, width, label='visitor', bottom=empty_counts, color='g')
+
+        # Calculate the average total count per family and draw a horizontal line
+        average_total_count = np.mean(np.array(empty_counts) + np.array(visitor_counts))
+        self.axes.axhline(average_total_count, color='gray', linestyle='--', linewidth=1,
+                          label=f"Avg Total Count: {int(average_total_count)}")
+
+        # Labels, title, and custom x-axis tick labels
+        self.axes.set_ylabel('Counts')
+        self.axes.set_title(f'Counts by {self.metric} and frame type')
+        x = np.arange(len(metric_levels))
+
+        # Truncate family names to first 5 characters and add a period
+        truncated_metric_levels = [f[:5] + '.' for f in metric_levels]
+        self.axes.set_xticks(x)
+        self.axes.set_xticklabels(truncated_metric_levels, rotation=45, ha='right')
+        self.axes.legend()
+
+        # Add labels above or on the bars
+        for i, rect in enumerate(rects1):
+            height = rect.get_height()
+            self.axes.annotate(f'{int(height)}',
+                               xy=(rect.get_x() + rect.get_width() / 2, height),
+                               xytext=(0, 3),
+                               textcoords="offset points",
+                               ha='center', va='bottom')
+
+        for i, rect in enumerate(rects2):
+            height = rect.get_height() + empty_counts[i]  # Offset by the height of 'empty' bar
+            self.axes.annotate(f'{int(height)}',
+                               xy=(rect.get_x() + rect.get_width() / 2, height),
+                               xytext=(0, 3),
+                               textcoords="offset points",
+                               ha='center', va='bottom')
+
+        self.draw()
+
+    def update_database(self, new_database_path, new_morphotype_db_path):
+        self.database_path = new_database_path
+        self.morphotype_db_path = new_morphotype_db_path
+        self.plot()
+
 class ICDM(QMainWindow):
     def __init__(self):
         super(ICDM, self).__init__()
@@ -1226,6 +1506,7 @@ class ICDM(QMainWindow):
         self.pixmap_item = None
         self.database_path = ""
         self.export_database_path = ""
+        self.plotting_threads = []
 
         # Build the GUI
         self.initialize_UI()
@@ -1342,7 +1623,7 @@ class ICDM(QMainWindow):
 
         self.tree_visitor.doubleClicked.connect(lambda: self.item_double_clicked(self.tree_visitor))
         self.tree_visitor.clicked.connect(lambda: self.item_clicked(
-            self.tree_visitor))  # TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
+            self.tree_visitor))  # DONE: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Create TreeView for empty folders
         self.tree_empty = QTreeView(self)
@@ -1367,7 +1648,7 @@ class ICDM(QMainWindow):
 
         self.tree_empty.doubleClicked.connect(lambda: self.item_double_clicked(self.tree_empty))
         self.tree_empty.clicked.connect(lambda: self.item_clicked(
-            self.tree_empty))  # TODO: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
+            self.tree_empty))  # DONE: This should connect to the clickedTree function and that should trigger functions based on whether it was a fodler or a file
 
         # Make the dockable part for editing
         # Initialize Splitter
@@ -1431,12 +1712,18 @@ class ICDM(QMainWindow):
         vertical_tabs = []
         self.plots = {
             'time': [],
+            'visit': [],
+            'family': [],
+            'color': [],
+            'shape': [],
             'folder': [],
             'pie': [],
             'database': []
         }
+        self.sliders = []
 
         for i, tab in enumerate(['Training Dataset', 'Validation Dataset']):
+            print(i)
             # Create tab
             tab_widget = QWidget()
             tab_layout = QVBoxLayout(tab_widget)
@@ -1467,9 +1754,53 @@ class ICDM(QMainWindow):
 
             # Initialize first horizontal splitter
             horizontal_splitter_1 = QSplitter(Qt.Horizontal)
+
+            # Create a QTabWidget to hold multiple plots
+            ds_data_tab_widget = QTabWidget()
+            ds_data_tab_widget.setTabPosition(QTabWidget.North)
+
+            # Create the original time_plot and add it as the first tab
             time_plot = TimeDistributionPlot("", i + 1, width=5, height=4, dpi=100)
+            ds_data_tab_widget.addTab(time_plot, "Time Distribution")
+
+            visit_plot_widget = QWidget()  # Create a QWidget
+            visit_plot_layout = QHBoxLayout()  # Create a layout
+            visit_plot = HeatmapPlot("", i + 1, width=5, height=4, dpi=100)  # Your heatmap
+            visit_plot_layout.addWidget(visit_plot)  # Add heatmap to layout
+
+            # Initialize and configure the slider
+            slider = QSlider(Qt.Vertical, self)
+            slider.setMinimum(0)
+            slider.setMaximum(max(visit_plot.number_of_parent_folders - 10, 0))
+            slider.setSingleStep(1)
+            slider.setPageStep(10)
+            slider.setInvertedAppearance(True)
+            slider.setInvertedControls(True)
+            print(f"index", i)
+            print("Initial slider value:", slider.value())
+            self.sliders.append(slider)
+            self.sliders[i].valueChanged.connect(lambda val, i=i: self.slider_moved(val, i))
+
+
+            # Add slider to layout
+            visit_plot_layout.addWidget(slider)
+
+            visit_plot_widget.setLayout(visit_plot_layout)  # Set the widget's layout
+            ds_data_tab_widget.addTab(visit_plot_widget, "Visit Distribution")  # Add widget as tab
+
+            family_stacked_bar_plot = PlantTraitStackedBarPlot("", os.path.join('resources', 'db', 'morphotypes.db'), i + 1, metric_displayed=0)
+            ds_data_tab_widget.addTab(family_stacked_bar_plot, "Family Distribution")
+
+            color_stacked_bar_plot = PlantTraitStackedBarPlot("", os.path.join('resources', 'db', 'morphotypes.db'),
+                                                               i + 1, metric_displayed=1)
+            ds_data_tab_widget.addTab(color_stacked_bar_plot, "Color Distribution")
+
+            shape_stacked_bar_plot = PlantTraitStackedBarPlot("", os.path.join('resources', 'db', 'morphotypes.db'),
+                                                              i + 1, metric_displayed=2)
+            ds_data_tab_widget.addTab(shape_stacked_bar_plot, "Shape Distribution")
+
             folder_plot = FolderDistributionPlot("", i + 1, width=5, height=4, dpi=100)
-            horizontal_splitter_1.addWidget(time_plot)
+            horizontal_splitter_1.addWidget(ds_data_tab_widget)
             horizontal_splitter_1.addWidget(folder_plot)
 
             # Initialize second horizontal splitter
@@ -1490,6 +1821,10 @@ class ICDM(QMainWindow):
 
             # Record plot references
             self.plots['time'].append(time_plot)
+            self.plots['visit'].append(visit_plot)
+            self.plots['family'].append(family_stacked_bar_plot)
+            self.plots['color'].append(color_stacked_bar_plot)
+            self.plots['shape'].append(shape_stacked_bar_plot)
             self.plots['folder'].append(folder_plot)
             self.plots['pie'].append(pie_chart)
             self.plots['database'].append(table_view)
@@ -1512,6 +1847,14 @@ class ICDM(QMainWindow):
         self.setWindowTitle('ICDM - Insect Communities Dataset Manager')
         self.show()
 
+    def slider_moved(self, value, slider_index):
+        print(f"Slider moved, i = {slider_index}")
+        #start_idx = self.sliders[slider_index].value()
+        start_idx = value
+        print(value)
+        end_idx = start_idx + 10  # Display 10 parent folders at a time
+        self.plots['visit'][slider_index].plot(start_idx, end_idx)  # Assuming `heatmap` is your heatmap object
+
     def update_database(self, database_widget, dataset_type_filter, new_database_path):
         # Step 1: Close the existing database connection
         QSqlDatabase.database().close()
@@ -1523,6 +1866,14 @@ class ICDM(QMainWindow):
         if not ok:
             print("Failed to open new database")  # Handle this more gracefully
             return
+
+        query = QSqlQuery(db)
+        query.prepare("SELECT COUNT(*) FROM metadata WHERE chosen_for_export = ?")
+        query.addBindValue(dataset_type_filter)
+        query.exec_()
+        if query.next():
+            record_count = query.value(0)
+        print(f"Record count: {record_count}")
 
         # self.database_path = new_database_path  # Update the class attribute
 
@@ -1605,13 +1956,44 @@ class ICDM(QMainWindow):
     def load_tree_view_label(self, text, label):
         label.setText(text)
 
+    # def update_inspection_graphs(self, database_path):
+    #     self.export_database_path = database_path
+    #
+    #     for i, tab in enumerate(['Train', 'Val']):
+    #         self.plots['time'][i].update_database(self.export_database_path)
+    #         self.plots['visit'][i].update_database(self.export_database_path)
+    #         print(self.plots['visit'][i].number_of_parent_folders)
+    #         self.sliders[i].setMaximum(self.plots['visit'][i].number_of_parent_folders - 10)
+    #         self.plots['family'][i].update_database(self.export_database_path,
+    #                                                 os.path.join('resources', 'db', 'morphotypes.db'))
+    #         self.plots['color'][i].update_database(self.export_database_path,
+    #                                                 os.path.join('resources', 'db', 'morphotypes.db'))
+    #         self.plots['shape'][i].update_database(self.export_database_path,
+    #                                                 os.path.join('resources', 'db', 'morphotypes.db'))
+    #         self.plots['folder'][i].update_database(self.export_database_path)
+    #         self.plots['pie'][i].update_database(self.export_database_path)
+    #         self.update_database(self.plots['database'][i], i + 1, self.export_database_path)
+
+    def thread_finished(self):
+        for thread in self.plotting_threads:
+            if not thread.isRunning():
+                thread.deleteLater()
+        self.plotting_threads = [thread for thread in self.plotting_threads if thread.isRunning()]
+
     def update_inspection_graphs(self, database_path):
         self.export_database_path = database_path
 
         for i, tab in enumerate(['Train', 'Val']):
-            self.plots['time'][i].update_database(self.export_database_path)
-            self.plots['folder'][i].update_database(self.export_database_path)
-            self.plots['pie'][i].update_database(self.export_database_path)
+            for plot_type in ['time', 'visit', 'family', 'color', 'shape', 'folder', 'pie']:
+                plot_instance = self.plots[plot_type][i]
+                additional_db_path = None if plot_type not in ['family', 'color', 'shape'] else os.path.join(
+                    'resources', 'db', 'morphotypes.db')
+
+                thread = PlottingThread(plot_instance, self.export_database_path, additional_db_path)
+                thread.finished.connect(self.thread_finished)
+                self.plotting_threads.append(thread)
+                thread.start()
+
             self.update_database(self.plots['database'][i], i + 1, self.export_database_path)
 
     # Function to initiate the counting
